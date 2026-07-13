@@ -13,6 +13,7 @@ const GUEST_NAV = [{ label: "Catalog", href: "/wholesale" }];
 const BUYER_NAV = [
   { label: "Catalog", href: "/wholesale" },
   { label: "Orders", href: "/wholesale/orders" },
+  { label: "Wishlist", href: "/wholesale/wishlist" },
   { label: "Account", href: "/wholesale/account" },
 ];
 

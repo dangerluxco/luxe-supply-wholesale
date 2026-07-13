@@ -172,6 +172,18 @@ export async function listStaff(): Promise<
   });
 }
 
+/** Active staff emails for this portal — used to notify staff of new invoice requests. */
+export async function listActiveStaffEmails(): Promise<string[]> {
+  const staff = await listStaff();
+  return [
+    ...new Set(
+      staff
+        .filter((s) => s.status !== "disabled" && s.email)
+        .map((s) => s.email.trim().toLowerCase()),
+    ),
+  ];
+}
+
 export async function getLuxesupplyOrg(): Promise<{
   id: string;
   data: Record<string, unknown>;

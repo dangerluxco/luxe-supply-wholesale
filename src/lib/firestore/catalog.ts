@@ -211,14 +211,92 @@ export async function listCatalogProducts(
   };
 }
 
+/**
+ * Direct-by-SKU lookup (bypasses the paginated `listCatalogProducts` scan) so
+ * `/wholesale/product/[sku]` works for any known SKU regardless of catalog size or
+ * upload recency — the previous implementation only searched the first 200
+ * newest-updated products, so older SKUs 404'd even when they existed.
+ */
 export async function getCatalogProductBySku(
   skuRaw: string,
   opts?: { buyerUsername?: string | null },
 ): Promise<CatalogProduct | null> {
   const sku = String(skuRaw || "").trim();
   if (!sku) return null;
-  const { products } = await listCatalogProducts(200, opts);
-  return products.find((p) => p.sku.toUpperCase() === sku.toUpperCase()) || null;
+  const buyerUsername = String(opts?.buyerUsername || "")
+    .trim()
+    .toLowerCase();
+
+  const org = await getLuxesupplyOrg();
+  const salesPortal = (org.data.salesPortal || {}) as Record<string, unknown>;
+  const catalogSelectionRaw = (salesPortal.catalogSelection || {}) as Record<string, unknown>;
+  const catalogMode = String(catalogSelectionRaw.mode || "all");
+  if (catalogMode === "sku_list" && Array.isArray(catalogSelectionRaw.skus)) {
+    const allow = new Set(
+      catalogSelectionRaw.skus.map((s) => String(s).trim().toUpperCase()).filter(Boolean),
+    );
+    if (allow.size && !allow.has(sku.toUpperCase())) return null;
+  }
+
+  const db = getDb();
+  let snap = await db
+    .collection("uploadHistory")
+    .where("uploadDirectory", "==", UPLOAD_DIRECTORY)
+    .where("sku", "==", sku)
+    .limit(25)
+    .get();
+  if (snap.empty && sku !== sku.toUpperCase()) {
+    snap = await db
+      .collection("uploadHistory")
+      .where("uploadDirectory", "==", UPLOAD_DIRECTORY)
+      .where("sku", "==", sku.toUpperCase())
+      .limit(25)
+      .get();
+  }
+  if (snap.empty) return null;
+
+  const groups = groupUploads(snap.docs);
+  const group =
+    groups.find((g) => g.sku.toUpperCase() === sku.toUpperCase()) || groups[0] || null;
+  if (!group) return null;
+
+  const [iiqMap, holds] = await Promise.all([
+    loadIiqBySku([group.sku]),
+    loadActiveHoldsBySku([group.sku]),
+  ]);
+  const iiq = iiqMap.get(group.sku) || null;
+  const priceLabel = getIiqListingPrice(iiq);
+  const title =
+    String((iiq && (iiq.Title || iiq.title || iiq.productName)) || "").trim() ||
+    group.titleHint ||
+    group.sku;
+  const brand = String((iiq && (iiq.Brand || iiq.brand)) || group.brand || "").trim();
+  const soldOut = !!(iiq && (iiq.sold === true || iiq.Sold === true));
+  const condition = String((iiq && (iiq.Condition || iiq.condition)) || "").trim() || "—";
+  const material = String((iiq && (iiq.Material || iiq.material)) || "").trim() || "—";
+  const era = String((iiq && (iiq.Era || iiq.era || iiq.Period)) || "").trim() || "—";
+  const hold = holds.get(group.sku);
+  const heldByYou = !!(hold && buyerUsername && hold.portalUsername === buyerUsername);
+  const heldByOther = !!(hold && !heldByYou);
+
+  return {
+    sku: group.sku,
+    title,
+    brand,
+    price: parseMoney(priceLabel),
+    priceLabel,
+    imageUrl: group.imageUrls[0] || null,
+    imageUrls: group.imageUrls,
+    hostCompAvgUsd: group.hostCompAvgUsd,
+    soldOut,
+    held: heldByOther,
+    heldByYou,
+    heldUntil: hold?.heldUntil || null,
+    condition,
+    material,
+    era,
+    location: "VAULT",
+  };
 }
 
 export async function saveCatalogSelection(input: {

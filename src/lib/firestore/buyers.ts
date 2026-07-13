@@ -308,6 +308,7 @@ export async function createBuyerQuote(opts: {
       brand: i.brand,
       quantity: 1,
       price: i.price,
+      imageUrl: i.imageUrl ?? null,
       isSuggestedLot: !!i.isSuggestedLot,
       lotId: i.isSuggestedLot ? i.lotId || "" : "",
       lotItems: i.isSuggestedLot && Array.isArray(i.lotItems) ? i.lotItems : [],

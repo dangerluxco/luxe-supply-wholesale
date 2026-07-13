@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { getQuoteById } from "@/lib/firestore/quotes";
 import { QuoteStatusSelect } from "@/components/QuoteStatusSelect";
 import { QuoteNotesForm } from "@/components/QuoteNotesForm";
-import { money, fullDate } from "@/lib/format";
+import { QuoteItemsEditor } from "@/components/QuoteItemsEditor";
+import { fullDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -48,51 +49,13 @@ export default async function StaffQuoteDetailPage({
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.3fr_1fr]">
         <div className="space-y-6">
           <div className="rounded-card border border-border bg-surface p-5">
-            <div className="micro-badge mb-3 text-[10px] tracking-[0.14em] text-accent">
-              LINE ITEMS
-            </div>
-            {quote.items.length === 0 ? (
-              <p className="text-[12.5px] text-muted">No items recorded on this invoice request.</p>
-            ) : (
-              <div className="overflow-hidden rounded-chip border border-border">
-                <div className="grid grid-cols-[1fr_110px_70px_90px] border-b border-border bg-ground px-4 py-2 font-mono text-[10px] uppercase tracking-[0.1em] text-muted">
-                  <span>Item</span>
-                  <span>Brand</span>
-                  <span className="text-center">Qty</span>
-                  <span className="text-right">Price</span>
-                </div>
-                {quote.items.map((item, i) => {
-                  const it = item as Record<string, unknown>;
-                  return (
-                    <div
-                      key={`${it.sku || i}-${i}`}
-                      className="grid grid-cols-[1fr_110px_70px_90px] items-center border-b border-border/60 px-4 py-3 text-[12.5px] last:border-b-0"
-                    >
-                      <div>
-                        <div className="text-ink">{String(it.title || it.sku || "—")}</div>
-                        <div className="font-mono text-[11px] text-muted">
-                          {String(it.sku || "")}
-                          {it.isSuggestedLot ? " · suggested lot" : ""}
-                        </div>
-                      </div>
-                      <span className="text-secondary">{String(it.brand || "—")}</span>
-                      <span className="text-center font-mono">{Number(it.quantity || 1)}</span>
-                      <span className="text-right font-mono">
-                        {it.price != null ? money(Number(it.price)) : "—"}
-                      </span>
-                    </div>
-                  );
-                })}
+            <div className="mb-3 flex items-baseline justify-between">
+              <div className="micro-badge text-[10px] tracking-[0.14em] text-accent">
+                LINE ITEMS
               </div>
-            )}
-            <div className="mt-3 flex items-center justify-between text-[12.5px]">
-              <span className="text-muted">
-                {quote.itemCount} item{quote.itemCount === 1 ? "" : "s"}
-              </span>
-              <span className="font-mono text-ink">
-                {quote.cartTotal != null ? money(Math.round(quote.cartTotal)) : "—"}
-              </span>
+              <span className="text-[11px] text-muted">Remove products or adjust prices below.</span>
             </div>
+            <QuoteItemsEditor quoteId={quote.id} items={quote.items} />
           </div>
 
           <div className="rounded-card border border-border bg-surface p-5">

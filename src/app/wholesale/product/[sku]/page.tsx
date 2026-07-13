@@ -6,6 +6,8 @@ import { ROLE, PRODUCT_STATUS } from "@/lib/constants";
 import { Placeholder, OneOfOneBadge } from "@/components/Placeholder";
 import { money } from "@/lib/format";
 import { AddToOrderButton } from "@/components/AddToOrderButton";
+import { HoldAlertButton } from "@/components/HoldAlertButton";
+import { getHoldAlertForBuyerSku } from "@/lib/firestore/holdAlerts";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +25,11 @@ export default async function ProductPage({
     buyerUsername,
   });
   if (!product || product.soldOut) notFound();
+
+  const hasHoldAlert =
+    pricesVisible && product.held && buyerUsername
+      ? await getHoldAlertForBuyerSku(buyerUsername, product.sku)
+      : false;
 
   const price = Math.round(product.price ?? 0);
   const unavailable = product.held || product.price == null;
@@ -91,9 +98,16 @@ export default async function ProductPage({
           </div>
 
           {product.held ? (
-            <p className="mt-3 text-[12px] text-muted">
-              Status: {PRODUCT_STATUS.ON_HOLD} — soft-held by another buyer.
-            </p>
+            <>
+              <p className="mt-3 text-[12px] text-muted">
+                Status: {PRODUCT_STATUS.ON_HOLD} — soft-held by another buyer.
+              </p>
+              {pricesVisible ? (
+                <div className="mt-3">
+                  <HoldAlertButton sku={product.sku} active={hasHoldAlert} />
+                </div>
+              ) : null}
+            </>
           ) : product.heldByYou ? (
             <p className="mt-3 text-[12px] text-muted">
               Soft-held for you

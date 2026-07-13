@@ -16,6 +16,9 @@ import {
   findSkusHeldByOthers,
   syncCartHolds,
 } from "@/lib/firestore/holds";
+import { getQuoteThresholds, evaluateQuoteThresholds } from "@/lib/firestore/settings";
+import { getDb } from "@/lib/firestore/admin";
+import { notifyStaffOfInvoiceRequest } from "@/lib/notify";
 
 export async function addSkuToCart(sku: string) {
   return addSkusToCart([sku]);
@@ -123,6 +126,19 @@ export async function submitInvoiceRequest(message?: string) {
   const cart = await getBuyerCart(session.id);
   if (!cart.length) return { error: "Your order is empty." };
 
+  // Configurable minimum item count / order total (staff: /wholesaleportal/rep/settings).
+  const itemCount = cart.length;
+  const cartTotal = cart.reduce((s, i) => s + (Number(i.price) || 0), 0);
+  const thresholds = await getQuoteThresholds();
+  const thresholdCheck = evaluateQuoteThresholds(thresholds, {
+    itemCount,
+    cartTotal,
+    pricedItemCount: itemCount,
+  });
+  if (!thresholdCheck.met) {
+    return { error: thresholdCheck.message };
+  }
+
   const holdSkus = cartHoldSkus(cart);
   const { id } = await createBuyerQuote({ buyer, items: cart, message });
   await setBuyerCart(session.id, []);
@@ -135,6 +151,34 @@ export async function submitInvoiceRequest(message?: string) {
     });
   } catch (err) {
     console.warn("[submitInvoiceRequest] hold convert:", err instanceof Error ? err.message : err);
+  }
+
+  // Notify staff by email. Never blocks/fails the submit — the invoice request
+  // is already created above regardless of email outcome.
+  try {
+    const { sent, recipients } = await notifyStaffOfInvoiceRequest({
+      quoteId: id,
+      customerName: buyer.displayName || buyer.username,
+      customerEmail: buyer.email,
+      customerCompany: buyer.company,
+      customerPhone: buyer.phone,
+      message,
+      items: cart.map((i) => ({ sku: i.sku, title: i.title, brand: i.brand, price: i.price })),
+      itemCount,
+      cartTotal,
+    });
+    if (sent) {
+      await getDb()
+        .collection("salesPortalQuotes")
+        .doc(id)
+        .update({ emailSent: true, emailRecipients: recipients })
+        .catch(() => {});
+    }
+  } catch (err) {
+    console.error(
+      "[submitInvoiceRequest] staff email notify failed:",
+      err instanceof Error ? err.message : err,
+    );
   }
 
   revalidatePath("/wholesale");

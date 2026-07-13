@@ -22,6 +22,29 @@ export type PortalQuote = {
   updatedAt: string | null;
 };
 
+export type QuoteItemInput = {
+  sku: string;
+  title?: string;
+  brand?: string;
+  quantity?: number;
+  price: number;
+  imageUrl?: string | null;
+  isSuggestedLot?: boolean;
+  lotId?: string;
+  lotItems?: Array<Record<string, unknown>>;
+};
+
+/** Expand a quote line item to the inventory SKU(s) it holds (lots expand to their member SKUs). */
+export function expandQuoteItemSkus(item: Record<string, unknown>): string[] {
+  if (item.isSuggestedLot && Array.isArray(item.lotItems)) {
+    return (item.lotItems as Array<Record<string, unknown>>)
+      .map((li) => String(li?.sku || "").trim())
+      .filter(Boolean);
+  }
+  const sku = String(item.sku || "").trim();
+  return sku && !sku.startsWith("lot:") ? [sku] : [];
+}
+
 function serializeQuote(id: string, d: Record<string, unknown>): PortalQuote {
   const items = Array.isArray(d.items) ? (d.items as Array<Record<string, unknown>>) : [];
   return {
@@ -142,6 +165,47 @@ export async function updateQuoteStatus(
   if (updates.adminNotes != null) payload.adminNotes = String(updates.adminNotes).slice(0, 4000);
 
   await ref.update(payload);
+  const next = await ref.get();
+  return serializeQuote(next.id, next.data() || {});
+}
+
+/**
+ * Staff edit of line items: remove products and/or adjust unit prices, then
+ * recompute itemCount/cartTotal from the surviving items.
+ */
+export async function updateQuoteItems(
+  quoteId: string,
+  items: QuoteItemInput[],
+  updatedBy: string,
+): Promise<PortalQuote> {
+  const ref = getDb().collection("salesPortalQuotes").doc(quoteId);
+  const snap = await ref.get();
+  if (!snap.exists) throw new Error("Invoice request not found.");
+
+  const cleanItems = items
+    .map((i) => ({
+      sku: String(i.sku || "").trim(),
+      title: String(i.title || ""),
+      brand: String(i.brand || ""),
+      quantity: Math.max(1, Math.round(Number(i.quantity) || 1)),
+      price: Math.max(0, Number(i.price) || 0),
+      imageUrl: i.imageUrl ? String(i.imageUrl) : null,
+      isSuggestedLot: !!i.isSuggestedLot,
+      lotId: i.isSuggestedLot ? String(i.lotId || "") : "",
+      lotItems: i.isSuggestedLot && Array.isArray(i.lotItems) ? i.lotItems : [],
+    }))
+    .filter((i) => i.sku);
+
+  const cartTotal = cleanItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
+
+  await ref.update({
+    items: cleanItems,
+    itemCount: cleanItems.length,
+    cartTotal,
+    updatedAt: new Date(),
+    updatedBy,
+  });
+
   const next = await ref.get();
   return serializeQuote(next.id, next.data() || {});
 }

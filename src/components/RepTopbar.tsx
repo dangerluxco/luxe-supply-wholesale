@@ -18,7 +18,9 @@ export function RepTopbar({
     { label: "Catalog", href: "/wholesaleportal/rep/catalog" },
     { label: "Bundles", href: "/wholesaleportal/rep/bundles" },
     { label: "Invoices", href: "/wholesaleportal/rep/invoices" },
+    { label: "Wishlist", href: "/wholesaleportal/rep/wishlist" },
     ...(isManager ? [{ label: "Performance", href: "/wholesaleportal/rep/performance" }] : []),
+    { label: "Settings", href: "/wholesaleportal/rep/settings" },
   ];
 
   function isActive(href: string) {

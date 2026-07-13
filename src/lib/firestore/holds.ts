@@ -205,6 +205,42 @@ export async function syncCartHolds(opts: {
   }
 }
 
+/**
+ * Release specific SKUs' holds when staff remove items from an invoice request,
+ * but only if the hold still points at this quote (avoids releasing another
+ * buyer's hold on a SKU that happens to match by coincidence).
+ */
+export async function releaseQuoteHoldsForSkus(
+  quoteId: string,
+  skus: string[],
+): Promise<{ released: number }> {
+  const unique = [...new Set(skus.map((s) => String(s || "").trim()).filter(Boolean))];
+  if (!unique.length || !quoteId) return { released: 0 };
+
+  const db = getDb();
+  const refs = unique.map((sku) => db.collection("salesPortalHolds").doc(holdDocId(WHOLESALE_ORG_SLUG, sku)));
+
+  let snaps;
+  try {
+    snaps = await db.getAll(...refs);
+  } catch (err) {
+    console.warn("[holds] releaseQuoteHoldsForSkus getAll:", err instanceof Error ? err.message : err);
+    return { released: 0 };
+  }
+
+  const batch = db.batch();
+  let released = 0;
+  for (const snap of snaps) {
+    if (!snap.exists) continue;
+    const d = snap.data() || {};
+    if (String(d.quoteId || "") !== quoteId) continue;
+    batch.delete(snap.ref);
+    released += 1;
+  }
+  if (released) await batch.commit();
+  return { released };
+}
+
 /** After invoice-request submit: upgrade cart SKUs to 48h processing holds (stored with reason: "quote" — see BRIDGE.md). */
 export async function convertCartHoldsToQuote(opts: {
   username: string;

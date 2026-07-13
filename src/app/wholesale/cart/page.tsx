@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { ROLE } from "@/lib/constants";
 import { cartHoldSkus, getBuyerCart } from "@/lib/firestore/buyers";
 import { loadActiveHoldsBySku } from "@/lib/firestore/holds";
+import { getQuoteThresholds, evaluateQuoteThresholds } from "@/lib/firestore/settings";
 import { money } from "@/lib/format";
 import { EmptyState } from "@/components/EmptyState";
 import { SubmitInvoiceRequestButton } from "@/components/SubmitInvoiceRequestButton";
@@ -20,6 +21,13 @@ export default async function CartPage() {
   const holdSkus = cartHoldSkus(cart);
   const holds = await loadActiveHoldsBySku(holdSkus);
   const me = (session.username || "").toLowerCase();
+
+  const thresholds = await getQuoteThresholds();
+  const thresholdCheck = evaluateQuoteThresholds(thresholds, {
+    itemCount: cart.length,
+    cartTotal: total,
+    pricedItemCount: cart.length,
+  });
 
   // Earliest active hold expiry for this buyer's cart SKUs
   let earliestHoldUntil: string | null = null;
@@ -101,8 +109,13 @@ export default async function CartPage() {
               Checkout submits your order for processing to invoice. Soft holds become 48-hour
               processing holds when you submit.
             </p>
+            {!thresholdCheck.met ? (
+              <p className="mt-3 rounded-chip border border-accent/40 bg-accent/5 px-3 py-2 text-[11.5px] text-secondary">
+                {thresholdCheck.message}
+              </p>
+            ) : null}
             <div className="mt-5">
-              <SubmitInvoiceRequestButton />
+              <SubmitInvoiceRequestButton disabled={!thresholdCheck.met} />
             </div>
           </div>
         </div>
