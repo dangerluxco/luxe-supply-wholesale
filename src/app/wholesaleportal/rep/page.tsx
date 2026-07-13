@@ -29,14 +29,14 @@ export default async function RepDashboard({
   const pipeline = [
     { label: "Open", status: "open", href: "/wholesaleportal/rep?status=open" },
     { label: "Contacted", status: "contacted", href: "/wholesaleportal/rep?status=contacted" },
-    { label: "Quoted", status: "quoted", href: "/wholesaleportal/rep?status=quoted" },
+    { label: "Invoiced", status: "quoted", href: "/wholesaleportal/rep?status=quoted" },
     { label: "All", status: "all", href: "/wholesaleportal/rep?status=all" },
   ];
 
   return (
     <div className="px-10 pb-12 pt-8">
       <div className="mb-6 flex flex-wrap items-baseline gap-4">
-        <h1 className="text-[24px] font-semibold text-ink">Quote queue</h1>
+        <h1 className="text-[24px] font-semibold text-ink">Invoice requests</h1>
         <span className="text-[12px] text-muted">
           Live from Firestore · {openCount} open
         </span>
@@ -67,8 +67,8 @@ export default async function RepDashboard({
 
       {quotes.length === 0 ? (
         <EmptyState
-          title="No quote requests in this filter."
-          hint="Buyer storefront quote submissions land here from Firestore."
+          title="No invoice requests in this filter."
+          hint="Buyer storefront invoice-request submissions land here from Firestore."
         />
       ) : (
         <div className="overflow-hidden rounded-card border border-border bg-surface">
@@ -88,7 +88,12 @@ export default async function RepDashboard({
                 className="grid grid-cols-[1.3fr_1fr_80px_90px_110px_140px] items-center border-b border-border/60 px-5 py-3.5 text-[12.5px] text-[#3A3934] last:border-b-0"
               >
                 <div>
-                  <div className="font-semibold text-ink">{name}</div>
+                  <Link
+                    href={`/wholesaleportal/rep/quotes/${q.id}`}
+                    className="font-semibold text-ink hover:text-accent hover:underline"
+                  >
+                    {name}
+                  </Link>
                   <div className="font-mono text-[11px] text-muted">{q.customerEmail || "—"}</div>
                 </div>
                 <div>

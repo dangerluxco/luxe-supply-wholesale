@@ -1,6 +1,7 @@
 import type { QueryDocumentSnapshot } from "firebase-admin/firestore";
 import { getDb, UPLOAD_DIRECTORY, WHOLESALE_ORG_SLUG } from "./admin";
 import { getLuxesupplyOrg } from "./staff";
+import { loadActiveHoldsBySku } from "./holds";
 
 export type CatalogProduct = {
   sku: string;
@@ -12,7 +13,11 @@ export type CatalogProduct = {
   imageUrls: string[];
   hostCompAvgUsd: number | null;
   soldOut: boolean;
+  /** Held by another buyer (blocks purchase). */
   held: boolean;
+  /** Soft-held by the current signed-in buyer. */
+  heldByYou: boolean;
+  heldUntil: string | null;
   condition: string;
   material: string;
   era: string;
@@ -101,13 +106,19 @@ async function loadIiqBySku(
   return map;
 }
 
-export async function listCatalogProducts(limit = 60): Promise<{
+export async function listCatalogProducts(
+  limit = 60,
+  opts?: { buyerUsername?: string | null },
+): Promise<{
   products: CatalogProduct[];
   catalogSelection: { mode: string; skus: string[] };
   orgName: string;
   hasMore: boolean;
 }> {
   const safeLimit = Math.min(Math.max(Math.floor(limit) || 60, 24), 800);
+  const buyerUsername = String(opts?.buyerUsername || "")
+    .trim()
+    .toLowerCase();
   const org = await getLuxesupplyOrg();
   const salesPortal = (org.data.salesPortal || {}) as Record<string, unknown>;
   const catalogSelectionRaw = (salesPortal.catalogSelection || {}) as Record<string, unknown>;
@@ -151,7 +162,11 @@ export async function listCatalogProducts(limit = 60): Promise<{
   const unique = Array.from(bySku.values());
   const page = unique.slice(0, safeLimit);
   const hasMore = unique.length > safeLimit || snap.size >= uploadCap;
-  const iiqMap = await loadIiqBySku(page.map((g) => g.sku));
+  const skus = page.map((g) => g.sku);
+  const [iiqMap, holds] = await Promise.all([
+    loadIiqBySku(skus),
+    loadActiveHoldsBySku(skus),
+  ]);
 
   const products: CatalogProduct[] = page.map((g) => {
     const iiq = iiqMap.get(g.sku) || null;
@@ -165,6 +180,9 @@ export async function listCatalogProducts(limit = 60): Promise<{
     const condition = String((iiq && (iiq.Condition || iiq.condition)) || "").trim() || "—";
     const material = String((iiq && (iiq.Material || iiq.material)) || "").trim() || "—";
     const era = String((iiq && (iiq.Era || iiq.era || iiq.Period)) || "").trim() || "—";
+    const hold = holds.get(g.sku);
+    const heldByYou = !!(hold && buyerUsername && hold.portalUsername === buyerUsername);
+    const heldByOther = !!(hold && !heldByYou);
     return {
       sku: g.sku,
       title,
@@ -175,7 +193,9 @@ export async function listCatalogProducts(limit = 60): Promise<{
       imageUrls: g.imageUrls,
       hostCompAvgUsd: g.hostCompAvgUsd,
       soldOut,
-      held: false,
+      held: heldByOther,
+      heldByYou,
+      heldUntil: hold?.heldUntil || null,
       condition,
       material,
       era,
@@ -191,10 +211,13 @@ export async function listCatalogProducts(limit = 60): Promise<{
   };
 }
 
-export async function getCatalogProductBySku(skuRaw: string): Promise<CatalogProduct | null> {
+export async function getCatalogProductBySku(
+  skuRaw: string,
+  opts?: { buyerUsername?: string | null },
+): Promise<CatalogProduct | null> {
   const sku = String(skuRaw || "").trim();
   if (!sku) return null;
-  const { products } = await listCatalogProducts(200);
+  const { products } = await listCatalogProducts(200, opts);
   return products.find((p) => p.sku.toUpperCase() === sku.toUpperCase()) || null;
 }
 

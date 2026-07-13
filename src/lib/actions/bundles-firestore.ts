@@ -14,9 +14,9 @@ import {
   cartHoldSkus,
   getBuyerCart,
   setBuyerCart,
-  syncCartHolds,
   type CartItem,
 } from "@/lib/firestore/buyers";
+import { findSkusHeldByOthers, syncCartHolds } from "@/lib/firestore/holds";
 
 async function requireStaff() {
   const session = await getSession();
@@ -116,6 +116,16 @@ export async function addSuggestedLotToCart(lotId: string) {
     return { error: "Already in your order." };
   }
 
+  const lotSkus = lot.items.map((it) => it.sku).filter(Boolean);
+  const blocked = await findSkusHeldByOthers(lotSkus, username);
+  if (blocked.length) {
+    return {
+      error: `On hold for another buyer: ${blocked.slice(0, 6).join(", ")}${
+        blocked.length > 6 ? "…" : ""
+      }`,
+    };
+  }
+
   const lotItems = lot.items.map((it) => ({
     sku: it.sku,
     title: it.title || it.sku,
@@ -142,7 +152,6 @@ export async function addSuggestedLotToCart(lotId: string) {
 
   await setBuyerCart(session.id, next);
   await syncCartHolds({
-    buyerId: session.id,
     username: session.username || "",
     displayName: session.name,
     skus: cartHoldSkus(next),

@@ -16,9 +16,12 @@ export default async function ProductPage({
 }) {
   const session = await getSession();
   const pricesVisible = !!session && session.role === ROLE.BUYER;
+  const buyerUsername = pricesVisible ? session?.username : null;
 
   const { sku } = await params;
-  const product = await getCatalogProductBySku(decodeURIComponent(sku));
+  const product = await getCatalogProductBySku(decodeURIComponent(sku), {
+    buyerUsername,
+  });
   if (!product || product.soldOut) notFound();
 
   const price = Math.round(product.price ?? 0);
@@ -90,6 +93,14 @@ export default async function ProductPage({
           {product.held ? (
             <p className="mt-3 text-[12px] text-muted">
               Status: {PRODUCT_STATUS.ON_HOLD} — soft-held by another buyer.
+            </p>
+          ) : product.heldByYou ? (
+            <p className="mt-3 text-[12px] text-muted">
+              Soft-held for you
+              {product.heldUntil
+                ? ` until ${new Date(product.heldUntil).toLocaleString()}`
+                : ""}
+              .
             </p>
           ) : null}
         </div>

@@ -2,6 +2,8 @@ import type { Query } from "firebase-admin/firestore";
 import { getDb, toIso } from "./admin";
 import { getLuxesupplyOrg } from "./staff";
 
+// Internal name matches the `salesPortalQuotes` Firestore collection so we don't
+// migrate live data. Buyer/staff UI presents these documents as "invoice requests".
 export type PortalQuote = {
   id: string;
   status: string;
@@ -83,6 +85,44 @@ export async function listQuotes(options?: {
   }
 
   return { quotes, openCount, organizationId: org.id };
+}
+
+export async function getQuoteById(id: string): Promise<PortalQuote | null> {
+  if (!id) return null;
+  const snap = await getDb().collection("salesPortalQuotes").doc(id).get();
+  if (!snap.exists) return null;
+  return serializeQuote(snap.id, snap.data() || {});
+}
+
+export async function listQuotesForBuyer(
+  username: string,
+  limitCount = 50,
+): Promise<PortalQuote[]> {
+  if (!username) return [];
+  const org = await getLuxesupplyOrg();
+  const db = getDb();
+
+  let snap;
+  try {
+    snap = await db
+      .collection("salesPortalQuotes")
+      .where("organizationId", "==", org.id)
+      .where("portalUsername", "==", username)
+      .orderBy("createdAt", "desc")
+      .limit(limitCount)
+      .get();
+  } catch {
+    snap = await db
+      .collection("salesPortalQuotes")
+      .where("organizationId", "==", org.id)
+      .where("portalUsername", "==", username)
+      .limit(limitCount)
+      .get();
+  }
+
+  return snap.docs
+    .map((doc) => serializeQuote(doc.id, doc.data() || {}))
+    .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
 }
 
 export async function updateQuoteStatus(

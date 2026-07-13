@@ -31,7 +31,9 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
   const pageLimit = Math.min(Math.max(Number(one(sp.limit)) || 200, 24), 800);
 
   const [{ products: all, hasMore }, lots] = await Promise.all([
-    listCatalogProducts(pageLimit),
+    listCatalogProducts(pageLimit, {
+      buyerUsername: isBuyer ? session?.username : null,
+    }),
     isBuyer && session.username
       ? getActiveLotsForBuyer(session.username)
       : Promise.resolve([]),
@@ -104,6 +106,8 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
     imageUrls: p.imageUrls?.length ? p.imageUrls : p.imageUrl ? [p.imageUrl] : [],
     brand: p.brand,
     hostCompAvgUsd: p.hostCompAvgUsd,
+    heldByYou: p.heldByYou,
+    heldUntil: p.heldUntil,
   }));
 
   return (

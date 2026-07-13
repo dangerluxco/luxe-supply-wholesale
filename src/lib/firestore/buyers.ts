@@ -1,4 +1,4 @@
-import { createHash, scryptSync, timingSafeEqual } from "crypto";
+import { randomBytes, scryptSync, timingSafeEqual } from "crypto";
 import type { QueryDocumentSnapshot } from "firebase-admin/firestore";
 import { getDb, toIso, WHOLESALE_ORG_SLUG } from "./admin";
 import { getLuxesupplyOrg } from "./staff";
@@ -37,6 +37,40 @@ export function normalizeBuyerUsername(raw: string): string | null {
     .toLowerCase();
   if (!s || s.length > 80 || !/^[a-z0-9._-]+$/.test(s)) return null;
   return s;
+}
+
+function normalizeBuyerEmail(raw: string): string | null {
+  const e = String(raw || "")
+    .trim()
+    .toLowerCase()
+    .slice(0, 200);
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) ? e : null;
+}
+
+/** Derive a login username from an email local-part, stripping +alias tags. */
+function usernameFromEmail(email: string): string | null {
+  const local = String(email || "").trim().toLowerCase().split("@")[0] || "";
+  const withoutAlias = local.split("+")[0] || "";
+  const cleaned = withoutAlias
+    .replace(/[^a-z0-9._-]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^[_.-]+|[_.-]+$/g, "")
+    .slice(0, 80);
+  return normalizeBuyerUsername(cleaned);
+}
+
+function generateTempPassword(): string {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+  const bytes = randomBytes(12);
+  let out = "";
+  for (let i = 0; i < 12; i += 1) out += alphabet[bytes[i]! % alphabet.length];
+  return out;
+}
+
+function hashPortalPassword(password: string): { salt: string; hash: string } {
+  const salt = randomBytes(16).toString("hex");
+  const hash = scryptSync(String(password || ""), salt, 64).toString("hex");
+  return { salt, hash };
 }
 
 function verifyPortalPassword(password: string, salt: unknown, expectedHash: unknown): boolean {
@@ -132,6 +166,72 @@ export async function listBuyers(): Promise<PortalBuyer[]> {
     .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
 }
 
+/** Staff-side invite: creates a storefront login in the same buyers collection auth reads from. */
+export async function createBuyer(opts: {
+  email: string;
+  username?: string;
+  password?: string;
+  displayName?: string;
+  company?: string;
+  ein?: string;
+  phone?: string;
+  createdBy: string;
+}): Promise<{ buyer: PortalBuyer; temporaryPassword: string }> {
+  const email = normalizeBuyerEmail(opts.email);
+  if (!email) throw new Error("A valid email is required.");
+
+  const username = normalizeBuyerUsername(opts.username || "") || usernameFromEmail(email);
+  if (!username) {
+    throw new Error(
+      "Could not derive a username from that email. Enter a username (letters, numbers, . _ - only).",
+    );
+  }
+
+  const org = await getLuxesupplyOrg();
+  const db = getDb();
+
+  const existing = await db
+    .collection("salesPortalBuyers")
+    .where("organizationId", "==", org.id)
+    .where("username", "==", username)
+    .limit(1)
+    .get();
+  if (!existing.empty) throw new Error(`Buyer username "${username}" already exists.`);
+
+  const password = String(opts.password || "").trim() || generateTempPassword();
+  if (password.length < 6) throw new Error("Password must be at least 6 characters.");
+  const { salt, hash } = hashPortalPassword(password);
+
+  const now = new Date();
+  const ref = db.collection("salesPortalBuyers").doc();
+  await ref.set({
+    organizationId: org.id,
+    orgSlug: WHOLESALE_ORG_SLUG,
+    username,
+    displayName: String(opts.displayName || "").trim().slice(0, 120) || username,
+    email,
+    company: String(opts.company || "").trim().slice(0, 160),
+    ein: String(opts.ein || "").trim().slice(0, 40),
+    phone: String(opts.phone || "").trim().slice(0, 40),
+    passwordSalt: salt,
+    passwordHash: hash,
+    mustChangePassword: true,
+    status: "invited",
+    invitedAt: now,
+    invitedBy: opts.createdBy,
+    createdAt: now,
+    updatedAt: now,
+    createdBy: opts.createdBy,
+    emailSent: false,
+  });
+
+  const saved = await ref.get();
+  return {
+    buyer: serializeBuyer(saved.id, saved.data() || {}),
+    temporaryPassword: password,
+  };
+}
+
 export type CartLotItem = {
   sku: string;
   title?: string;
@@ -180,47 +280,6 @@ export async function setBuyerCart(buyerId: string, items: CartItem[]): Promise<
     .collection("salesPortalCarts")
     .doc(buyerId)
     .set({ items, updatedAt: new Date() }, { merge: true });
-}
-
-function holdDocId(orgSlug: string, sku: string): string {
-  const raw = `${orgSlug}__${sku}`.toLowerCase();
-  return createHash("sha256").update(raw).digest("hex").slice(0, 40);
-}
-
-const HOLD_CART_MS = 30 * 60 * 1000;
-
-export async function syncCartHolds(opts: {
-  buyerId: string;
-  username: string;
-  displayName: string;
-  skus: string[];
-}): Promise<void> {
-  const org = await getLuxesupplyOrg();
-  const db = getDb();
-  const heldUntil = new Date(Date.now() + HOLD_CART_MS);
-  const unique = [...new Set(opts.skus.filter(Boolean))];
-
-  // Write holds for current cart SKUs
-  const batch = db.batch();
-  for (const sku of unique) {
-    const ref = db.collection("salesPortalHolds").doc(holdDocId(WHOLESALE_ORG_SLUG, sku));
-    batch.set(
-      ref,
-      {
-        orgSlug: WHOLESALE_ORG_SLUG,
-        organizationId: org.id,
-        uploadDirectory: WHOLESALE_ORG_SLUG,
-        sku,
-        portalUsername: opts.username,
-        buyerDisplayName: opts.displayName || opts.username,
-        reason: "cart",
-        heldUntil,
-        updatedAt: new Date(),
-      },
-      { merge: true },
-    );
-  }
-  await batch.commit();
 }
 
 export async function createBuyerQuote(opts: {

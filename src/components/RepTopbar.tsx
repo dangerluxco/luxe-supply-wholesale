@@ -13,7 +13,7 @@ export function RepTopbar({
   const pathname = usePathname();
 
   const nav = [
-    { label: "Quotes", href: "/wholesaleportal/rep" },
+    { label: "Invoice Requests", href: "/wholesaleportal/rep" },
     { label: "Clients", href: "/wholesaleportal/rep/clients" },
     { label: "Catalog", href: "/wholesaleportal/rep/catalog" },
     { label: "Bundles", href: "/wholesaleportal/rep/bundles" },

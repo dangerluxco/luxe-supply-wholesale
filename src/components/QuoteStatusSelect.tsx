@@ -4,6 +4,14 @@ import { useTransition } from "react";
 import { QUOTE_STATUSES } from "@/lib/constants";
 import { setQuoteStatus } from "@/lib/actions/portal";
 
+const STATUS_LABEL: Record<string, string> = {
+  open: "Open",
+  contacted: "Contacted",
+  quoted: "Invoiced",
+  closed: "Closed",
+  declined: "Declined",
+};
+
 export function QuoteStatusSelect({
   quoteId,
   status,
@@ -27,7 +35,7 @@ export function QuoteStatusSelect({
     >
       {QUOTE_STATUSES.map((s) => (
         <option key={s} value={s}>
-          {s}
+          {STATUS_LABEL[s] || s}
         </option>
       ))}
     </select>

@@ -1,5 +1,6 @@
 import { listBuyers } from "@/lib/firestore/buyers";
 import { EmptyState } from "@/components/EmptyState";
+import { InviteBuyerForm } from "@/components/InviteBuyerForm";
 
 export const dynamic = "force-dynamic";
 
@@ -15,10 +16,12 @@ export default async function ClientsPage() {
         </span>
       </div>
 
+      <InviteBuyerForm />
+
       {buyers.length === 0 ? (
         <EmptyState
           title="No clients yet."
-          hint="Invite buyers from the legacy portal tools or Cloud Functions; they will appear here."
+          hint="Invite a buyer above — they'll be able to sign in on the storefront immediately."
         />
       ) : (
         <div className="overflow-hidden rounded-card border border-border bg-surface">

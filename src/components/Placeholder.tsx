@@ -46,11 +46,11 @@ export function Placeholder({
 }
 
 // The black "1/1" badge that sits on every product image.
-export function OneOfOneBadge({ className }: { className?: string }) {
+export function OneOfOneBadge({ className = "left-2.5" }: { className?: string }) {
   return (
     <span
       className={clsx(
-        "micro-badge absolute left-2.5 top-2.5 rounded-[5px] bg-ink px-2 py-1 text-ground",
+        "micro-badge absolute top-2.5 rounded-[5px] bg-ink px-2 py-1 text-ground",
         className,
       )}
     >

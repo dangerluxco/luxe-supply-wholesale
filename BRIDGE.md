@@ -49,11 +49,11 @@ Smoke: `/wholesale/sign-in` (buyer) and `/wholesaleportal/sign-in` (staff). Stat
 
 | Reference (Next) | Live Firestore today | Status |
 | --- | --- | --- |
-| Quote queue (`/rep`) | `salesPortalQuotes` | Wired |
+| Invoice requests (`/rep`) | `salesPortalQuotes` (collection name unchanged to avoid a data migration; UI now says "invoice request", not "quote") | Wired |
 | Clients (`/rep/clients`) | `salesPortalBuyers` | Wired |
 | Catalog (`/rep/catalog`) | `uploadHistory` + IIQ + org catalogSelection | Wired |
-| Bundles / invoices / leads | Prisma only | Keep for new work |
-| Buyer `/portal` cart → invoice | Still Firebase `/wholesale` storefront | Later cutover |
+| Bundles / formal invoices (`/rep/invoices`) / leads | Prisma only | Keep for new work |
+| Buyer cart → "Submit for processing to invoice" | Firebase `/wholesale` storefront submits an invoice request; full Modify/Approve → formal invoice workflow is later cutover | In progress |
 
 ## Do not edit `reference-project/luxe-supply-co`
 

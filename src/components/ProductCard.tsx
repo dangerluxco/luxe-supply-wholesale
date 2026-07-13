@@ -23,6 +23,8 @@ export type CatalogProduct = {
   imageUrls?: string[];
   brand?: string | null;
   hostCompAvgUsd?: number | null;
+  heldByYou?: boolean;
+  heldUntil?: string | null;
 };
 
 export function ProductCard({
@@ -44,6 +46,7 @@ export function ProductCard({
   const [galleryIndex, setGalleryIndex] = useState(0);
   const onHold = p.status === PRODUCT_STATUS.ON_HOLD;
   const soldOut = p.status === PRODUCT_STATUS.SOLD;
+  const heldByYou = !!p.heldByYou;
   const canSelect = selectable && !onHold && !soldOut;
   const metaBits = [p.brand || p.origin, p.era.split(" · ")[1] ?? p.era, p.material].filter(
     Boolean,
@@ -86,17 +89,23 @@ export function ProductCard({
         {metaBits.join(" · ")}
       </div>
       <div className="mt-2.5 flex items-center gap-1.5 text-[11px] text-[#3A3934]">
-        <span
-          className="h-[7px] w-[7px] rounded-full"
-          style={{
-            background: soldOut ? "#8B897F" : onHold ? "#B08D3E" : "#4E9A6A",
-          }}
-        />
-        {soldOut
-          ? "Sold out"
-          : onHold
-            ? "On hold for another buyer"
-            : `Available · ${p.location.split(" · ")[0]}`}
+        {heldByYou ? (
+          <MicroBadge tone="outline-gold">Held for you</MicroBadge>
+        ) : (
+          <>
+            <span
+              className="h-[7px] w-[7px] rounded-full"
+              style={{
+                background: soldOut ? "#8B897F" : onHold ? "#B08D3E" : "#4E9A6A",
+              }}
+            />
+            {soldOut
+              ? "Sold out"
+              : onHold
+                ? "On hold for another buyer"
+                : `Available · ${p.location.split(" · ")[0]}`}
+          </>
+        )}
       </div>
     </>
   );

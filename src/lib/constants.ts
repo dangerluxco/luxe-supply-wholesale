@@ -80,6 +80,8 @@ export const DEFAULT_PACKING_CHECKLIST = [
 
 export const CARRIERS = ["FERRARI GRP", "MALCA-AMIT", "BRINK'S FINE ART"];
 
-// Firestore salesPortalQuotes statuses
+// Firestore salesPortalQuotes statuses. Kept as "quote" internally (collection
+// name + these values) to avoid a data migration — buyer/staff-facing copy now
+// calls this an "invoice request" (see BRIDGE.md).
 export const QUOTE_STATUSES = ["open", "contacted", "quoted", "closed", "declined"] as const;
 export type QuoteStatus = (typeof QUOTE_STATUSES)[number];
