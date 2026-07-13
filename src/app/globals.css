@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+}
+
+body {
+  background: #fafaf8;
+  color: #16161a;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Striped neutral placeholder (light + dark variants) */
+.ph-stripe {
+  background: repeating-linear-gradient(45deg, #edece7 0 10px, #f3f2ee 10px 20px);
+}
+.ph-stripe-dark {
+  background: repeating-linear-gradient(45deg, #2a2921 0 8px, #33322a 8px 16px);
+}
+.ph-stripe-vault {
+  background: repeating-linear-gradient(45deg, #33301f 0 8px, #3b3728 8px 16px);
+}
+
+/* Thin scrollbars for dense tables */
+* {
+  scrollbar-width: thin;
+}
+
+@layer utilities {
+  .micro-badge {
+    font-family: ui-monospace, monospace;
+    font-weight: 600;
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+}

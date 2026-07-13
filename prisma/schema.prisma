@@ -1,0 +1,221 @@
+// Luxe Supply Co. — Wholesale Portal (MVP)
+// SQLite has no native enums; status/role fields are String, constrained in app code
+// via src/lib/constants.ts. Money is stored as whole US dollars (Int).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String  @id @default(cuid())
+  email     String  @unique
+  password  String
+  name      String
+  initials  String
+  role      String // BUYER | REP | MANAGER | FULFILLMENT
+  title     String? // e.g. "senior specialist"
+  isSenior  Boolean @default(false)
+
+  // Buyer -> Account
+  accountId String?
+  account   Account? @relation("AccountBuyers", fields: [accountId], references: [id])
+
+  // Rep-owned relations
+  managedAccounts Account[]          @relation("AccountRep")
+  bundles         Bundle[]
+  leads           Lead[]
+  callsAsRep      VideoCallRequest[] @relation("CallRep")
+
+  // Buyer-owned relations
+  ordersAsBuyer Order[]            @relation("OrderBuyer")
+  callsAsBuyer  VideoCallRequest[] @relation("CallBuyer")
+
+  // Denormalized rep performance (demo stats)
+  statSalesQuarter Int?
+  statInvoices     Int?
+  statAov          Int?
+  statConversion   Int? // percent
+  statCalls        Int?
+  statDeltaSales   Int? // percent vs last quarter
+  statMonthly      String? // JSON: number[12] trailing-12-month sales
+
+  createdAt DateTime @default(now())
+}
+
+model Account {
+  id           String  @id @default(cuid())
+  company      String
+  email        String
+  addressLines String // JSON: string[]
+  industry     String?
+  // Trailing-12-month spend drives tier (T1 >= 50k, T2 10-50k, T3 < 10k)
+  trailing12Spend Int   @default(0)
+
+  assignedRepId String?
+  assignedRep   User?   @relation("AccountRep", fields: [assignedRepId], references: [id])
+
+  buyers   User[]    @relation("AccountBuyers")
+  orders   Order[]
+  invoices Invoice[]
+  purchases Product[] @relation("ProductSoldTo")
+
+  createdAt DateTime @default(now())
+}
+
+model Product {
+  id             String  @id @default(cuid())
+  sku            String  @unique // LX-XXXX or ItemIQ SKU
+  name           String
+  brand          String  @default("")
+  category       String
+  era            String
+  material       String
+  origin         String
+  wholesalePrice Int
+  estRetailLow   Int
+  estRetailHigh  Int
+  provenance     String
+  condition      String
+  marks          String?
+  dimensions     String?
+  location       String // e.g. "VAULT B · SHELF 14 · BIN 3"
+  status         String // AVAILABLE | ON_HOLD | SOLD | BUNDLED
+  images         String // JSON: string[] of placeholder labels OR image URLs
+  imageLabel     String // short label for the primary placeholder
+  primaryImageUrl String? // ItemIQ CDN URL when synced
+  hostCompAvgUsd  Float?
+  source          String  @default("seed") // seed | itemiq
+  authenticated   Boolean @default(false)
+  authLabel       String?
+
+  // Hold (48h) placed when added to a cart/order
+  holdExpiresAt DateTime?
+
+  // Bundle membership (a product is in at most one bundle)
+  bundleId String?
+  bundle   Bundle? @relation(fields: [bundleId], references: [id])
+
+  // Sale history (kept after SOLD for recommendation inputs)
+  soldToId String?
+  soldTo   Account?  @relation("ProductSoldTo", fields: [soldToId], references: [id])
+  soldAt   DateTime?
+
+  orderItems   OrderItem[]
+  callRequests VideoCallRequest[]
+
+  createdAt DateTime @default(now()) // "consigned" date
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
+model Bundle {
+  id            String    @id @default(cuid())
+  name          String
+  repId         String
+  rep           User      @relation(fields: [repId], references: [id])
+  discountType  String // PERCENT | FLAT
+  discountValue Int
+  status        String // DRAFT | LIVE
+  products      Product[]
+  createdAt     DateTime  @default(now())
+}
+
+model Order {
+  id        String  @id @default(cuid())
+  number    String  @unique // ORD-XXXX
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id])
+  buyerId   String
+  buyer     User    @relation("OrderBuyer", fields: [buyerId], references: [id])
+
+  // CART | TO_PICK | PICKING | PACKING | SHIPPED
+  status   String
+  poNumber String?
+
+  items       OrderItem[]
+  invoice     Invoice?
+  fulfillment FulfillmentTask?
+
+  shipBy    DateTime?
+  createdAt DateTime @default(now())
+}
+
+model OrderItem {
+  id         String  @id @default(cuid())
+  orderId    String
+  order      Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId  String
+  product    Product @relation(fields: [productId], references: [id])
+  priceAtAdd Int
+
+  holdExpiresAt  DateTime?
+  pickVerifiedAt DateTime?
+
+  createdAt DateTime @default(now())
+}
+
+model Invoice {
+  id        String  @id @default(cuid())
+  number    String  @unique // INV-XXXX
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id])
+  orderId   String? @unique
+  order     Order?  @relation(fields: [orderId], references: [id])
+
+  status   String // DRAFT | SENT | PAID | OVERDUE
+  poNumber String?
+  terms    String  @default("Net 30")
+
+  subtotal Int
+  shipping Int
+  total    Int
+
+  // Denormalized item summary for display (JSON: {name, sku, price}[])
+  lineItems String
+
+  issuedAt DateTime  @default(now())
+  dueDate  DateTime?
+  paidAt   DateTime?
+}
+
+model Lead {
+  id              String  @id @default(cuid())
+  accountName     String
+  industry        String?
+  estAnnualSpend  Int
+  tier            Int // 1 | 2 | 3
+  status          String // NEW | CONTACTED | QUALIFYING | WON | LOST
+  assignedRepId   String?
+  assignedRep     User?   @relation(fields: [assignedRepId], references: [id])
+  routedReason    String?
+  createdAt       DateTime @default(now())
+}
+
+model VideoCallRequest {
+  id            String   @id @default(cuid())
+  productId     String
+  product       Product  @relation(fields: [productId], references: [id])
+  buyerId       String
+  buyer         User     @relation("CallBuyer", fields: [buyerId], references: [id])
+  repId         String
+  rep           User     @relation("CallRep", fields: [repId], references: [id])
+  requestedSlot String // human label e.g. "Tue 14 · 11:30 EST"
+  note          String?
+  status        String // PENDING | ACCEPTED | RESCHEDULE
+  createdAt     DateTime @default(now())
+}
+
+model FulfillmentTask {
+  id              String  @id @default(cuid())
+  orderId         String  @unique
+  order           Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status          String // TO_PICK | PICKING | PACKING | SHIPPED
+  packingChecklist String // JSON: {label, done}[]
+  carrier         String?
+  trackingNumber  String?
+  shippedAt       DateTime?
+}
