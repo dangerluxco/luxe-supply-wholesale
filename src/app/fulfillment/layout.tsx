@@ -6,7 +6,7 @@ import { logout } from "@/lib/actions/auth";
 
 export default async function FulfillmentLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
-  if (!session || session.role !== ROLE.FULFILLMENT) redirect("/login");
+  if (!session || session.role !== ROLE.FULFILLMENT) redirect("/wholesaleportal/sign-in");
 
   return (
     <div className="min-h-screen bg-ful-ground text-white">

@@ -13,6 +13,6 @@ export function csvBody(rows: Array<Array<string | number | null | undefined>>):
   return rows.map(csvRow).join("\r\n");
 }
 
-export function isoDate(d: Date | null | undefined): string {
+export function isoDate(d: Date | string | null | undefined): string {
   return d ? new Date(d).toISOString().slice(0, 10) : "";
 }

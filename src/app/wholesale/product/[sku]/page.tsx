@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { getCatalogProductBySku } from "@/lib/firestore/catalog";
 import { getSession } from "@/lib/auth";
 import { ROLE, PRODUCT_STATUS } from "@/lib/constants";
-import { Placeholder, OneOfOneBadge } from "@/components/Placeholder";
+import { ProductPdpGallery } from "@/components/ProductPdpGallery";
 import { money } from "@/lib/format";
 import { AddToOrderButton } from "@/components/AddToOrderButton";
 import { HoldAlertButton } from "@/components/HoldAlertButton";
@@ -21,9 +21,14 @@ export default async function ProductPage({
   const buyerUsername = pricesVisible ? session?.username : null;
 
   const { sku } = await params;
-  const product = await getCatalogProductBySku(decodeURIComponent(sku), {
-    buyerUsername,
-  });
+  let product: Awaited<ReturnType<typeof getCatalogProductBySku>> = null;
+  try {
+    product = await getCatalogProductBySku(decodeURIComponent(sku), {
+      buyerUsername,
+    });
+  } catch (err) {
+    console.warn("[wholesale product] Firestore unavailable:", err instanceof Error ? err.message : err);
+  }
   if (!product || product.soldOut) notFound();
 
   const hasHoldAlert =
@@ -45,13 +50,11 @@ export default async function ProductPage({
       </div>
 
       <div className="grid grid-cols-1 gap-10 lg:grid-cols-[1.1fr_0.9fr]">
-        <Placeholder
-          label={product.title}
-          imageSrc={product.imageUrl}
-          className="aspect-square w-full overflow-hidden rounded-card border border-border"
-        >
-          <OneOfOneBadge />
-        </Placeholder>
+        <ProductPdpGallery
+          title={product.title}
+          sku={product.sku}
+          imageUrls={product.imageUrls.length ? product.imageUrls : [product.imageUrl]}
+        />
 
         <div>
           <div className="font-mono text-[11px] uppercase tracking-[0.12em] text-muted">{product.sku}</div>

@@ -16,6 +16,11 @@ function loginRedirect(path: string, request: Request) {
   return NextResponse.redirect(new URL(path, publicOrigin(request)), 303);
 }
 
+/** GET should never stay on /api/login — send staff to the sign-in page. */
+export async function GET(request: Request) {
+  return loginRedirect("/wholesaleportal/sign-in", request);
+}
+
 export async function POST(request: Request) {
   const form = await request.formData();
   const email = formField(form, "email").trim().toLowerCase();

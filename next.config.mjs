@@ -3,6 +3,11 @@ const nextConfig = {
   output: "standalone",
   eslint: { ignoreDuringBuilds: true },
   typescript: { ignoreBuildErrors: false },
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "32mb",
+    },
+  },
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "**.googleapis.com" },

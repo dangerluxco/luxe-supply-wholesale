@@ -16,6 +16,7 @@ import {
   findSkusHeldByOthers,
   syncCartHolds,
 } from "@/lib/firestore/holds";
+import { listActiveBundledSkus } from "@/lib/firestore/suggestedLots";
 import { getQuoteThresholds, evaluateQuoteThresholds } from "@/lib/firestore/settings";
 import { getDb } from "@/lib/firestore/admin";
 import { notifyStaffOfInvoiceRequest } from "@/lib/notify";
@@ -34,6 +35,16 @@ export async function addSkusToCart(skus: string[]) {
   if (!unique.length) return { error: "No pieces selected." };
 
   const username = session.username || "";
+  const bundled = await listActiveBundledSkus();
+  const inBundle = unique.filter((s) => bundled.has(s.toUpperCase()));
+  if (inBundle.length) {
+    return {
+      error: `In an active suggested lot (not sold individually): ${inBundle
+        .slice(0, 6)
+        .join(", ")}${inBundle.length > 6 ? "…" : ""}`,
+    };
+  }
+
   const blocked = await findSkusHeldByOthers(unique, username);
   if (blocked.length) {
     return {

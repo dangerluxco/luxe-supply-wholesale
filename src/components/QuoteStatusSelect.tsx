@@ -10,6 +10,7 @@ const STATUS_LABEL: Record<string, string> = {
   quoted: "Invoiced",
   closed: "Closed",
   declined: "Declined",
+  timed_out: "Timed out",
 };
 
 export function QuoteStatusSelect({

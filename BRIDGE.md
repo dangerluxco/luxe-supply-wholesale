@@ -45,6 +45,21 @@ firebase deploy --only hosting
 
 Smoke: `/wholesale/sign-in` (buyer) and `/wholesaleportal/sign-in` (staff). Static SPA backup lives in `wholesaleportal-legacy/`.
 
+## Daily cron — expire stale suggested lots & invoice requests
+
+Active bundles hide their SKUs from the individual storefront. Lots older than **14 days** auto-archive so those SKUs return to sale.
+
+Pending invoice requests (open/contacted) older than **7 days** are set to **timed_out**: holds release and any suggested lots on the request are deactivated.
+
+Both run on the same Scheduler job:
+
+1. Set a strong `CRON_SECRET` on Cloud Run (and locally in `.env` for testing).
+2. Cloud Scheduler job `luxe-expire-bundles` (daily 6:00 America/New_York) POSTs:
+
+`https://photography-964f5.web.app/api/cron/expire-bundles` with `Authorization: Bearer <CRON_SECRET>`
+
+Local smoke: `curl -X POST "http://localhost:3000/api/cron/expire-bundles" -H "Authorization: Bearer $CRON_SECRET"`
+
 ## Feature map
 
 | Reference (Next) | Live Firestore today | Status |

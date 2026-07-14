@@ -1,4 +1,4 @@
-import { listCatalogProducts } from "@/lib/firestore/catalog";
+import { listCatalogProducts, getCatalogSettingsState } from "@/lib/firestore/catalog";
 import { CatalogSettingsForm } from "@/components/CatalogSettingsForm";
 import { money } from "@/lib/format";
 import { EmptyState } from "@/components/EmptyState";
@@ -6,18 +6,34 @@ import { EmptyState } from "@/components/EmptyState";
 export const dynamic = "force-dynamic";
 
 export default async function CatalogPage() {
-  const { products, catalogSelection, orgName } = await listCatalogProducts(48);
+  let products: Awaited<ReturnType<typeof listCatalogProducts>>["products"] = [];
+  let settings: Awaited<ReturnType<typeof getCatalogSettingsState>> = {
+    mode: "all",
+    skus: [],
+    curatedCatalog: null,
+    orgName: "LuxeSupply",
+  };
+  try {
+    const [productsResult, settingsResult] = await Promise.all([
+      listCatalogProducts(48),
+      getCatalogSettingsState(),
+    ]);
+    products = productsResult.products;
+    settings = settingsResult;
+  } catch (err) {
+    console.warn("[rep catalog] Firestore unavailable:", err instanceof Error ? err.message : err);
+  }
 
   return (
     <div className="px-10 pb-12 pt-8">
       <div className="mb-6 flex flex-wrap items-baseline gap-3">
         <h1 className="text-[24px] font-semibold text-ink">Catalog</h1>
         <span className="text-[12px] text-muted">
-          {orgName} · live Firestore inventory (not synced to Prisma)
+          {settings.orgName} · live Firestore inventory (not synced to Prisma)
         </span>
       </div>
 
-      <CatalogSettingsForm mode={catalogSelection.mode} skus={catalogSelection.skus} />
+      <CatalogSettingsForm mode={settings.mode} curatedCatalog={settings.curatedCatalog} />
 
       <div className="mt-10 mb-4 flex items-baseline gap-3">
         <h2 className="text-[16px] font-semibold text-ink">Recent products</h2>

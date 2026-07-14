@@ -1,6 +1,10 @@
 import type { Query } from "firebase-admin/firestore";
 import { getDb, toIso } from "./admin";
 import { getLuxesupplyOrg } from "./staff";
+import { INVOICE_REQUEST_TIMEOUT_DAYS } from "@/lib/constants";
+import { releaseAllHoldsForQuote } from "./holds";
+import { archiveSuggestedLot } from "./suggestedLots";
+import { markSkusSold } from "./catalog";
 
 // Internal name matches the `salesPortalQuotes` Firestore collection so we don't
 // migrate live data. Buyer/staff UI presents these documents as "invoice requests".
@@ -20,6 +24,9 @@ export type PortalQuote = {
   adminNotes: string;
   createdAt: string | null;
   updatedAt: string | null;
+  /** Set once staff generates a formal invoice from this request. */
+  invoiceId: string | null;
+  invoiceNumber: string | null;
 };
 
 export type QuoteItemInput = {
@@ -45,6 +52,20 @@ export function expandQuoteItemSkus(item: Record<string, unknown>): string[] {
   return sku && !sku.startsWith("lot:") ? [sku] : [];
 }
 
+export function expandQuoteAllSkus(items: Array<Record<string, unknown>>): string[] {
+  return [...new Set(items.flatMap((it) => expandQuoteItemSkus(it)))];
+}
+
+export function lotIdsFromQuoteItems(items: Array<Record<string, unknown>>): string[] {
+  const ids = new Set<string>();
+  for (const it of items) {
+    if (!it.isSuggestedLot) continue;
+    const lotId = String(it.lotId || "").trim();
+    if (lotId) ids.add(lotId);
+  }
+  return [...ids];
+}
+
 function serializeQuote(id: string, d: Record<string, unknown>): PortalQuote {
   const items = Array.isArray(d.items) ? (d.items as Array<Record<string, unknown>>) : [];
   return {
@@ -63,6 +84,8 @@ function serializeQuote(id: string, d: Record<string, unknown>): PortalQuote {
     adminNotes: String(d.adminNotes || ""),
     createdAt: toIso(d.createdAt),
     updatedAt: toIso(d.updatedAt),
+    invoiceId: d.invoiceId ? String(d.invoiceId) : null,
+    invoiceNumber: d.invoiceNumber ? String(d.invoiceNumber) : null,
   };
 }
 
@@ -208,6 +231,73 @@ export async function updateQuoteItems(
 
   const next = await ref.get();
   return serializeQuote(next.id, next.data() || {});
+}
+
+/** Link an invoice request to the formal invoice generated from it. */
+export async function linkQuoteToInvoice(
+  quoteId: string,
+  invoice: { id: string; invoiceNumber: string },
+): Promise<void> {
+  await getDb().collection("salesPortalQuotes").doc(quoteId).update({
+    invoiceId: invoice.id,
+    invoiceNumber: invoice.invoiceNumber,
+    status: "quoted",
+    updatedAt: new Date(),
+  });
+}
+
+/** On invoice generation / approval: mark SKUs sold and clear soft-holds for this request. */
+export async function finalizeInvoiceRequestAsSold(
+  quoteId: string,
+  updatedBy: string,
+): Promise<void> {
+  const quote = await getQuoteById(quoteId);
+  if (!quote) return;
+  const skus = expandQuoteAllSkus(quote.items);
+  if (skus.length) {
+    await markSkusSold(skus);
+  }
+  await releaseAllHoldsForQuote(quoteId);
+  for (const lotId of lotIdsFromQuoteItems(quote.items)) {
+    try {
+      await archiveSuggestedLot(lotId, updatedBy || "system:invoice-approved");
+    } catch (err) {
+      console.warn("[quotes] archive lot on approve:", lotId, err);
+    }
+  }
+}
+
+/**
+ * Pending open/contacted requests older than INVOICE_REQUEST_TIMEOUT_DAYS → timed_out,
+ * release holds, deactivate any bundles included in the request.
+ */
+export async function expireStaleInvoiceRequests(
+  maxAgeDays = INVOICE_REQUEST_TIMEOUT_DAYS,
+): Promise<{ timedOut: string[]; checked: number }> {
+  const cutoff = Date.now() - Math.max(1, maxAgeDays) * 24 * 60 * 60 * 1000;
+  const { quotes } = await listQuotes({ status: "all", limit: 200 });
+  const pending = quotes.filter((q) => q.status === "open" || q.status === "contacted");
+  const timedOut: string[] = [];
+
+  for (const quote of pending) {
+    const anchor = quote.createdAt || quote.updatedAt;
+    if (!anchor) continue;
+    const ts = Date.parse(anchor);
+    if (!Number.isFinite(ts) || ts > cutoff) continue;
+
+    await updateQuoteStatus(quote.id, { status: "timed_out" }, "system:expire-requests");
+    await releaseAllHoldsForQuote(quote.id);
+    for (const lotId of lotIdsFromQuoteItems(quote.items)) {
+      try {
+        await archiveSuggestedLot(lotId, "system:expire-requests");
+      } catch (err) {
+        console.warn("[quotes] archive lot on timeout:", lotId, err);
+      }
+    }
+    timedOut.push(quote.id);
+  }
+
+  return { timedOut, checked: pending.length };
 }
 
 export { QUOTE_STATUSES } from "@/lib/constants";

@@ -93,6 +93,62 @@ export async function getBuyerById(id: string): Promise<PortalBuyer | null> {
   return serializeBuyer(snap.id, snap.data() || {});
 }
 
+/** Buyer self-service: update the safe subset of profile fields (no username/status). */
+export async function updateBuyerProfile(
+  id: string,
+  updates: { displayName?: string; email?: string; phone?: string; company?: string },
+): Promise<PortalBuyer> {
+  const ref = getDb().collection("salesPortalBuyers").doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) throw new Error("Account not found.");
+
+  const payload: Record<string, unknown> = { updatedAt: new Date() };
+  if (updates.displayName != null) {
+    const displayName = String(updates.displayName).trim().slice(0, 120);
+    if (!displayName) throw new Error("Name can't be empty.");
+    payload.displayName = displayName;
+  }
+  if (updates.email != null) {
+    const email = normalizeBuyerEmail(updates.email);
+    if (!email) throw new Error("Enter a valid email address.");
+    payload.email = email;
+  }
+  if (updates.phone != null) payload.phone = String(updates.phone).trim().slice(0, 40);
+  if (updates.company != null) payload.company = String(updates.company).trim().slice(0, 160);
+
+  await ref.update(payload);
+  const saved = await ref.get();
+  return serializeBuyer(saved.id, saved.data() || {});
+}
+
+/** Buyer self-service password change — re-verifies the current password before hashing the new one. */
+export async function changeBuyerPassword(
+  id: string,
+  currentPassword: string,
+  newPassword: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ref = getDb().collection("salesPortalBuyers").doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) return { ok: false, error: "Account not found." };
+
+  const d = snap.data() || {};
+  if (!verifyPortalPassword(currentPassword, d.passwordSalt, d.passwordHash)) {
+    return { ok: false, error: "Current password is incorrect." };
+  }
+  if (String(newPassword || "").length < 6) {
+    return { ok: false, error: "New password must be at least 6 characters." };
+  }
+
+  const { salt, hash } = hashPortalPassword(newPassword);
+  await ref.update({
+    passwordSalt: salt,
+    passwordHash: hash,
+    mustChangePassword: false,
+    updatedAt: new Date(),
+  });
+  return { ok: true };
+}
+
 export async function authenticateBuyer(
   usernameRaw: string,
   password: string,

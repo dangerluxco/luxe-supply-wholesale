@@ -93,7 +93,7 @@ export function roleCanAccess(role: string, pathname: string): boolean {
   if (pathname.startsWith("/wholesale") && !pathname.startsWith("/wholesaleportal")) {
     return role === ROLE.BUYER;
   }
-  if (pathname.startsWith("/wholesaleportal/rep")) {
+  if (pathname.startsWith("/wholesaleportal")) {
     return role === ROLE.REP || role === ROLE.MANAGER;
   }
   if (pathname.startsWith("/fulfillment")) return role === ROLE.FULFILLMENT;

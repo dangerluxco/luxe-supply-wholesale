@@ -2,6 +2,7 @@ import { getSession } from "@/lib/auth";
 import { money } from "@/lib/format";
 import { BundleBuilder } from "@/components/BundleBuilder";
 import { MicroBadge } from "@/components/badges";
+import { InfoTip } from "@/components/InfoTip";
 import { listCatalogProducts } from "@/lib/firestore/catalog";
 import { listBuyers } from "@/lib/firestore/buyers";
 import { listSuggestedLots } from "@/lib/firestore/suggestedLots";
@@ -48,14 +49,26 @@ export default async function BundlesPage({
         </div>
       ) : null}
 
-      <div className="border-b border-border bg-surface/50 px-8 py-3 text-[12px] text-muted">
-        Live from Firestore · suggested lots for portal clients (same as legacy storefront)
+      <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface/50 px-8 py-3 text-[12px] text-muted">
+        <span>Live from Firestore · suggested lots for portal clients</span>
+        <InfoTip label="How suggested lots / bundles work">
+          While a suggested lot is active, its SKUs are hidden from individual sale on the
+          storefront (buyers only get them via the lot). Default lot discount starts at 5%.
+          Active lots older than 14 days are auto-archived each night so those SKUs return
+          to the catalog. Archiving a lot manually has the same effect.
+        </InfoTip>
       </div>
 
       <BundleBuilder items={items} buyers={buyerOpts} repName={session?.name || "Rep"} />
 
       <div className="border-t border-border px-8 py-8">
-        <h2 className="mb-4 text-[18px] font-semibold text-ink">Active lots</h2>
+        <h2 className="mb-4 flex items-center gap-2 text-[18px] font-semibold text-ink">
+          Active lots
+          <InfoTip label="Active lot visibility">
+            SKUs in these lots stay off the regular catalog until the lot is archived
+            (manually or after 14 days).
+          </InfoTip>
+        </h2>
         {existing.length === 0 ? (
           <p className="text-[13px] text-muted">No active suggested lots yet.</p>
         ) : (

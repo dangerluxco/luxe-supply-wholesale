@@ -1,35 +1,31 @@
-import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
+import { ROLE } from "@/lib/constants";
+import { getInvoiceByNumber, displayInvoiceStatus } from "@/lib/firestore/invoices";
 import { csvBody, isoDate } from "@/lib/csv";
 
 // Single-invoice CSV download (header block + line items + totals).
 export async function GET(_req: Request, { params }: { params: Promise<{ number: string }> }) {
   const { number } = await params;
   const session = await getSession();
-  if (!session?.accountId) return new Response("Unauthorized", { status: 401 });
+  if (!session || session.role !== ROLE.BUYER) return new Response("Unauthorized", { status: 401 });
 
-  const inv = await prisma.invoice.findUnique({
-    where: { number },
-    include: { account: true },
-  });
-  if (!inv || inv.accountId !== session.accountId) {
+  const inv = await getInvoiceByNumber(decodeURIComponent(number));
+  if (!inv || inv.portalUsername !== session.username) {
     return new Response("Not found", { status: 404 });
   }
 
-  const line: { name: string; sku: string; price: number }[] = JSON.parse(inv.lineItems);
-
   const rows: Array<Array<string | number>> = [
-    ["Invoice", inv.number],
-    ["Account", inv.account.company],
-    ["Status", inv.status],
-    ["PO Number", inv.poNumber ?? ""],
+    ["Invoice", inv.invoiceNumber],
+    ["Company", inv.customerCompany],
+    ["Status", displayInvoiceStatus(inv)],
     ["Terms", inv.terms],
     ["Issued", isoDate(inv.issuedAt)],
     ["Due", isoDate(inv.dueDate)],
     ["Paid", isoDate(inv.paidAt)],
+    ["Fulfillment", inv.fulfillmentStatus],
     [],
     ["SKU", "Piece", "Wholesale (USD)"],
-    ...line.map((l) => [l.sku, l.name, l.price]),
+    ...inv.items.map((l) => [l.sku, l.title, l.price]),
     [],
     ["Subtotal", "", inv.subtotal],
     ["Insured shipping", "", inv.shipping],
@@ -40,7 +36,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ number:
   return new Response(body, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="${inv.number}.csv"`,
+      "Content-Disposition": `attachment; filename="${inv.invoiceNumber}.csv"`,
     },
   });
 }

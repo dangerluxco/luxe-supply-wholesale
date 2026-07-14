@@ -1,9 +1,11 @@
 import { createHash } from "crypto";
 import { getDb, toIso, WHOLESALE_ORG_SLUG } from "./admin";
 import { getLuxesupplyOrg } from "./staff";
+import { HOLD_QUOTE_MS } from "@/lib/constants";
 
 export const HOLD_CART_MS = 30 * 60 * 1000;
-export const HOLD_QUOTE_MS = 48 * 60 * 60 * 1000;
+/** Re-export for hold conversion helpers / bridge comments. */
+export { HOLD_QUOTE_MS };
 
 export type PortalHold = {
   id: string;
@@ -241,7 +243,7 @@ export async function releaseQuoteHoldsForSkus(
   return { released };
 }
 
-/** After invoice-request submit: upgrade cart SKUs to 48h processing holds (stored with reason: "quote" — see BRIDGE.md). */
+/** After invoice-request submit: upgrade cart SKUs to processing holds for the pending-request window. */
 export async function convertCartHoldsToQuote(opts: {
   username: string;
   displayName: string;
@@ -262,4 +264,31 @@ export async function convertCartHoldsToQuote(opts: {
     quoteId: opts.quoteId,
     ttlMs: HOLD_QUOTE_MS,
   });
+}
+
+/** Release every soft-hold still tied to this invoice request (all SKUs). */
+export async function releaseAllHoldsForQuote(quoteId: string): Promise<{ released: number }> {
+  if (!quoteId) return { released: 0 };
+  const db = getDb();
+  let snap;
+  try {
+    snap = await db
+      .collection("salesPortalHolds")
+      .where("orgSlug", "==", WHOLESALE_ORG_SLUG)
+      .where("quoteId", "==", quoteId)
+      .limit(500)
+      .get();
+  } catch (err) {
+    console.warn("[holds] releaseAllHoldsForQuote:", err instanceof Error ? err.message : err);
+    return { released: 0 };
+  }
+  if (snap.empty) return { released: 0 };
+  const batch = db.batch();
+  let released = 0;
+  snap.forEach((doc) => {
+    batch.delete(doc.ref);
+    released += 1;
+  });
+  await batch.commit();
+  return { released };
 }

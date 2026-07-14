@@ -30,14 +30,26 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
   const sort = one(sp.sort) || "newest";
   const pageLimit = Math.min(Math.max(Number(one(sp.limit)) || 200, 24), 800);
 
-  const [{ products: all, hasMore }, lots] = await Promise.all([
-    listCatalogProducts(pageLimit, {
-      buyerUsername: isBuyer ? session?.username : null,
-    }),
-    isBuyer && session.username
-      ? getActiveLotsForBuyer(session.username)
-      : Promise.resolve([]),
-  ]);
+  // Never let a transient Firestore hiccup blank the whole page — degrade to an
+  // empty catalog (same resilience pattern as WholesaleLayout's index fetch).
+  let all: Awaited<ReturnType<typeof listCatalogProducts>>["products"] = [];
+  let hasMore = false;
+  let lots: Awaited<ReturnType<typeof getActiveLotsForBuyer>> = [];
+  try {
+    const [catalogResult, lotsResult] = await Promise.all([
+      listCatalogProducts(pageLimit, {
+        buyerUsername: isBuyer ? session?.username : null,
+      }),
+      isBuyer && session.username
+        ? getActiveLotsForBuyer(session.username)
+        : Promise.resolve([]),
+    ]);
+    all = catalogResult.products;
+    hasMore = catalogResult.hasMore;
+    lots = lotsResult;
+  } catch (err) {
+    console.warn("[wholesale catalog] Firestore unavailable:", err instanceof Error ? err.message : err);
+  }
 
   const brands = [
     ...new Set(all.map((p) => p.brand).filter((b) => b && b !== "—")),

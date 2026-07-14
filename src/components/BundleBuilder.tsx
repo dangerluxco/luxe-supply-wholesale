@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { saveSuggestedLotAction } from "@/lib/actions/bundles-firestore";
 import { bundlePricing, bundleMargin } from "@/lib/bundle";
+import { BUNDLE_DEFAULT_DISCOUNT_PERCENT } from "@/lib/constants";
 import { money } from "@/lib/format";
 import { Placeholder } from "./Placeholder";
 import { MicroBadge } from "./badges";
@@ -36,7 +37,7 @@ export function BundleBuilder({
   const [name, setName] = useState("The Collector's Edit");
   const [buyerUsername, setBuyerUsername] = useState(buyers[0]?.username || "");
   const [discountType, setDiscountType] = useState<"PERCENT" | "FLAT">("PERCENT");
-  const [discountValue, setDiscountValue] = useState(8);
+  const [discountValue, setDiscountValue] = useState(BUNDLE_DEFAULT_DISCOUNT_PERCENT);
   const [query, setQuery] = useState("");
 
   const chosen = items.filter((i) => selected.has(i.sku));

@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { SubmitInvoiceRequestButton } from "@/components/SubmitInvoiceRequestButton";
 import { RemoveCartItemButton } from "@/components/RemoveCartItemButton";
 import { HoldCountdown } from "@/components/HoldCountdown";
+import { InfoTip } from "@/components/InfoTip";
 
 export const dynamic = "force-dynamic";
 
@@ -42,9 +43,16 @@ export default async function CartPage() {
 
   return (
     <div className="px-8 pb-16 pt-8">
-      <h1 className="text-[24px] font-semibold text-ink">Your order</h1>
+      <h1 className="flex items-center gap-2 text-[24px] font-semibold text-ink">
+        Your order
+        <InfoTip label="Cart vs invoice-request holds">
+          Cart soft holds last about 30 minutes. When you submit for invoicing, holds continue
+          for up to 7 days while staff reviews. Generating an invoice marks pieces sold; if
+          staff remove a line or the request times out, those items go back on the store.
+        </InfoTip>
+      </h1>
       <p className="mt-1 text-[13px] text-secondary">
-        Soft holds · ~30 minutes · submit for processing to invoice with the LuxeSupply team
+        Soft holds · ~30 minutes in cart · then up to 7 days after you submit
         {earliestHoldUntil ? (
           <>
             {" · "}
@@ -106,8 +114,8 @@ export default async function CartPage() {
               <span className="font-mono font-semibold">{money(total)}</span>
             </div>
             <p className="mt-3 text-[11px] text-muted">
-              Checkout submits your order for processing to invoice. Soft holds become 48-hour
-              processing holds when you submit.
+              Checkout submits your order for processing to invoice. Soft holds continue for up
+              to 7 days while staff reviews the request.
             </p>
             {!thresholdCheck.met ? (
               <p className="mt-3 rounded-chip border border-accent/40 bg-accent/5 px-3 py-2 text-[11.5px] text-secondary">

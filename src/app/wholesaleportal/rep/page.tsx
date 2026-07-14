@@ -2,6 +2,7 @@ import Link from "next/link";
 import { listQuotes } from "@/lib/firestore/quotes";
 import { EmptyState } from "@/components/EmptyState";
 import { QuoteStatusSelect } from "@/components/QuoteStatusSelect";
+import { InfoTip } from "@/components/InfoTip";
 import { money } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -30,13 +31,23 @@ export default async function RepDashboard({
     { label: "Open", status: "open", href: "/wholesaleportal/rep?status=open" },
     { label: "Contacted", status: "contacted", href: "/wholesaleportal/rep?status=contacted" },
     { label: "Invoiced", status: "quoted", href: "/wholesaleportal/rep?status=quoted" },
+    { label: "Timed out", status: "timed_out", href: "/wholesaleportal/rep?status=timed_out" },
     { label: "All", status: "all", href: "/wholesaleportal/rep?status=all" },
   ];
 
   return (
     <div className="px-10 pb-12 pt-8">
       <div className="mb-6 flex flex-wrap items-baseline gap-4">
-        <h1 className="text-[24px] font-semibold text-ink">Invoice requests</h1>
+        <h1 className="flex items-center gap-2 text-[24px] font-semibold text-ink">
+          Invoice requests
+          <InfoTip label="How invoice-request holds work">
+            Items stay on soft hold while a request is open or contacted. Generating an
+            invoice (or setting status to Invoiced) marks those SKUs sold and removes them
+            from the storefront. Removing a line item releases its hold immediately. If a
+            request stays pending more than 7 days, it times out — holds are cleared and
+            any suggested lots in that request are deactivated.
+          </InfoTip>
+        </h1>
         <span className="text-[12px] text-muted">
           Live from Firestore · {openCount} open
         </span>

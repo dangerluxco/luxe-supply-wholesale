@@ -1,21 +1,19 @@
-import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
+import { ROLE } from "@/lib/constants";
+import { listInvoicesForBuyer, displayInvoiceStatus } from "@/lib/firestore/invoices";
 import { csvBody, isoDate } from "@/lib/csv";
 
-// All-invoices CSV export for the signed-in account (one row per invoice).
+// All-invoices CSV export for the signed-in buyer (one row per invoice).
 export async function GET() {
   const session = await getSession();
-  if (!session?.accountId) return new Response("Unauthorized", { status: 401 });
+  if (!session || session.role !== ROLE.BUYER) return new Response("Unauthorized", { status: 401 });
 
-  const invoices = await prisma.invoice.findMany({
-    where: { accountId: session.accountId },
-    orderBy: { issuedAt: "desc" },
-  });
+  const invoices = session.username ? await listInvoicesForBuyer(session.username) : [];
 
   const header = [
     "Invoice",
     "Status",
-    "PO Number",
+    "Fulfillment",
     "Terms",
     "Issued",
     "Due",
@@ -25,22 +23,19 @@ export async function GET() {
     "Total",
     "Pieces",
   ];
-  const rows = invoices.map((inv) => {
-    const line: { name: string }[] = JSON.parse(inv.lineItems);
-    return [
-      inv.number,
-      inv.status,
-      inv.poNumber ?? "",
-      inv.terms,
-      isoDate(inv.issuedAt),
-      isoDate(inv.dueDate),
-      isoDate(inv.paidAt),
-      inv.subtotal,
-      inv.shipping,
-      inv.total,
-      line.map((l) => l.name).join("; "),
-    ];
-  });
+  const rows = invoices.map((inv) => [
+    inv.invoiceNumber,
+    displayInvoiceStatus(inv),
+    inv.fulfillmentStatus,
+    inv.terms,
+    isoDate(inv.issuedAt),
+    isoDate(inv.dueDate),
+    isoDate(inv.paidAt),
+    inv.subtotal,
+    inv.shipping,
+    inv.total,
+    inv.items.map((l) => l.title).join("; "),
+  ]);
 
   const body = csvBody([header, ...rows]);
   return new Response(body, {

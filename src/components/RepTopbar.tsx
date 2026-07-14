@@ -14,12 +14,12 @@ export function RepTopbar({
 
   const nav = [
     { label: "Invoice Requests", href: "/wholesaleportal/rep" },
+    { label: "Applications", href: "/wholesaleportal/rep/applications" },
     { label: "Clients", href: "/wholesaleportal/rep/clients" },
     { label: "Catalog", href: "/wholesaleportal/rep/catalog" },
     { label: "Bundles", href: "/wholesaleportal/rep/bundles" },
     { label: "Invoices", href: "/wholesaleportal/rep/invoices" },
     { label: "Wishlist", href: "/wholesaleportal/rep/wishlist" },
-    ...(isManager ? [{ label: "Performance", href: "/wholesaleportal/rep/performance" }] : []),
     { label: "Settings", href: "/wholesaleportal/rep/settings" },
   ];
 

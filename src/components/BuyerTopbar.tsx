@@ -13,6 +13,7 @@ const GUEST_NAV = [{ label: "Catalog", href: "/wholesale" }];
 const BUYER_NAV = [
   { label: "Catalog", href: "/wholesale" },
   { label: "Orders", href: "/wholesale/orders" },
+  { label: "Invoices", href: "/wholesale/invoices" },
   { label: "Wishlist", href: "/wholesale/wishlist" },
   { label: "Account", href: "/wholesale/account" },
 ];
@@ -60,8 +61,8 @@ export function BuyerTopbar({
     return pathname.startsWith(href);
   }
 
-  // Don't duplicate chrome on the sign-in page
-  if (pathname.startsWith("/wholesale/sign-in")) {
+  // Don't duplicate chrome on auth pages
+  if (pathname.startsWith("/wholesale/sign-in") || pathname.startsWith("/wholesale/register")) {
     return null;
   }
 

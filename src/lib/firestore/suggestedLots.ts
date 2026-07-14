@@ -227,3 +227,52 @@ export async function archiveSuggestedLot(lotId: string, staffEmail?: string): P
     { merge: true },
   );
 }
+
+/** SKUs currently locked inside an active suggested lot (should not appear as individual storefront sales). */
+export async function listActiveBundledSkus(): Promise<Set<string>> {
+  const lots = await listSuggestedLots({ status: "active" });
+  const skus = new Set<string>();
+  for (const lot of lots) {
+    for (const item of lot.items) {
+      const sku = String(item.sku || "").trim();
+      if (sku) skus.add(sku.toUpperCase());
+    }
+  }
+  return skus;
+}
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/**
+ * Archive active suggested lots older than `maxAgeDays` (default 14) so their
+ * SKUs return to the individual storefront catalog. Intended for a daily cron.
+ */
+export async function expireStaleSuggestedLots(
+  maxAgeDays = 14,
+): Promise<{ archived: string[]; checked: number }> {
+  const cutoff = Date.now() - Math.max(1, maxAgeDays) * MS_PER_DAY;
+  const lots = await listSuggestedLots({ status: "active" });
+  const archived: string[] = [];
+
+  for (const lot of lots) {
+    const anchor = lot.createdAt || lot.updatedAt;
+    if (!anchor) continue;
+    const ts = Date.parse(anchor);
+    if (!Number.isFinite(ts) || ts > cutoff) continue;
+
+    const ref = getDb().collection("salesPortalSuggestedLots").doc(lot.id);
+    await ref.set(
+      {
+        status: "archived",
+        updatedAt: new Date(),
+        updatedBy: "system:expire-bundles",
+        autoArchivedAt: new Date(),
+        autoArchiveReason: `inactive_${maxAgeDays}_days`,
+      },
+      { merge: true },
+    );
+    archived.push(lot.id);
+  }
+
+  return { archived, checked: lots.length };
+}

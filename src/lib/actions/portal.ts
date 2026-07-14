@@ -5,13 +5,19 @@ import { getSession } from "@/lib/auth";
 import { QUOTE_STATUSES, ROLE } from "@/lib/constants";
 import {
   expandQuoteItemSkus,
+  finalizeInvoiceRequestAsSold,
   getQuoteById,
   updateQuoteItems,
   updateQuoteStatus,
   type QuoteItemInput,
 } from "@/lib/firestore/quotes";
-import { releaseQuoteHoldsForSkus } from "@/lib/firestore/holds";
-import { saveCatalogSelection } from "@/lib/firestore/catalog";
+import { releaseAllHoldsForQuote, releaseQuoteHoldsForSkus } from "@/lib/firestore/holds";
+import {
+  resolveCuratedDraftItems,
+  saveCuratedCatalog,
+  setCatalogMode,
+  type CuratedCatalogItem,
+} from "@/lib/firestore/catalog";
 import { createBuyer } from "@/lib/firestore/buyers";
 
 export async function setQuoteStatus(quoteId: string, status: string) {
@@ -24,8 +30,25 @@ export async function setQuoteStatus(quoteId: string, status: string) {
     return { error: "Invalid status." };
   }
   await updateQuoteStatus(quoteId, { status: next }, session.email);
+
+  // Invoiced / approved → treat as sold; declined or timed out → free inventory holds
+  if (next === "quoted") {
+    try {
+      await finalizeInvoiceRequestAsSold(quoteId, session.email);
+    } catch (err) {
+      console.warn("[setQuoteStatus] finalize sold:", err);
+    }
+  } else if (next === "declined" || next === "timed_out" || next === "closed") {
+    try {
+      await releaseAllHoldsForQuote(quoteId);
+    } catch (err) {
+      console.warn("[setQuoteStatus] release holds:", err);
+    }
+  }
+
   revalidatePath("/wholesaleportal/rep");
   revalidatePath(`/wholesaleportal/rep/quotes/${quoteId}`);
+  revalidatePath("/wholesale");
   return { ok: true };
 }
 
@@ -127,23 +150,83 @@ export async function inviteBuyer(
   }
 }
 
-export async function saveCatalogSettings(_prev: unknown, formData: FormData) {
-  const session = await getSession();
-  if (!session || (session.role !== "REP" && session.role !== "MANAGER")) {
-    return { error: "Staff session required." };
-  }
-  if (session.source !== "firestore") {
-    return { error: "Catalog settings require a live Firestore staff session." };
-  }
+function assertStaffSession(session: Awaited<ReturnType<typeof getSession>>) {
+  return (
+    !!session &&
+    (session.role === "REP" || session.role === "MANAGER") &&
+    session.source === "firestore"
+  );
+}
 
-  const mode = String(formData.get("mode") || "all") === "sku_list" ? "sku_list" : "all";
-  const raw = String(formData.get("skus") || "");
-  const skus = raw
+/** Quick switch between "all" (testing) and "sku_list" (curated) — never touches saved SKUs/curated data. */
+export async function setCatalogModeAction(mode: string) {
+  const session = await getSession();
+  if (!assertStaffSession(session)) return { error: "Staff session required." };
+
+  const next = mode === "sku_list" ? "sku_list" : "all";
+  await setCatalogMode(next);
+  revalidatePath("/wholesaleportal/rep/catalog");
+  revalidatePath("/wholesale");
+  return {
+    ok: true,
+    message:
+      next === "all"
+        ? "Storefront is now showing all products (testing)."
+        : "Storefront is now showing the curated catalog.",
+  };
+}
+
+/**
+ * Step 1 of the curated catalog workflow: resolve pasted SKUs against the
+ * inventory DB and return a draft review — nothing is saved yet.
+ */
+export async function buildCuratedCatalogDraft(
+  skusText: string,
+): Promise<
+  | { error: string }
+  | { ok: true; items: CuratedCatalogItem[]; unresolvedSkus: string[] }
+> {
+  const session = await getSession();
+  if (!assertStaffSession(session)) return { error: "Staff session required." };
+
+  const skus = String(skusText || "")
     .split(/[\s,;]+/)
     .map((s) => s.trim())
     .filter(Boolean);
+  if (!skus.length) return { error: "Paste at least one SKU." };
+  if (skus.length > 1000) return { error: "Paste 1000 SKUs or fewer at a time." };
 
-  await saveCatalogSelection({ mode, skus });
-  revalidatePath("/wholesaleportal/rep/catalog");
-  return { ok: true, message: "Catalog settings saved." };
+  try {
+    const { items, unresolvedSkus } = await resolveCuratedDraftItems(skus);
+    return { ok: true, items, unresolvedSkus };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Could not resolve SKUs." };
+  }
+}
+
+/**
+ * Step 2: persist the reviewed items as the live curated catalog. Overwrites
+ * any previously saved catalog entirely and switches the live mode to `sku_list`.
+ */
+export async function saveCuratedCatalogAction(
+  items: CuratedCatalogItem[],
+  unresolvedSkus: string[],
+) {
+  const session = await getSession();
+  if (!assertStaffSession(session)) return { error: "Staff session required." };
+  if (!Array.isArray(items) || !items.length) {
+    return { error: "Add at least one item before saving." };
+  }
+
+  try {
+    await saveCuratedCatalog({ items, unresolvedSkus, updatedBy: session!.email });
+    revalidatePath("/wholesaleportal/rep/catalog");
+    revalidatePath("/wholesale");
+    return {
+      ok: true,
+      message: `Curated catalog saved — ${items.length} item${items.length === 1 ? "" : "s"} now live.`,
+    };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Could not save curated catalog." };
+  }
 }

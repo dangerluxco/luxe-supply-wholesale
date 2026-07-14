@@ -10,15 +10,21 @@ export default async function WholesaleLayout({ children }: { children: React.Re
   const decoded = decodeSession(store.get(SESSION_COOKIE)?.value);
 
   // Always load a lightweight catalog index for search (guest + buyer).
-  const { products } = await listCatalogProducts(400);
-  const index = products
-    .filter((p) => !p.soldOut)
-    .map((p) => ({
-      sku: p.sku,
-      name: p.title,
-      era: p.era,
-      material: p.material,
-    }));
+  // Never let a transient Firestore hiccup take down sign-in/browsing entirely.
+  let index: { sku: string; name: string; era: string; material: string }[] = [];
+  try {
+    const { products } = await listCatalogProducts(400);
+    index = products
+      .filter((p) => !p.soldOut)
+      .map((p) => ({
+        sku: p.sku,
+        name: p.title,
+        era: p.era,
+        material: p.material,
+      }));
+  } catch (err) {
+    console.warn("[wholesale layout] catalog index unavailable:", err instanceof Error ? err.message : err);
+  }
 
   // Staff or invalid cookie → guest chrome (no Firestore staff lookup hang)
   if (!decoded || decoded.role !== ROLE.BUYER) {
@@ -40,13 +46,18 @@ export default async function WholesaleLayout({ children }: { children: React.Re
     );
   }
 
-  const cart = await getBuyerCart(session.id);
+  let cartCount = 0;
+  try {
+    cartCount = (await getBuyerCart(session.id)).length;
+  } catch (err) {
+    console.warn("[wholesale layout] cart unavailable:", err instanceof Error ? err.message : err);
+  }
 
   return (
     <div className="min-h-screen bg-ground">
       <BuyerTopbar
         user={{ name: session.name, initials: session.initials }}
-        cartCount={cart.length}
+        cartCount={cartCount}
         index={index}
       />
       {children}

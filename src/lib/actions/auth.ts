@@ -39,5 +39,5 @@ export async function login(_prev: unknown, formData: FormData) {
 export async function logout() {
   const store = await cookies();
   store.set(SESSION_COOKIE, "", { ...sessionCookieOptions(0), maxAge: 0 });
-  redirect("/sign-in");
+  redirect("/wholesaleportal/sign-in");
 }

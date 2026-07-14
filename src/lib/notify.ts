@@ -86,3 +86,46 @@ export async function notifyStaffOfInvoiceRequest(opts: {
   });
   return { sent, recipients };
 }
+
+export async function notifyStaffOfRegistrationRequest(opts: {
+  applicationId: string;
+  name: string;
+  email: string;
+  company?: string;
+  phone?: string;
+}): Promise<{ sent: boolean; recipients: string[] }> {
+  const [staffEmails, extraEmails] = await Promise.all([
+    listActiveStaffEmails(),
+    getNotifyEmails(),
+  ]);
+  const envEmails = String(process.env.STAFF_NOTIFICATION_EMAILS || "")
+    .split(/[\s,;]+/)
+    .map((e) => e.trim().toLowerCase())
+    .filter((e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+
+  const recipients = [...new Set([...staffEmails, ...extraEmails, ...envEmails])];
+  if (!recipients.length) {
+    console.warn("[notify] No staff recipients for registration", opts.applicationId);
+    return { sent: false, recipients: [] };
+  }
+
+  const html = `<!DOCTYPE html>
+<html><body style="font-family:Segoe UI,Roboto,Helvetica,sans-serif;line-height:1.55;color:#333;max-width:640px;">
+  <p>A new <strong>buyer registration request</strong> was submitted on the LuxeSupply wholesale portal.</p>
+  <p>
+    <strong>Name:</strong> ${escapeHtml(opts.name)}<br/>
+    <strong>Email:</strong> ${escapeHtml(opts.email)}<br/>
+    ${opts.company ? `<strong>Company:</strong> ${escapeHtml(opts.company)}<br/>` : ""}
+    ${opts.phone ? `<strong>Phone:</strong> ${escapeHtml(opts.phone)}<br/>` : ""}
+  </p>
+  <p><a href="${STOREFRONT_ORIGIN}/wholesaleportal/rep/applications/${opts.applicationId}">Review application</a> in the staff portal — you can approve (creates a buyer login) or reject.</p>
+</body></html>`;
+
+  const sent = await sendEmail({
+    to: recipients,
+    subject: `Buyer registration request — ${opts.name || opts.email}`,
+    html,
+    replyTo: opts.email || undefined,
+  });
+  return { sent, recipients };
+}

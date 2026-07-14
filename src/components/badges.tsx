@@ -65,6 +65,12 @@ export function OrderBadge({ status, dark = false }: { status: string; dark?: bo
   return <MicroBadge tone={map[status] ?? "outline-gray"}>{label}</MicroBadge>;
 }
 
+// ---- Firestore invoice fulfillment status: UNFULFILLED outline gray / SHIPPED solid green
+export function FulfillmentBadge({ status }: { status: string }) {
+  const tone: Tone = status === "SHIPPED" ? "solid-green" : "outline-gray";
+  return <MicroBadge tone={tone}>{status.replace("_", " ")}</MicroBadge>;
+}
+
 // ---- Lead tiers: TIER 1 solid gold / TIER 2 outline gold / TIER 3 outline gray
 export function TierBadge({ tier, label }: { tier: number; label?: string }) {
   const tone: Tone = tier === 1 ? "solid-gold" : tier === 2 ? "outline-gold" : "outline-gray";

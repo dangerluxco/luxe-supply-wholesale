@@ -10,6 +10,7 @@ function signInForArea(isBuyer: boolean): string {
 function isPublicBuyerPath(pathname: string): boolean {
   if (pathname === "/wholesale" || pathname === "/wholesale/") return true;
   if (pathname.startsWith("/wholesale/sign-in")) return true;
+  if (pathname.startsWith("/wholesale/register")) return true;
   if (pathname.startsWith("/wholesale/product/")) return true;
   return false;
 }
@@ -26,7 +27,7 @@ export function middleware(req: NextRequest) {
   }
 
   const isBuyer = pathname.startsWith("/wholesale") && !pathname.startsWith("/wholesaleportal");
-  const isStaff = pathname.startsWith("/wholesaleportal/rep");
+  const isStaff = pathname.startsWith("/wholesaleportal");
   const isFulfillment = pathname.startsWith("/fulfillment");
   if (!isBuyer && !isStaff && !isFulfillment) return NextResponse.next();
 
@@ -72,7 +73,8 @@ export const config = {
   matcher: [
     "/wholesale",
     "/wholesale/:path*",
-    "/wholesaleportal/rep/:path*",
+    "/wholesaleportal",
+    "/wholesaleportal/:path*",
     "/fulfillment/:path*",
   ],
 };

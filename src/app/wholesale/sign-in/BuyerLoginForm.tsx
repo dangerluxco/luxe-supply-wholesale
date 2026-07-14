@@ -67,6 +67,12 @@ export default function BuyerLoginForm() {
             {pending ? "Signing in…" : "Sign in"}
           </button>
         </form>
+        <p className="mt-6 text-center text-[12.5px] text-secondary">
+          Need access?{" "}
+          <a href="/wholesale/register" className="text-accent underline">
+            Request to join
+          </a>
+        </p>
       </div>
     </div>
   );
