@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { Placeholder } from "@/components/Placeholder";
-import { saveQuoteLineItems } from "@/lib/actions/portal";
+import { saveQuoteLineItems } from "@/lib/actions/quote-line-items";
 import { money } from "@/lib/format";
 
 type EditableItem = {
@@ -30,17 +30,32 @@ function resolveImageUrl(it: Record<string, unknown>): string | null {
 }
 
 function toEditable(raw: Array<Record<string, unknown>>): EditableItem[] {
-  return raw.map((it) => ({
-    sku: String(it.sku || ""),
-    title: String(it.title || ""),
-    brand: String(it.brand || ""),
-    quantity: Math.max(1, Math.round(Number(it.quantity) || 1)),
-    price: Number(it.price) || 0,
-    imageUrl: resolveImageUrl(it),
-    isSuggestedLot: !!it.isSuggestedLot,
-    lotId: String(it.lotId || ""),
-    lotItems: Array.isArray(it.lotItems) ? (it.lotItems as Array<Record<string, unknown>>) : [],
-  }));
+  return raw.map((it) => {
+    const rawLotItems = Array.isArray(it.lotItems)
+      ? (it.lotItems as Array<Record<string, unknown>>)
+      : [];
+    const seen = new Set<string>();
+    const lotItems: Array<Record<string, unknown>> = [];
+    for (const li of rawLotItems) {
+      const sku = String(li?.sku || "").trim();
+      if (!sku) continue;
+      const key = sku.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      lotItems.push({ ...li, sku });
+    }
+    return {
+      sku: String(it.sku || ""),
+      title: String(it.title || ""),
+      brand: String(it.brand || ""),
+      quantity: Math.max(1, Math.round(Number(it.quantity) || 1)),
+      price: Number(it.price) || 0,
+      imageUrl: resolveImageUrl(it),
+      isSuggestedLot: !!it.isSuggestedLot,
+      lotId: String(it.lotId || ""),
+      lotItems,
+    };
+  });
 }
 
 export function QuoteItemsEditor({

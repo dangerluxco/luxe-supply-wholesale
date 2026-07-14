@@ -163,7 +163,7 @@ export async function addToCartForm(productId: string): Promise<void> {
   await addToCart(productId);
 }
 
-// Add every piece in a live bundle to the cart, each held 48h.
+// Add every piece in a live bundle to the cart, each held HOLD_HOURS.
 export async function addBundleToCart(bundleId: string): Promise<void> {
   const session = await getSession();
   if (!session?.accountId) return;

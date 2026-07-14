@@ -1,7 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
-import { archiveSuggestedLotAction } from "@/lib/actions/bundles-firestore";
+import { archiveSuggestedLotAction } from "@/lib/actions/archive-lot";
 
 export function ArchiveLotButton({ lotId }: { lotId: string }) {
   const [pending, start] = useTransition();

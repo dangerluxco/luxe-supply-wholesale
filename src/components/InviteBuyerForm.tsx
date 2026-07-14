@@ -1,20 +1,30 @@
 "use client";
 
 import { useActionState } from "react";
-import { inviteBuyer } from "@/lib/actions/portal";
 
 const fieldClass =
   "h-10 rounded-chip border border-border bg-ground px-3 text-[12.5px] text-ink outline-none focus:border-accent";
 const labelClass = "micro-badge text-[10px] tracking-[0.14em] text-muted";
 
-export function InviteBuyerForm() {
-  const [state, action, pending] = useActionState(inviteBuyer, {} as {
-    error?: string;
-    message?: string;
-    ok?: boolean;
-    username?: string;
-    temporaryPassword?: string;
-  });
+type InviteState = {
+  error?: string;
+  message?: string;
+  ok?: boolean;
+  username?: string;
+  temporaryPassword?: string;
+};
+
+type InviteAction = (
+  prev: InviteState | undefined,
+  formData: FormData,
+) => Promise<InviteState>;
+
+/**
+ * Server action is passed from the Server Component page so this client
+ * module never imports a `"use server"` file (avoids soft-nav webpack stub collisions).
+ */
+export function InviteBuyerForm({ action: inviteAction }: { action: InviteAction }) {
+  const [state, action, pending] = useActionState(inviteAction, {} as InviteState);
 
   return (
     <form

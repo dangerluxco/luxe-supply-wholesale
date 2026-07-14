@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-// Live 48h hold countdown.
+// Live soft-hold countdown (TTL is HOLD_TTL_MS — currently 7 days).
 export function HoldCountdown({ expiresAt }: { expiresAt: string }) {
   const [label, setLabel] = useState("");
 

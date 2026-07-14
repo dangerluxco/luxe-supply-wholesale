@@ -27,14 +27,14 @@ export default async function OrdersPage() {
     <div className="px-8 pb-16 pt-8">
       <h1 className="text-[24px] font-semibold text-ink">Invoice requests</h1>
       <p className="mt-1 text-[13px] text-secondary">
-        Orders you submit for processing to invoice appear here as the sales team works them.
+        Orders you submit for review appear here as the sales team works them.
         Full order history is coming with Net-30 invoices.
       </p>
 
       {quotes.length === 0 ? (
         <EmptyState
           title="You haven't submitted anything for invoicing yet."
-          hint="Add pieces to your order and submit for processing to invoice from your cart — it will show up here."
+          hint="Add pieces to your order and submit for review from your cart — it will show up here."
           className="mt-8"
         />
       ) : (

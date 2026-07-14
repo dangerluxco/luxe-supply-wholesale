@@ -5,18 +5,10 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { ROLE } from "@/lib/constants";
 import {
-  archiveSuggestedLot,
   getSuggestedLotById,
   saveSuggestedLot,
 } from "@/lib/firestore/suggestedLots";
 import { getCatalogProductBySku } from "@/lib/firestore/catalog";
-import {
-  cartHoldSkus,
-  getBuyerCart,
-  setBuyerCart,
-  type CartItem,
-} from "@/lib/firestore/buyers";
-import { findSkusHeldByOthers, syncCartHolds } from "@/lib/firestore/holds";
 
 async function requireStaff() {
   const session = await getSession();
@@ -26,6 +18,7 @@ async function requireStaff() {
   return session;
 }
 
+/** Staff-only: create/update suggested lots. Buyer add-to-cart lives in add-lot-to-cart.ts. */
 export async function saveSuggestedLotAction(formData: FormData) {
   const session = await requireStaff();
 
@@ -34,26 +27,53 @@ export async function saveSuggestedLotAction(formData: FormData) {
     return v == null ? "" : String(v);
   };
 
+  const lotId = get("lotId").trim();
   const buyerUsername = get("buyerUsername").trim();
   const buyerDisplayName = get("buyerDisplayName").trim();
   const title = get("name").trim() || "Suggested lot";
   const note = get("note").trim();
   const lotPrice = Number(get("lotPrice") || 0);
-  const skus = formData.getAll("skus").map(String).filter(Boolean);
+  const rawSkus = formData.getAll("skus").map(String);
   const titles = formData.getAll("titles").map(String);
   const brands = formData.getAll("brands").map(String);
   const formImageUrls = formData.getAll("imageUrls").map(String);
 
-  if (!buyerUsername || !skus.length || !(lotPrice >= 0)) {
+  const bundlesPath = "/wholesaleportal/rep/bundles";
+  const errorPath = lotId ? `${bundlesPath}/${lotId}/edit` : bundlesPath;
+
+  // Unique-by-SKU (case-insensitive) so a lot never stores the same piece twice.
+  const seenSkus = new Set<string>();
+  const uniqueEntries: { sku: string; index: number }[] = [];
+  rawSkus.forEach((skuRaw, index) => {
+    const sku = String(skuRaw || "").trim();
+    if (!sku) return;
+    const key = sku.toLowerCase();
+    if (seenSkus.has(key)) return;
+    seenSkus.add(key);
+    uniqueEntries.push({ sku, index });
+  });
+
+  if (!buyerUsername || !uniqueEntries.length || !(lotPrice >= 0)) {
     redirect(
-      "/wholesaleportal/rep/bundles?error=" +
+      `${errorPath}?error=` +
         encodeURIComponent("Client, pieces, and lot price are required."),
     );
   }
 
+  if (lotId) {
+    const existing = await getSuggestedLotById(lotId);
+    if (!existing || existing.status !== "active") {
+      redirect(
+        `${bundlesPath}?error=` + encodeURIComponent("That suggested lot is not available to edit."),
+      );
+    }
+  }
+
   const items = await Promise.all(
-    skus.map(async (sku, i) => {
-      const product = await getCatalogProductBySku(sku).catch(() => null);
+    uniqueEntries.map(async ({ sku, index: i }) => {
+      const product = await getCatalogProductBySku(sku, { includeBundled: true }).catch(
+        () => null,
+      );
       const resolvedUrls =
         product?.imageUrls?.length
           ? product.imageUrls
@@ -74,6 +94,7 @@ export async function saveSuggestedLotAction(formData: FormData) {
   );
 
   await saveSuggestedLot({
+    lotId: lotId || undefined,
     buyerUsername,
     buyerDisplayName: buyerDisplayName || buyerUsername,
     title,
@@ -83,81 +104,8 @@ export async function saveSuggestedLotAction(formData: FormData) {
     staffEmail: session.email,
   });
 
-  revalidatePath("/wholesaleportal/rep/bundles");
+  revalidatePath(bundlesPath);
+  if (lotId) revalidatePath(`${bundlesPath}/${lotId}/edit`);
   revalidatePath("/wholesale");
-  redirect("/wholesaleportal/rep/bundles");
-}
-
-export async function archiveSuggestedLotAction(lotId: string) {
-  const session = await requireStaff();
-  await archiveSuggestedLot(lotId, session.email);
-  revalidatePath("/wholesaleportal/rep/bundles");
-  revalidatePath("/wholesale");
-}
-
-export async function addSuggestedLotToCart(lotId: string) {
-  const session = await getSession();
-  if (!session || session.role !== ROLE.BUYER || session.source !== "firestore") {
-    return { error: "Sign in required." };
-  }
-
-  const lot = await getSuggestedLotById(lotId);
-  if (!lot || lot.status !== "active") return { error: "Lot not found." };
-  if (lot.lotPrice == null) return { error: "Lot price unavailable." };
-
-  const username = (session.username || "").toLowerCase();
-  if (lot.buyerUsername && lot.buyerUsername !== username) {
-    return { error: "This lot is for another client." };
-  }
-
-  const cart = await getBuyerCart(session.id);
-  const lotSku = `lot:${lot.id}`;
-  if (cart.some((i) => i.isSuggestedLot && (i.lotId === lot.id || i.sku === lotSku))) {
-    return { error: "Already in your order." };
-  }
-
-  const lotSkus = lot.items.map((it) => it.sku).filter(Boolean);
-  const blocked = await findSkusHeldByOthers(lotSkus, username);
-  if (blocked.length) {
-    return {
-      error: `On hold for another buyer: ${blocked.slice(0, 6).join(", ")}${
-        blocked.length > 6 ? "…" : ""
-      }`,
-    };
-  }
-
-  const lotItems = lot.items.map((it) => ({
-    sku: it.sku,
-    title: it.title || it.sku,
-    brand: it.brand || "",
-    quantity: it.quantity || 1,
-    imageUrl: it.imageUrl,
-  }));
-  const firstImage = lotItems.find((it) => it.imageUrl)?.imageUrl || null;
-
-  const next: CartItem[] = [
-    ...cart,
-    {
-      sku: lotSku,
-      title: lot.title || "Suggested lot",
-      brand: "",
-      price: lot.lotPrice,
-      imageUrl: firstImage,
-      addedAt: new Date().toISOString(),
-      isSuggestedLot: true,
-      lotId: lot.id,
-      lotItems,
-    },
-  ];
-
-  await setBuyerCart(session.id, next);
-  await syncCartHolds({
-    username: session.username || "",
-    displayName: session.name,
-    skus: cartHoldSkus(next),
-  });
-
-  revalidatePath("/wholesale");
-  revalidatePath("/wholesale/cart");
-  return { ok: true };
+  redirect(bundlesPath);
 }

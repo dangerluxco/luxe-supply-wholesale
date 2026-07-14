@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { saveSuggestedLotAction } from "@/lib/actions/bundles-firestore";
 import { bundlePricing, bundleMargin } from "@/lib/bundle";
 import { BUNDLE_DEFAULT_DISCOUNT_PERCENT } from "@/lib/constants";
@@ -24,23 +25,111 @@ type BuyerOption = {
   company: string;
 };
 
+export type BundleBuilderInitialLot = {
+  id: string;
+  title: string;
+  note?: string;
+  buyerUsername: string;
+  lotPrice: number | null;
+  /** SKUs already on the lot — pre-selected; must also appear in `items` where possible. */
+  skus: string[];
+};
+
+function uniqueBySku(items: Item[]): Item[] {
+  const seen = new Set<string>();
+  const out: Item[] = [];
+  for (const it of items) {
+    const sku = String(it.sku || "").trim();
+    if (!sku) continue;
+    const key = sku.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ ...it, sku });
+  }
+  return out;
+}
+
 export function BundleBuilder({
   items,
   buyers,
   repName,
+  initialLot,
 }: {
   items: Item[];
   buyers: BuyerOption[];
   repName: string;
+  initialLot?: BundleBuilderInitialLot | null;
 }) {
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [name, setName] = useState("The Collector's Edit");
-  const [buyerUsername, setBuyerUsername] = useState(buyers[0]?.username || "");
-  const [discountType, setDiscountType] = useState<"PERCENT" | "FLAT">("PERCENT");
-  const [discountValue, setDiscountValue] = useState(BUNDLE_DEFAULT_DISCOUNT_PERCENT);
+  const inventory = useMemo(() => uniqueBySku(items), [items]);
+  const editing = Boolean(initialLot?.id);
+
+  const [selected, setSelected] = useState<Set<string>>(() => {
+    if (!initialLot?.skus?.length) return new Set();
+    const byLower = new Map(
+      uniqueBySku(items).map((i) => [i.sku.toLowerCase(), i.sku] as const),
+    );
+    const next = new Set<string>();
+    for (const raw of initialLot.skus) {
+      const sku = String(raw || "").trim();
+      if (!sku) continue;
+      next.add(byLower.get(sku.toLowerCase()) || sku);
+    }
+    return next;
+  });
+  const [name, setName] = useState(initialLot?.title || "The Collector's Edit");
+  const [note, setNote] = useState(initialLot?.note || "");
+  const [buyerUsername, setBuyerUsername] = useState(
+    initialLot?.buyerUsername || buyers[0]?.username || "",
+  );
+
+  const initialPrices = useMemo(() => {
+    if (!initialLot?.skus?.length) return null;
+    const prices = initialLot.skus
+      .map((sku) => inventory.find((i) => i.sku.toLowerCase() === sku.toLowerCase())?.wholesalePrice)
+      .filter((p): p is number => p != null && Number.isFinite(p));
+    if (!prices.length || initialLot.lotPrice == null) return null;
+    const sum = prices.reduce((a, b) => a + b, 0);
+    const flat = Math.max(0, sum - initialLot.lotPrice);
+    return { flat, sum };
+  }, [initialLot, inventory]);
+
+  const [discountType, setDiscountType] = useState<"PERCENT" | "FLAT">(
+    initialPrices ? "FLAT" : "PERCENT",
+  );
+  const [discountValue, setDiscountValue] = useState(
+    initialPrices ? initialPrices.flat : BUNDLE_DEFAULT_DISCOUNT_PERCENT,
+  );
   const [query, setQuery] = useState("");
 
-  const chosen = items.filter((i) => selected.has(i.sku));
+  // Selected order: lot’s saved SKU order first, then any newly toggled-on SKUs
+  // (inventory order). Display partitions selected above unselected.
+  const selectedOrder = useMemo(() => {
+    const byLower = new Map(inventory.map((i) => [i.sku.toLowerCase(), i.sku] as const));
+    const ordered: string[] = [];
+    const used = new Set<string>();
+    for (const raw of initialLot?.skus || []) {
+      const sku = byLower.get(String(raw || "").trim().toLowerCase());
+      if (!sku || !selected.has(sku) || used.has(sku.toLowerCase())) continue;
+      ordered.push(sku);
+      used.add(sku.toLowerCase());
+    }
+    for (const it of inventory) {
+      if (!selected.has(it.sku) || used.has(it.sku.toLowerCase())) continue;
+      ordered.push(it.sku);
+      used.add(it.sku.toLowerCase());
+    }
+    return ordered;
+  }, [initialLot?.skus, inventory, selected]);
+
+  const inventoryBySku = useMemo(
+    () => new Map(inventory.map((i) => [i.sku, i] as const)),
+    [inventory],
+  );
+
+  // Selection is SKU-unique; preserve selectedOrder for form/preview/pricing.
+  const chosen = selectedOrder
+    .map((sku) => inventoryBySku.get(sku))
+    .filter((i): i is Item => !!i);
   const prices = chosen.map((i) => i.wholesalePrice);
   const { sum, saveAmt, bundlePrice, savePct } = useMemo(
     () => bundlePricing(prices, discountType, discountValue),
@@ -49,9 +138,15 @@ export function BundleBuilder({
   const margin = bundleMargin(bundlePrice, sum);
   const buyer = buyers.find((b) => b.username === buyerUsername);
 
-  const filtered = items.filter((i) =>
-    query ? `${i.name} ${i.sku}`.toLowerCase().includes(query.toLowerCase()) : true,
-  );
+  const filtered = useMemo(() => {
+    const matches = (i: Item) =>
+      !query || `${i.name} ${i.sku}`.toLowerCase().includes(query.toLowerCase());
+    const selectedRows = selectedOrder
+      .map((sku) => inventoryBySku.get(sku))
+      .filter((i): i is Item => !!i && matches(i));
+    const unselectedRows = inventory.filter((i) => !selected.has(i.sku) && matches(i));
+    return [...selectedRows, ...unselectedRows];
+  }, [inventory, inventoryBySku, query, selected, selectedOrder]);
 
   function toggle(sku: string, available: boolean) {
     if (!available) return;
@@ -66,9 +161,23 @@ export function BundleBuilder({
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_460px]">
       <div className="border-b border-border p-8 lg:border-b-0 lg:border-r">
-        <h1 className="mb-1 text-[24px] font-semibold text-ink">New bundle</h1>
+        <div className="mb-1 flex flex-wrap items-center gap-3">
+          <h1 className="text-[24px] font-semibold text-ink">
+            {editing ? "Edit bundle" : "New bundle"}
+          </h1>
+          {editing ? (
+            <Link
+              href="/wholesaleportal/rep/bundles"
+              className="text-[11px] uppercase tracking-[0.1em] text-muted hover:text-ink"
+            >
+              ← Cancel
+            </Link>
+          ) : null}
+        </div>
         <p className="mb-5 text-[12px] text-muted">
-          Curate a suggested lot for one client — live from Firestore inventory. They see it on their storefront.
+          {editing
+            ? "Update this suggested lot — changes publish to the client’s storefront."
+            : "Curate a suggested lot for one client — live from Firestore inventory. They see it on their storefront."}
         </p>
 
         <label className="mb-4 block">
@@ -104,11 +213,11 @@ export function BundleBuilder({
         </div>
 
         <div className="max-h-[420px] overflow-auto">
-          {filtered.map((it) => {
+          {filtered.map((it, index) => {
             const on = selected.has(it.sku);
             return (
               <button
-                key={it.sku}
+                key={`${it.sku}-${index}`}
                 type="button"
                 onClick={() => toggle(it.sku, it.available)}
                 className={clsx(
@@ -145,11 +254,15 @@ export function BundleBuilder({
         </div>
 
         <form action={saveSuggestedLotAction} className="mt-6">
+          {editing && initialLot ? (
+            <input type="hidden" name="lotId" value={initialLot.id} />
+          ) : null}
           <input type="hidden" name="buyerUsername" value={buyerUsername} />
           <input type="hidden" name="buyerDisplayName" value={buyer?.displayName || buyerUsername} />
           <input type="hidden" name="lotPrice" value={bundlePrice} />
-          {chosen.map((c) => (
-            <span key={c.sku}>
+          <input type="hidden" name="note" value={note} />
+          {chosen.map((c, index) => (
+            <span key={`${c.sku}-${index}`}>
               <input type="hidden" name="skus" value={c.sku} />
               <input type="hidden" name="titles" value={c.name} />
               <input type="hidden" name="brands" value={c.brand || ""} />
@@ -204,16 +317,26 @@ export function BundleBuilder({
             </div>
           </div>
 
+          <label className="mt-4 block">
+            <div className="mb-1.5 micro-badge text-[10px] tracking-[0.14em] text-accent">NOTE</div>
+            <input
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Optional note for the client…"
+              className="h-10 w-full rounded-chip border border-border bg-ground px-3.5 text-[13px] text-ink outline-none focus:border-accent"
+            />
+          </label>
+
           <div className="mt-5 flex flex-wrap items-center gap-3">
             <button
               type="submit"
               disabled={chosen.length === 0 || !buyerUsername}
               className="h-11 rounded-chip bg-ink px-8 text-[11.5px] uppercase tracking-[0.14em] text-ground disabled:opacity-40"
             >
-              Publish to client
+              {editing ? "Save changes" : "Publish to client"}
             </button>
             <span className="text-[11.5px] text-muted">
-              Saves as a suggested lot · lot price {money(bundlePrice)}
+              {editing ? "Updates" : "Saves as"} a suggested lot · lot price {money(bundlePrice)}
             </span>
           </div>
         </form>
@@ -246,7 +369,7 @@ export function BundleBuilder({
             ) : (
               chosen.slice(0, 5).map((c, i) => (
                 <Placeholder
-                  key={c.sku}
+                  key={`${c.sku}-${i}`}
                   variant="dark"
                   imageSrc={c.imageUrl}
                   label={i === 4 && chosen.length > 5 ? `+${chosen.length - 4}` : c.sku}

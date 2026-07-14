@@ -5,7 +5,7 @@ import {
   buildCuratedCatalogDraft,
   saveCuratedCatalogAction,
   setCatalogModeAction,
-} from "@/lib/actions/portal";
+} from "@/lib/actions/catalog-settings";
 import { money } from "@/lib/format";
 import { Placeholder } from "@/components/Placeholder";
 
@@ -201,9 +201,9 @@ export function CatalogSettingsForm({
                 </span>
               </div>
               <div className="mt-3 max-h-48 overflow-y-auto">
-                {curated.items.slice(0, 12).map((it) => (
+                {curated.items.slice(0, 12).map((it, index) => (
                   <div
-                    key={it.sku}
+                    key={`${it.sku}-${index}`}
                     className="flex items-center justify-between border-b border-border/60 py-1.5 text-[12px] last:border-b-0"
                   >
                     <span className="font-mono text-[11px] text-secondary">{it.sku}</span>

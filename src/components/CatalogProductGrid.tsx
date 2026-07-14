@@ -158,9 +158,9 @@ export function CatalogProductGrid({
             : "flex flex-col gap-3",
         )}
       >
-        {products.map((p) => (
+        {products.map((p, i) => (
           <ProductCard
-            key={p.sku}
+            key={`${p.sku}-${i}`}
             p={p}
             layout={layout}
             pricesVisible={pricesVisible}

@@ -36,22 +36,29 @@ function parseLotPrice(raw: unknown): number | null {
 
 function serializeLot(id: string, d: Record<string, unknown>): SuggestedLot {
   const itemsRaw = Array.isArray(d.items) ? d.items : [];
-  const items: SuggestedLotItem[] = itemsRaw.map((it) => {
+  const seenSkus = new Set<string>();
+  const items: SuggestedLotItem[] = [];
+  for (const it of itemsRaw) {
     const row = (it || {}) as Record<string, unknown>;
+    const sku = String(row.sku || "").trim();
+    if (!sku) continue;
+    const skuKey = sku.toLowerCase();
+    if (seenSkus.has(skuKey)) continue;
+    seenSkus.add(skuKey);
     const fromArray = Array.isArray(row.imageUrls)
       ? row.imageUrls.map(String).filter(Boolean)
       : [];
     const single = typeof row.imageUrl === "string" ? row.imageUrl : null;
     const imageUrls = fromArray.length ? fromArray : single ? [single] : [];
-    return {
-      sku: String(row.sku || "").trim(),
+    items.push({
+      sku,
       quantity: Math.max(1, Number(row.quantity) || 1),
       title: String(row.title || row.sku || "").trim(),
       brand: String(row.brand || "").trim(),
       imageUrl: imageUrls[0] || null,
       imageUrls,
-    };
-  }).filter((it) => it.sku);
+    });
+  }
 
   let lotPrice = parseLotPrice(d.lotPrice);
   if (lotPrice == null && itemsRaw.length) {
@@ -72,7 +79,8 @@ function serializeLot(id: string, d: Record<string, unknown>): SuggestedLot {
     status: String(d.status || "active"),
     lotPrice,
     items,
-    itemCount: Number(d.itemCount) || items.length,
+    // Prefer deduped length so legacy duplicate SKUs don’t inflate the count.
+    itemCount: items.length || Number(d.itemCount) || 0,
     createdAt: toIso(d.createdAt),
     updatedAt: toIso(d.updatedAt),
     createdBy: d.createdBy ? String(d.createdBy) : undefined,

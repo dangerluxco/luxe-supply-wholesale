@@ -1,14 +1,55 @@
+import Link from "next/link";
 import { getSession } from "@/lib/auth";
 import { money } from "@/lib/format";
 import { BundleBuilder } from "@/components/BundleBuilder";
 import { MicroBadge } from "@/components/badges";
 import { InfoTip } from "@/components/InfoTip";
+import { Placeholder } from "@/components/Placeholder";
 import { listCatalogProducts } from "@/lib/firestore/catalog";
 import { listBuyers } from "@/lib/firestore/buyers";
 import { listSuggestedLots } from "@/lib/firestore/suggestedLots";
 import { ArchiveLotButton } from "@/components/ArchiveLotButton";
 
 export const dynamic = "force-dynamic";
+
+function uniqueCatalogItems(
+  products: {
+    sku: string;
+    title: string;
+    price: number | null;
+    imageUrl: string | null;
+    brand: string;
+    held: boolean;
+    soldOut: boolean;
+  }[],
+) {
+  const seen = new Set<string>();
+  const items: {
+    sku: string;
+    name: string;
+    wholesalePrice: number;
+    imageUrl: string | null;
+    brand: string;
+    available: boolean;
+  }[] = [];
+  for (const p of products) {
+    if (p.soldOut || p.price == null) continue;
+    const sku = String(p.sku || "").trim();
+    if (!sku) continue;
+    const key = sku.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    items.push({
+      sku,
+      name: p.title,
+      wholesalePrice: Math.round(p.price),
+      imageUrl: p.imageUrl,
+      brand: p.brand || "",
+      available: !p.held,
+    });
+  }
+  return items;
+}
 
 export default async function BundlesPage({
   searchParams,
@@ -24,16 +65,7 @@ export default async function BundlesPage({
     listSuggestedLots({ status: "active" }),
   ]);
 
-  const items = products
-    .filter((p) => !p.soldOut && p.price != null)
-    .map((p) => ({
-      sku: p.sku,
-      name: p.title,
-      wholesalePrice: Math.round(p.price ?? 0),
-      imageUrl: p.imageUrl,
-      brand: p.brand || "",
-      available: !p.held,
-    }));
+  const items = uniqueCatalogItems(products);
 
   const buyerOpts = buyers.map((b) => ({
     username: b.username,
@@ -80,16 +112,46 @@ export default async function BundlesPage({
                   <MicroBadge tone="solid-green">ACTIVE</MicroBadge>
                 </div>
                 <div className="mt-1.5 text-[11.5px] text-muted">
-                  {b.itemCount} pieces · @{b.buyerUsername}
+                  {b.items.length || b.itemCount} pieces · @{b.buyerUsername}
                   {b.buyerDisplayName && b.buyerDisplayName !== b.buyerUsername
                     ? ` · ${b.buyerDisplayName}`
                     : ""}
                 </div>
-                <div className="mt-2 flex items-center justify-between gap-2">
+
+                {b.items.length > 0 ? (
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {b.items.slice(0, 6).map((it, i) => (
+                      <Placeholder
+                        key={`${it.sku}-${i}`}
+                        imageSrc={it.imageUrl || it.imageUrls?.[0] || null}
+                        label={
+                          i === 5 && b.items.length > 6
+                            ? `+${b.items.length - 5}`
+                            : it.sku
+                        }
+                        className="h-14 w-14 items-end rounded border border-border pb-0.5 text-[7px]"
+                      />
+                    ))}
+                  </div>
+                ) : null}
+
+                {b.note ? (
+                  <p className="mt-2 line-clamp-2 text-[11px] text-muted">{b.note}</p>
+                ) : null}
+
+                <div className="mt-3 flex items-center justify-between gap-2">
                   <span className="font-mono text-[15px] text-ink">
                     {b.lotPrice != null ? money(b.lotPrice) : "—"}
                   </span>
-                  <ArchiveLotButton lotId={b.id} />
+                  <div className="flex items-center gap-3">
+                    <Link
+                      href={`/wholesaleportal/rep/bundles/${b.id}/edit`}
+                      className="text-[11px] uppercase tracking-[0.1em] text-muted hover:text-ink"
+                    >
+                      Edit
+                    </Link>
+                    <ArchiveLotButton lotId={b.id} />
+                  </div>
                 </div>
               </div>
             ))}

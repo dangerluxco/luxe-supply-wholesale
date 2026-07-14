@@ -2,7 +2,7 @@
 
 import { useTransition } from "react";
 import { QUOTE_STATUSES } from "@/lib/constants";
-import { setQuoteStatus } from "@/lib/actions/portal";
+import { setQuoteStatus } from "@/lib/actions/quote-status";
 
 const STATUS_LABEL: Record<string, string> = {
   open: "Open",

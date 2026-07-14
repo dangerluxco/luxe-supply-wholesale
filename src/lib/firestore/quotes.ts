@@ -44,9 +44,17 @@ export type QuoteItemInput = {
 /** Expand a quote line item to the inventory SKU(s) it holds (lots expand to their member SKUs). */
 export function expandQuoteItemSkus(item: Record<string, unknown>): string[] {
   if (item.isSuggestedLot && Array.isArray(item.lotItems)) {
-    return (item.lotItems as Array<Record<string, unknown>>)
-      .map((li) => String(li?.sku || "").trim())
-      .filter(Boolean);
+    const seen = new Set<string>();
+    const skus: string[] = [];
+    for (const li of item.lotItems as Array<Record<string, unknown>>) {
+      const sku = String(li?.sku || "").trim();
+      if (!sku) continue;
+      const key = sku.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      skus.push(sku);
+    }
+    return skus;
   }
   const sku = String(item.sku || "").trim();
   return sku && !sku.startsWith("lot:") ? [sku] : [];
@@ -66,8 +74,29 @@ export function lotIdsFromQuoteItems(items: Array<Record<string, unknown>>): str
   return [...ids];
 }
 
+function dedupeLotItemsRaw(
+  lotItems: Array<Record<string, unknown>> | undefined,
+): Array<Record<string, unknown>> {
+  if (!Array.isArray(lotItems) || !lotItems.length) return [];
+  const seen = new Set<string>();
+  const out: Array<Record<string, unknown>> = [];
+  for (const li of lotItems) {
+    const sku = String(li?.sku || "").trim();
+    if (!sku) continue;
+    const key = sku.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ ...li, sku });
+  }
+  return out;
+}
+
 function serializeQuote(id: string, d: Record<string, unknown>): PortalQuote {
-  const items = Array.isArray(d.items) ? (d.items as Array<Record<string, unknown>>) : [];
+  const rawItems = Array.isArray(d.items) ? (d.items as Array<Record<string, unknown>>) : [];
+  const items = rawItems.map((it) => {
+    if (!it?.isSuggestedLot || !Array.isArray(it.lotItems)) return it;
+    return { ...it, lotItems: dedupeLotItemsRaw(it.lotItems as Array<Record<string, unknown>>) };
+  });
   return {
     id,
     status: String(d.status || "open"),

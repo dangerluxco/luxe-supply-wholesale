@@ -2,6 +2,7 @@ import Link from "next/link";
 import { listBuyers } from "@/lib/firestore/buyers";
 import { EmptyState } from "@/components/EmptyState";
 import { InviteBuyerForm } from "@/components/InviteBuyerForm";
+import { inviteBuyer } from "@/lib/actions/invite-buyer";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,7 @@ export default async function ClientsPage() {
         </span>
       </div>
 
-      <InviteBuyerForm />
+      <InviteBuyerForm action={inviteBuyer} />
 
       {buyers.length === 0 ? (
         <EmptyState

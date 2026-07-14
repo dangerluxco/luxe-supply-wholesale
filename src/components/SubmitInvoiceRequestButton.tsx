@@ -26,7 +26,7 @@ export function SubmitInvoiceRequestButton({ disabled }: { disabled?: boolean })
         }
         className="flex h-11 w-full items-center justify-center rounded-chip bg-ink text-[12px] font-semibold uppercase tracking-[0.14em] text-ground disabled:opacity-60"
       >
-        {pending ? "Submitting…" : "Submit for processing to invoice"}
+        {pending ? "Submitting…" : "Submit for review"}
       </button>
       {error ? <span className="text-[12px] text-danger">{error}</span> : null}
     </div>

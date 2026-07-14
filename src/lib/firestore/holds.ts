@@ -1,11 +1,10 @@
 import { createHash } from "crypto";
 import { getDb, toIso, WHOLESALE_ORG_SLUG } from "./admin";
 import { getLuxesupplyOrg } from "./staff";
-import { HOLD_QUOTE_MS } from "@/lib/constants";
+import { HOLD_TTL_MS } from "@/lib/constants";
 
-export const HOLD_CART_MS = 30 * 60 * 1000;
-/** Re-export for hold conversion helpers / bridge comments. */
-export { HOLD_QUOTE_MS };
+/** Cart soft-hold TTL — same window as HOLD_TTL_MS / HOLD_QUOTE_MS (7 days). */
+export const HOLD_CART_MS = HOLD_TTL_MS;
 
 export type PortalHold = {
   id: string;
@@ -262,7 +261,7 @@ export async function convertCartHoldsToQuote(opts: {
     buyerDisplayName: opts.displayName || username,
     reason: "quote",
     quoteId: opts.quoteId,
-    ttlMs: HOLD_QUOTE_MS,
+    ttlMs: HOLD_TTL_MS,
   });
 }
 

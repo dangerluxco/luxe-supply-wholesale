@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { Placeholder } from "./Placeholder";
 import { MicroBadge } from "./badges";
 import { money } from "@/lib/format";
-import { addSuggestedLotToCart } from "@/lib/actions/bundles-firestore";
+import { addSuggestedLotToCart } from "@/lib/actions/add-lot-to-cart";
 import { ProductGallery } from "./ProductGallery";
 
 type LotItem = {
@@ -51,7 +51,7 @@ export function BundleStrip({ lot }: { lot: LotForStrip }) {
             </span>
           </div>
           <div className="flex flex-wrap gap-2">
-            {lot.items.map((p) => {
+            {lot.items.map((p, index) => {
               const urls = p.imageUrls?.length
                 ? p.imageUrls
                 : p.imageUrl
@@ -59,7 +59,7 @@ export function BundleStrip({ lot }: { lot: LotForStrip }) {
                   : [];
               return (
                 <button
-                  key={p.sku}
+                  key={`${p.sku}-${index}`}
                   type="button"
                   onClick={() => {
                     setGallerySku(p.sku);

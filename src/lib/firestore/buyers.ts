@@ -2,6 +2,10 @@ import { randomBytes, scryptSync, timingSafeEqual } from "crypto";
 import type { QueryDocumentSnapshot } from "firebase-admin/firestore";
 import { getDb, toIso, WHOLESALE_ORG_SLUG } from "./admin";
 import { getLuxesupplyOrg } from "./staff";
+import {
+  DEFAULT_MAX_CART_ITEMS,
+  DEFAULT_MAX_CART_VALUE,
+} from "@/lib/constants";
 
 export type PortalBuyer = {
   id: string;
@@ -12,11 +16,23 @@ export type PortalBuyer = {
   ein: string;
   phone: string;
   status: string;
+  /** Max distinct order lines this buyer may hold (defaults to DEFAULT_MAX_CART_ITEMS). */
+  maxCartItems: number;
+  /** Max cart $ total while on hold (defaults to DEFAULT_MAX_CART_VALUE). */
+  maxCartValue: number;
   createdAt: string | null;
   lastLoginAt: string | null;
 };
 
 function serializeBuyer(id: string, d: Record<string, unknown>): PortalBuyer {
+  const maxItems =
+    typeof d.maxCartItems === "number" && Number.isFinite(d.maxCartItems) && d.maxCartItems > 0
+      ? Math.floor(d.maxCartItems)
+      : DEFAULT_MAX_CART_ITEMS;
+  const maxValue =
+    typeof d.maxCartValue === "number" && Number.isFinite(d.maxCartValue) && d.maxCartValue > 0
+      ? Math.floor(d.maxCartValue)
+      : DEFAULT_MAX_CART_VALUE;
   return {
     id,
     username: String(d.username || ""),
@@ -26,6 +42,8 @@ function serializeBuyer(id: string, d: Record<string, unknown>): PortalBuyer {
     ein: String(d.ein || ""),
     phone: String(d.phone || ""),
     status: String(d.status || "invited"),
+    maxCartItems: maxItems,
+    maxCartValue: maxValue,
     createdAt: toIso(d.createdAt),
     lastLoginAt: toIso(d.lastLoginAt),
   };
@@ -91,6 +109,48 @@ export async function getBuyerById(id: string): Promise<PortalBuyer | null> {
   const snap = await getDb().collection("salesPortalBuyers").doc(id).get();
   if (!snap.exists) return null;
   return serializeBuyer(snap.id, snap.data() || {});
+}
+
+/** Staff: raise/lower per-buyer cart hold caps (positive whole numbers). */
+export async function updateBuyerCartLimits(
+  id: string,
+  limits: { maxCartItems: number; maxCartValue: number },
+): Promise<PortalBuyer> {
+  const ref = getDb().collection("salesPortalBuyers").doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) throw new Error("Buyer not found.");
+
+  const maxCartItems = Number(limits.maxCartItems);
+  const maxCartValue = Number(limits.maxCartValue);
+  if (!Number.isFinite(maxCartItems) || maxCartItems <= 0) {
+    throw new Error("Max items must be a positive number.");
+  }
+  if (!Number.isFinite(maxCartValue) || maxCartValue <= 0) {
+    throw new Error("Max cart value must be a positive number.");
+  }
+
+  await ref.update({
+    maxCartItems: Math.floor(maxCartItems),
+    maxCartValue: Math.floor(maxCartValue),
+    updatedAt: new Date(),
+  });
+  const saved = await ref.get();
+  return serializeBuyer(saved.id, saved.data() || {});
+}
+
+/** Returns an error message if cart lines exceed the buyer's hold caps, else null. */
+export function cartLimitError(
+  items: CartItem[],
+  buyer: Pick<PortalBuyer, "maxCartItems" | "maxCartValue">,
+): string | null {
+  if (items.length > buyer.maxCartItems) {
+    return `Order limit is ${buyer.maxCartItems} items. Remove something or ask your rep to raise your limit.`;
+  }
+  const total = items.reduce((s, i) => s + (Number(i.price) || 0), 0);
+  if (total > buyer.maxCartValue) {
+    return `Order limit is $${buyer.maxCartValue.toLocaleString("en-US")}. Remove something or ask your rep to raise your limit.`;
+  }
+  return null;
 }
 
 /** Buyer self-service: update the safe subset of profile fields (no username/status). */
@@ -231,6 +291,8 @@ export async function createBuyer(opts: {
   company?: string;
   ein?: string;
   phone?: string;
+  maxCartItems?: number;
+  maxCartValue?: number;
   createdBy: string;
 }): Promise<{ buyer: PortalBuyer; temporaryPassword: string }> {
   const email = normalizeBuyerEmail(opts.email);
@@ -273,6 +335,14 @@ export async function createBuyer(opts: {
     passwordHash: hash,
     mustChangePassword: true,
     status: "invited",
+    maxCartItems:
+      opts.maxCartItems != null && Number(opts.maxCartItems) > 0
+        ? Math.floor(Number(opts.maxCartItems))
+        : DEFAULT_MAX_CART_ITEMS,
+    maxCartValue:
+      opts.maxCartValue != null && Number(opts.maxCartValue) > 0
+        ? Math.floor(Number(opts.maxCartValue))
+        : DEFAULT_MAX_CART_VALUE,
     invitedAt: now,
     invitedBy: opts.createdBy,
     createdAt: now,
@@ -309,13 +379,58 @@ export type CartItem = {
   lotItems?: CartLotItem[];
 };
 
+/** Collapse duplicate SKUs inside a suggested-lot’s nested line items (keep first). */
+export function dedupeCartLotItems(lotItems: CartLotItem[] | undefined | null): CartLotItem[] {
+  if (!Array.isArray(lotItems) || !lotItems.length) return [];
+  const seen = new Set<string>();
+  const out: CartLotItem[] = [];
+  for (const li of lotItems) {
+    const sku = String(li?.sku || "").trim();
+    if (!sku) continue;
+    const key = sku.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({
+      sku,
+      title: li.title,
+      brand: li.brand,
+      quantity: li.quantity,
+      imageUrl: li.imageUrl ?? null,
+    });
+  }
+  return out;
+}
+
+/** Normalize cart lines from Firestore — dedupe nested lotItems; keep line order. */
+export function normalizeCartItems(raw: unknown): CartItem[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((row) => {
+    const i = (row || {}) as Record<string, unknown>;
+    const isSuggestedLot = !!i.isSuggestedLot;
+    const lotItems = isSuggestedLot
+      ? dedupeCartLotItems(i.lotItems as CartLotItem[])
+      : [];
+    return {
+      sku: String(i.sku || "").trim(),
+      title: String(i.title || "").trim(),
+      brand: String(i.brand || "").trim(),
+      price: Number(i.price) || 0,
+      imageUrl: i.imageUrl ? String(i.imageUrl) : null,
+      addedAt: String(i.addedAt || ""),
+      isSuggestedLot,
+      lotId: isSuggestedLot ? String(i.lotId || "") : undefined,
+      lotItems: isSuggestedLot ? lotItems : undefined,
+    };
+  }).filter((i) => i.sku);
+}
+
 /** Expand cart lines to inventory SKUs for soft holds. */
 export function cartHoldSkus(items: CartItem[]): string[] {
   const skus: string[] = [];
   for (const line of items) {
     if (line.isSuggestedLot && Array.isArray(line.lotItems)) {
-      for (const li of line.lotItems) {
-        if (li?.sku) skus.push(li.sku);
+      for (const li of dedupeCartLotItems(line.lotItems)) {
+        if (li.sku) skus.push(li.sku);
       }
     } else if (line.sku && !String(line.sku).startsWith("lot:")) {
       skus.push(line.sku);
@@ -327,15 +442,15 @@ export function cartHoldSkus(items: CartItem[]): string[] {
 export async function getBuyerCart(buyerId: string): Promise<CartItem[]> {
   const snap = await getDb().collection("salesPortalCarts").doc(buyerId).get();
   if (!snap.exists) return [];
-  const items = (snap.data() || {}).items;
-  return Array.isArray(items) ? (items as CartItem[]) : [];
+  return normalizeCartItems((snap.data() || {}).items);
 }
 
 export async function setBuyerCart(buyerId: string, items: CartItem[]): Promise<void> {
+  const normalized = normalizeCartItems(items);
   await getDb()
     .collection("salesPortalCarts")
     .doc(buyerId)
-    .set({ items, updatedAt: new Date() }, { merge: true });
+    .set({ items: normalized, updatedAt: new Date() }, { merge: true });
 }
 
 export async function createBuyerQuote(opts: {
@@ -367,7 +482,10 @@ export async function createBuyerQuote(opts: {
       imageUrl: i.imageUrl ?? null,
       isSuggestedLot: !!i.isSuggestedLot,
       lotId: i.isSuggestedLot ? i.lotId || "" : "",
-      lotItems: i.isSuggestedLot && Array.isArray(i.lotItems) ? i.lotItems : [],
+      lotItems:
+        i.isSuggestedLot && Array.isArray(i.lotItems)
+          ? dedupeCartLotItems(i.lotItems)
+          : [],
     })),
     itemCount: opts.items.length,
     cartTotal,

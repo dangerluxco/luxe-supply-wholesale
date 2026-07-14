@@ -61,8 +61,17 @@ export const BUNDLE_STATUS = {
 
 // Business rules
 export const MIN_ORDER_VALUE = 2500;
-export const HOLD_HOURS = 48;
+/** Prisma/legacy cart hold length in hours (aligned with HOLD_TTL_MS = 7 days). */
+export const HOLD_HOURS = 7 * 24;
 export const INSURED_SHIPPING = 185;
+/** Soft-hold TTL for cart and invoice-request holds alike. */
+export const HOLD_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+/** Soft-hold while an invoice request is pending (aligned with request timeout). */
+// Do not redeclare HOLD_QUOTE_MS elsewhere in this file.
+export const HOLD_QUOTE_MS = HOLD_TTL_MS;
+/** Default order hold limits for new buyers (staff can raise per client). */
+export const DEFAULT_MAX_CART_ITEMS = 5;
+export const DEFAULT_MAX_CART_VALUE = 5000;
 /** Default % off for suggested-lot builder preview. */
 export const BUNDLE_DEFAULT_DISCOUNT_PERCENT = 5;
 /** Active suggested lots auto-archive after this many days so SKUs return to the catalog. */
@@ -97,8 +106,6 @@ export const QUOTE_STATUSES = [
 ] as const;
 export type QuoteStatus = (typeof QUOTE_STATUSES)[number];
 
-/** Soft-hold while an invoice request is pending (aligned with request timeout). */
-export const HOLD_QUOTE_MS = 7 * 24 * 60 * 60 * 1000;
 /** Pending invoice requests auto-timeout after this many days. */
 export const INVOICE_REQUEST_TIMEOUT_DAYS = 7;
 

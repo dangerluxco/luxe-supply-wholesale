@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { saveQuoteNotes } from "@/lib/actions/portal";
+import { saveQuoteNotes } from "@/lib/actions/quote-notes";
 
 export function QuoteNotesForm({
   quoteId,

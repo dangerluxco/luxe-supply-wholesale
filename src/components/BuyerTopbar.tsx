@@ -158,9 +158,9 @@ export function BuyerTopbar({
                   No pieces match “{q}”.
                 </div>
               ) : (
-                results.map((r) => (
+                results.map((r, index) => (
                   <button
-                    key={r.sku}
+                    key={`${r.sku}-${index}`}
                     onClick={() => {
                       router.push(`/wholesale/product/${r.sku}`);
                       setOpen(false);

@@ -295,9 +295,16 @@ function parseCuratedCatalog(raw: unknown): CuratedCatalog | null {
   if (!raw || typeof raw !== "object") return null;
   const d = raw as Record<string, unknown>;
   if (!Array.isArray(d.items) || !d.items.length) return null;
-  const items: CuratedCatalogItem[] = (d.items as Record<string, unknown>[])
-    .map((it) => ({
-      sku: String(it.sku || "").trim(),
+  const seen = new Set<string>();
+  const items: CuratedCatalogItem[] = [];
+  for (const it of d.items as Record<string, unknown>[]) {
+    const sku = String(it.sku || "").trim();
+    if (!sku) continue;
+    const key = sku.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    items.push({
+      sku,
       title: String(it.title || "").trim(),
       brand: String(it.brand || "").trim(),
       imageUrl: it.imageUrl ? String(it.imageUrl) : null,
@@ -305,8 +312,8 @@ function parseCuratedCatalog(raw: unknown): CuratedCatalog | null {
       cost: typeof it.cost === "number" && Number.isFinite(it.cost) ? it.cost : null,
       price: typeof it.price === "number" && Number.isFinite(it.price) ? it.price : null,
       priceOverridden: !!it.priceOverridden,
-    }))
-    .filter((it) => it.sku);
+    });
+  }
   if (!items.length) return null;
   return {
     items,
@@ -567,7 +574,7 @@ export async function listCatalogProducts(
  */
 export async function getCatalogProductBySku(
   skuRaw: string,
-  opts?: { buyerUsername?: string | null },
+  opts?: { buyerUsername?: string | null; includeBundled?: boolean },
 ): Promise<CatalogProduct | null> {
   const sku = String(skuRaw || "").trim();
   if (!sku) return null;
@@ -575,8 +582,10 @@ export async function getCatalogProductBySku(
     .trim()
     .toLowerCase();
 
-  const bundled = await listActiveBundledSkus();
-  if (bundled.has(sku.toUpperCase())) return null;
+  if (!opts?.includeBundled) {
+    const bundled = await listActiveBundledSkus();
+    if (bundled.has(sku.toUpperCase())) return null;
+  }
 
   const org = await getLuxesupplyOrg();
   const salesPortal = (org.data.salesPortal || {}) as Record<string, unknown>;

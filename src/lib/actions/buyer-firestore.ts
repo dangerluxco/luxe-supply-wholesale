@@ -5,6 +5,7 @@ import { getSession } from "@/lib/auth";
 import { getCatalogProductBySku } from "@/lib/firestore/catalog";
 import {
   cartHoldSkus,
+  cartLimitError,
   createBuyerQuote,
   getBuyerById,
   getBuyerCart,
@@ -89,6 +90,11 @@ export async function addSkusToCart(skus: string[]) {
         : "Nothing to add.",
     };
   }
+
+  const buyer = await getBuyerById(session.id);
+  if (!buyer) return { error: "Buyer account not found." };
+  const limitErr = cartLimitError(next, buyer);
+  if (limitErr) return { error: limitErr };
 
   await setBuyerCart(session.id, next);
   await syncCartHolds({

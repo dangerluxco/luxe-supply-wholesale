@@ -44,8 +44,8 @@ export default async function CatalogPage() {
         <EmptyState title="No products found." hint="Check uploadDirectory luxesupply in uploadHistory." />
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {products.map((p) => (
-            <div key={p.sku} className="overflow-hidden rounded-card border border-border bg-surface">
+          {products.map((p, i) => (
+            <div key={`${p.sku}-${i}`} className="overflow-hidden rounded-card border border-border bg-surface">
               <div className="aspect-[4/3] bg-ground">
                 {p.imageUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
