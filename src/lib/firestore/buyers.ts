@@ -392,13 +392,35 @@ export function dedupeCartLotItems(lotItems: CartLotItem[] | undefined | null): 
     seen.add(key);
     out.push({
       sku,
-      title: li.title,
-      brand: li.brand,
-      quantity: li.quantity,
+      title: String(li.title || ""),
+      brand: String(li.brand || ""),
+      quantity: Number(li.quantity) > 0 ? Number(li.quantity) : 1,
       imageUrl: li.imageUrl ?? null,
     });
   }
   return out;
+}
+
+/**
+ * Firestore rejects `undefined` field values. Build a plain document row with
+ * only defined scalars — omit lot fields on normal (non-suggested-lot) lines.
+ */
+export function cartItemForFirestore(item: CartItem): Record<string, unknown> {
+  const isSuggestedLot = !!item.isSuggestedLot;
+  const row: Record<string, unknown> = {
+    sku: item.sku,
+    title: item.title,
+    brand: item.brand,
+    price: item.price,
+    imageUrl: item.imageUrl ?? null,
+    addedAt: item.addedAt || "",
+    isSuggestedLot,
+  };
+  if (isSuggestedLot) {
+    row.lotId = item.lotId || "";
+    row.lotItems = dedupeCartLotItems(item.lotItems);
+  }
+  return row;
 }
 
 /** Normalize cart lines from Firestore — dedupe nested lotItems; keep line order. */
@@ -410,7 +432,7 @@ export function normalizeCartItems(raw: unknown): CartItem[] {
     const lotItems = isSuggestedLot
       ? dedupeCartLotItems(i.lotItems as CartLotItem[])
       : [];
-    return {
+    const item: CartItem = {
       sku: String(i.sku || "").trim(),
       title: String(i.title || "").trim(),
       brand: String(i.brand || "").trim(),
@@ -418,9 +440,14 @@ export function normalizeCartItems(raw: unknown): CartItem[] {
       imageUrl: i.imageUrl ? String(i.imageUrl) : null,
       addedAt: String(i.addedAt || ""),
       isSuggestedLot,
-      lotId: isSuggestedLot ? String(i.lotId || "") : undefined,
-      lotItems: isSuggestedLot ? lotItems : undefined,
     };
+    // Only attach lot fields when needed so round-trips via setBuyerCart
+    // never write `lotId: undefined` (Firestore Admin rejects that).
+    if (isSuggestedLot) {
+      item.lotId = String(i.lotId || "");
+      item.lotItems = lotItems;
+    }
+    return item;
   }).filter((i) => i.sku);
 }
 
@@ -446,11 +473,11 @@ export async function getBuyerCart(buyerId: string): Promise<CartItem[]> {
 }
 
 export async function setBuyerCart(buyerId: string, items: CartItem[]): Promise<void> {
-  const normalized = normalizeCartItems(items);
+  const forWrite = normalizeCartItems(items).map(cartItemForFirestore);
   await getDb()
     .collection("salesPortalCarts")
     .doc(buyerId)
-    .set({ items: normalized, updatedAt: new Date() }, { merge: true });
+    .set({ items: forWrite, updatedAt: new Date() }, { merge: true });
 }
 
 export async function createBuyerQuote(opts: {
