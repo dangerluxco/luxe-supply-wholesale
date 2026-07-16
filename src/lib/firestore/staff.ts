@@ -1,7 +1,9 @@
-import { scryptSync, timingSafeEqual } from "crypto";
+import { randomBytes, scryptSync, timingSafeEqual } from "crypto";
 import type { QueryDocumentSnapshot } from "firebase-admin/firestore";
 import { getDb, toIso, WHOLESALE_ORG_SLUG } from "./admin";
 import { ROLE, type Role } from "@/lib/constants";
+
+const STAFF_STATUSES = new Set(["active", "disabled"]);
 
 export type StaffRecord = {
   id: string;
@@ -11,6 +13,11 @@ export type StaffRecord = {
   role: "admin" | "staff";
   status: string;
   organizationId: string | null;
+};
+
+export type StaffListItem = StaffRecord & {
+  lastLoginAt: string | null;
+  createdAt: string | null;
 };
 
 function normalizeStaffEmail(raw: string): string | null {
@@ -25,6 +32,20 @@ function staffIsAdmin(data: Record<string, unknown>): boolean {
   if (data.isAdmin === true) return true;
   if (data.isAdmin === false) return false;
   return String(data.role || "").toLowerCase() === "admin";
+}
+
+function generateTempPassword(): string {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+  const bytes = randomBytes(12);
+  let out = "";
+  for (let i = 0; i < 12; i += 1) out += alphabet[bytes[i]! % alphabet.length];
+  return out;
+}
+
+function hashPortalPassword(password: string): { salt: string; hash: string } {
+  const salt = randomBytes(16).toString("hex");
+  const hash = scryptSync(String(password || ""), salt, 64).toString("hex");
+  return { salt, hash };
 }
 
 function verifyPortalPassword(password: string, salt: unknown, expectedHash: unknown): boolean {
@@ -142,9 +163,7 @@ export function initialsFromName(name: string): string {
   return `${parts[0]![0] || ""}${parts[1]![0] || ""}`.toUpperCase();
 }
 
-export async function listStaff(): Promise<
-  Array<StaffRecord & { lastLoginAt: string | null; createdAt: string | null }>
-> {
+export async function listStaff(): Promise<StaffListItem[]> {
   const db = getDb();
   let snap;
   try {
@@ -162,14 +181,187 @@ export async function listStaff(): Promise<
       .get();
   }
 
-  return snap.docs.map((doc) => {
-    const d = doc.data() || {};
-    return {
-      ...serializeStaff(doc.id, d),
-      lastLoginAt: toIso(d.lastLoginAt),
-      createdAt: toIso(d.createdAt),
-    };
+  return snap.docs
+    .map((doc) => {
+      const d = doc.data() || {};
+      return {
+        ...serializeStaff(doc.id, d),
+        lastLoginAt: toIso(d.lastLoginAt),
+        createdAt: toIso(d.createdAt),
+      };
+    })
+    .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+}
+
+async function countActiveAdmins(): Promise<number> {
+  const staff = await listStaff();
+  return staff.filter((s) => s.status !== "disabled" && s.isAdmin).length;
+}
+
+/** Admin invite: creates a staff login in the same collection auth reads from. */
+export async function createStaff(opts: {
+  email: string;
+  displayName?: string;
+  password?: string;
+  isAdmin?: boolean;
+  invitedBy: string;
+}): Promise<{ staff: StaffRecord; temporaryPassword: string }> {
+  const email = normalizeStaffEmail(opts.email);
+  if (!email) throw new Error("A valid email is required.");
+
+  const existing = await findStaffByEmail(email);
+  if (existing) throw new Error("A staff user with that email already exists.");
+
+  const password = String(opts.password || "").trim() || generateTempPassword();
+  if (password.length < 8) throw new Error("Password must be at least 8 characters.");
+
+  const isAdmin = opts.isAdmin === true;
+  const { salt, hash } = hashPortalPassword(password);
+  const org = await getLuxesupplyOrg();
+  const now = new Date();
+  const displayName =
+    String(opts.displayName || "")
+      .trim()
+      .slice(0, 120) || email;
+
+  const ref = getDb().collection("salesPortalStaff").doc();
+  await ref.set({
+    organizationId: org.id,
+    orgSlug: WHOLESALE_ORG_SLUG,
+    email,
+    username: email,
+    displayName,
+    isAdmin,
+    role: isAdmin ? "admin" : "staff",
+    status: "active",
+    passwordSalt: salt,
+    passwordHash: hash,
+    mustChangePassword: true,
+    invitedBy: opts.invitedBy,
+    createdBy: opts.invitedBy,
+    createdAt: now,
+    updatedAt: now,
+    emailSent: false,
   });
+
+  const saved = await ref.get();
+  return {
+    staff: serializeStaff(saved.id, saved.data() || {}),
+    temporaryPassword: password,
+  };
+}
+
+/** Admin: toggle isAdmin / status / displayName. Blocks removing the last active admin. */
+export async function updateStaff(
+  targetStaffId: string,
+  updates: {
+    displayName?: string;
+    isAdmin?: boolean;
+    status?: string;
+    updatedBy: string;
+  },
+): Promise<StaffRecord> {
+  const id = String(targetStaffId || "").trim();
+  if (!id) throw new Error("Staff id is required.");
+
+  const ref = getDb().collection("salesPortalStaff").doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) throw new Error("Staff user not found.");
+
+  const prev = snap.data() || {};
+  if (prev.orgSlug && prev.orgSlug !== WHOLESALE_ORG_SLUG) {
+    throw new Error("Not allowed.");
+  }
+
+  const payload: Record<string, unknown> = {
+    updatedAt: new Date(),
+    updatedBy: updates.updatedBy,
+  };
+
+  if (updates.displayName !== undefined) {
+    payload.displayName =
+      String(updates.displayName || "")
+        .trim()
+        .slice(0, 120) ||
+      String(prev.email || "") ||
+      "";
+  }
+
+  let nextIsAdmin = staffIsAdmin(prev);
+  if (updates.isAdmin !== undefined) {
+    nextIsAdmin = updates.isAdmin === true;
+    payload.isAdmin = nextIsAdmin;
+    payload.role = nextIsAdmin ? "admin" : "staff";
+  }
+
+  let nextStatus = String(prev.status || "active");
+  if (updates.status !== undefined) {
+    nextStatus = String(updates.status || "").toLowerCase();
+    if (!STAFF_STATUSES.has(nextStatus)) throw new Error("Invalid status.");
+    payload.status = nextStatus;
+  }
+
+  const wasActiveAdmin = (prev.status || "active") === "active" && staffIsAdmin(prev);
+  const willBeActiveAdmin = nextStatus === "active" && nextIsAdmin;
+  if (wasActiveAdmin && !willBeActiveAdmin) {
+    const adminCount = await countActiveAdmins();
+    if (adminCount <= 1) {
+      throw new Error("Cannot remove or disable the last active admin.");
+    }
+  }
+
+  await ref.update(payload);
+  const saved = await ref.get();
+  return serializeStaff(saved.id, saved.data() || {});
+}
+
+/** Admin: reset password (scrypt salt/hash, mustChangePassword). Returns temp password. */
+export async function resetStaffPassword(
+  targetStaffId: string,
+  opts: { password?: string; updatedBy: string },
+): Promise<{ staff: StaffRecord; temporaryPassword: string }> {
+  const id = String(targetStaffId || "").trim();
+  if (!id) throw new Error("Staff id is required.");
+
+  const ref = getDb().collection("salesPortalStaff").doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) throw new Error("Staff user not found.");
+
+  const prev = snap.data() || {};
+  if (prev.orgSlug && prev.orgSlug !== WHOLESALE_ORG_SLUG) {
+    throw new Error("Not allowed.");
+  }
+
+  const password = String(opts.password || "").trim() || generateTempPassword();
+  if (password.length < 8) throw new Error("Password must be at least 8 characters.");
+
+  const { salt, hash } = hashPortalPassword(password);
+  await ref.update({
+    passwordSalt: salt,
+    passwordHash: hash,
+    mustChangePassword: true,
+    updatedAt: new Date(),
+    updatedBy: opts.updatedBy,
+  });
+
+  const saved = await ref.get();
+  return {
+    staff: serializeStaff(saved.id, saved.data() || {}),
+    temporaryPassword: password,
+  };
+}
+
+export async function markStaffEmailSent(staffId: string): Promise<void> {
+  const id = String(staffId || "").trim();
+  if (!id) return;
+  try {
+    await getDb().collection("salesPortalStaff").doc(id).update({
+      emailSent: true,
+      emailSentAt: new Date(),
+    });
+  } catch {
+    /* ignore */
+  }
 }
 
 /** Active staff emails for this portal — used to notify staff of new invoice requests. */

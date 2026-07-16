@@ -20,6 +20,7 @@ export function RepTopbar({
     { label: "Bundles", href: "/wholesaleportal/rep/bundles" },
     { label: "Invoices", href: "/wholesaleportal/rep/invoices" },
     { label: "Wishlist", href: "/wholesaleportal/rep/wishlist" },
+    ...(isManager ? [{ label: "Staff", href: "/wholesaleportal/rep/staff" }] : []),
     { label: "Settings", href: "/wholesaleportal/rep/settings" },
   ];
 

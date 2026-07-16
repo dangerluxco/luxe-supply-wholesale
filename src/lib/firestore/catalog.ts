@@ -66,10 +66,73 @@ function defaultPriceFromCost(cost: number | null): number | null {
   return Math.round(cost / 0.8);
 }
 
+function takeText(v: unknown): string {
+  if (v == null) return "";
+  return String(v).trim();
+}
+
+function normEmail(email: unknown): string {
+  return takeText(email).toLowerCase();
+}
+
+/** Brand fields commonly nested under uploadHistory.metadata. */
+type UploadBrandMeta = {
+  brand?: string;
+  Brand?: string;
+  brands?: unknown[];
+  rauBrand?: string;
+};
+
+function extractBrandMeta(raw: unknown): UploadBrandMeta {
+  if (!raw || typeof raw !== "object") return {};
+  const m = raw as Record<string, unknown>;
+  const out: UploadBrandMeta = {};
+  const brand = takeText(m.brand);
+  const Brand = takeText(m.Brand);
+  const rauBrand = takeText(m.rauBrand);
+  if (brand) out.brand = brand;
+  if (Brand) out.Brand = Brand;
+  if (rauBrand) out.rauBrand = rauBrand;
+  if (Array.isArray(m.brands) && m.brands.length) out.brands = m.brands;
+  return out;
+}
+
+/**
+ * Same fallback chain as curationView.resolveBrand / salesPortal.productBrand:
+ * ask brands → IIQ brand → upload brand / primaryBrandNorm / metadata brands.
+ */
+function resolveBrand(
+  upload: UploadGroup | null | undefined,
+  iiq: Record<string, unknown> | null | undefined,
+  ask: Record<string, unknown> | null | undefined,
+): string {
+  const meta = (upload && upload.metadata) || {};
+  const askBrands = ask && Array.isArray(ask.brands) ? ask.brands : null;
+  const askBrand =
+    takeText(ask && ask.brand) ||
+    (askBrands ? takeText(askBrands[0]) : "") ||
+    takeText(ask && ask.Brand);
+  return (
+    askBrand ||
+    takeText(iiq && (iiq.brand || iiq.Brand)) ||
+    takeText(upload && upload.brand) ||
+    takeText(upload && upload.primaryBrandNorm) ||
+    takeText(meta.brand) ||
+    takeText(meta.Brand) ||
+    (Array.isArray(meta.brands) ? takeText(meta.brands[0]) : "") ||
+    takeText(meta.rauBrand) ||
+    ""
+  );
+}
+
 type UploadGroup = {
   sku: string;
   imageUrls: string[];
   brand: string;
+  primaryBrandNorm: string;
+  metadata: UploadBrandMeta;
+  /** Uploader email — used to prefer matching askIIQResults rows. */
+  userEmail: string;
   hostCompAvgUsd: number | null;
   /** Denormalized cost synced onto uploadHistory (see `inventoryCost` in utils/uploadHistory.ts). */
   inventoryCost: number | null;
@@ -82,18 +145,27 @@ function groupUploads(docs: QueryDocumentSnapshot[]): UploadGroup[] {
     const d = doc.data() || {};
     const sku = String(d.sku || "").trim();
     if (!sku) return;
-    const key = `${sku}_${d.userEmail || ""}`;
+    const userEmail = takeText(d.userEmail);
+    const key = `${sku}_${userEmail}`;
     if (!grouped.has(key)) {
       grouped.set(key, {
         sku,
         imageUrls: [],
-        brand: String(d.brand || "").trim(),
+        brand: takeText(d.brand),
+        primaryBrandNorm: takeText(d.primaryBrandNorm),
+        metadata: extractBrandMeta(d.metadata),
+        userEmail,
         hostCompAvgUsd: null,
         inventoryCost: null,
-        titleHint: String(d.title || d.productName || "").trim(),
+        titleHint: takeText(d.title || d.productName),
       });
     }
     const g = grouped.get(key)!;
+    if (!g.brand) g.brand = takeText(d.brand);
+    if (!g.primaryBrandNorm) g.primaryBrandNorm = takeText(d.primaryBrandNorm);
+    if (!g.metadata.brand && !g.metadata.Brand && !g.metadata.rauBrand && !g.metadata.brands?.length) {
+      g.metadata = extractBrandMeta(d.metadata);
+    }
     if (Array.isArray(d.imageUrls)) {
       d.imageUrls.forEach((url: unknown) => {
         if (url && !g.imageUrls.includes(String(url))) g.imageUrls.push(String(url));
@@ -114,6 +186,9 @@ function mergeUploadGroups(groups: UploadGroup[]): UploadGroup | null {
     sku: groups[0]!.sku,
     imageUrls: [],
     brand: "",
+    primaryBrandNorm: "",
+    metadata: {},
+    userEmail: groups[0]!.userEmail || "",
     hostCompAvgUsd: null,
     inventoryCost: null,
     titleHint: "",
@@ -123,6 +198,17 @@ function mergeUploadGroups(groups: UploadGroup[]): UploadGroup | null {
       if (!merged.imageUrls.includes(url)) merged.imageUrls.push(url);
     }
     if (!merged.brand && g.brand) merged.brand = g.brand;
+    if (!merged.primaryBrandNorm && g.primaryBrandNorm) merged.primaryBrandNorm = g.primaryBrandNorm;
+    if (
+      !merged.metadata.brand &&
+      !merged.metadata.Brand &&
+      !merged.metadata.rauBrand &&
+      !merged.metadata.brands?.length &&
+      (g.metadata.brand || g.metadata.Brand || g.metadata.rauBrand || g.metadata.brands?.length)
+    ) {
+      merged.metadata = { ...g.metadata };
+    }
+    if (!merged.userEmail && g.userEmail) merged.userEmail = g.userEmail;
     if (!merged.titleHint && g.titleHint) merged.titleHint = g.titleHint;
     if (g.hostCompAvgUsd != null) merged.hostCompAvgUsd = g.hostCompAvgUsd;
     if (g.inventoryCost != null) merged.inventoryCost = g.inventoryCost;
@@ -171,6 +257,67 @@ async function loadIiqBySku(
   return map;
 }
 
+/**
+ * Batch-load askIIQResults by SKU (same chunking as loadIiqBySku).
+ * Prefer uploader email match when `uploaderBySku` provides one; else first doc.
+ */
+async function loadAskBySku(
+  skus: string[],
+  uploaderBySku?: Map<string, string>,
+): Promise<Map<string, Record<string, unknown>>> {
+  const map = new Map<string, Record<string, unknown>>();
+  const db = getDb();
+  const unique = [...new Set(skus.filter(Boolean))];
+  for (let i = 0; i < unique.length; i += 10) {
+    const chunk = unique.slice(i, i + 10);
+    const snaps = await Promise.all(
+      chunk.map(async (sku) => {
+        let snap = await db
+          .collection("askIIQResults")
+          .where("sku", "==", sku)
+          .where("uploadDirectory", "==", UPLOAD_DIRECTORY)
+          .limit(5)
+          .get();
+        if (snap.empty && sku !== sku.toUpperCase()) {
+          snap = await db
+            .collection("askIIQResults")
+            .where("sku", "==", sku.toUpperCase())
+            .where("uploadDirectory", "==", UPLOAD_DIRECTORY)
+            .limit(5)
+            .get();
+        }
+        return snap;
+      }),
+    );
+    snaps.forEach((snap, idx) => {
+      if (snap.empty) return;
+      const sku = chunk[idx]!;
+      const wantEmail = normEmail(uploaderBySku?.get(sku));
+      let best: Record<string, unknown> | null = null;
+      snap.forEach((doc) => {
+        const data = doc.data() || {};
+        if (wantEmail && normEmail(data.userEmail) === wantEmail) {
+          best = data;
+        }
+      });
+      if (!best) best = snap.docs[0]?.data() || null;
+      if (best) map.set(sku, best);
+    });
+  }
+  return map;
+}
+
+function uploaderEmailsFromGroups(
+  groups: Iterable<UploadGroup | null | undefined>,
+): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const g of groups) {
+    if (!g?.sku || !g.userEmail) continue;
+    if (!map.has(g.sku)) map.set(g.sku, g.userEmail);
+  }
+  return map;
+}
+
 /** Direct-by-SKU uploadHistory lookup (not limited to a recent window) — used to resolve
  * arbitrary, possibly-old SKUs pasted into the curated catalog builder. */
 async function loadUploadGroupsBySku(skus: string[]): Promise<Map<string, UploadGroup>> {
@@ -211,6 +358,7 @@ function toCatalogProduct(
   sku: string,
   group: UploadGroup | null,
   iiq: Record<string, unknown> | null,
+  ask: Record<string, unknown> | null,
   hold: PortalHold | undefined,
   buyerUsername: string,
   overrides?: {
@@ -226,7 +374,8 @@ function toCatalogProduct(
     group?.titleHint ||
     overrides?.title ||
     sku;
-  const brand = String((iiq && (iiq.Brand || iiq.brand)) || group?.brand || overrides?.brand || "").trim();
+  // Prefer a non-empty staff/saved override; otherwise run the full ask→iiq→upload chain.
+  const brand = takeText(overrides?.brand) || resolveBrand(group, iiq, ask);
   const soldOut = !!(iiq && (iiq.sold === true || iiq.Sold === true));
   const condition = String((iiq && (iiq.Condition || iiq.condition)) || "").trim() || "—";
   const material = String((iiq && (iiq.Material || iiq.material)) || "").trim() || "—";
@@ -273,12 +422,14 @@ async function hydrateCuratedItems(
     loadIiqBySku(skus),
     loadActiveHoldsBySku(skus),
   ]);
+  const askMap = await loadAskBySku(skus, uploaderEmailsFromGroups(uploadMap.values()));
 
   return items.map((item) =>
     toCatalogProduct(
       item.sku,
       uploadMap.get(item.sku) || null,
       iiqMap.get(item.sku) || null,
+      askMap.get(item.sku) || null,
       holds.get(item.sku),
       buyerUsername,
       {
@@ -350,17 +501,19 @@ export async function resolveCuratedDraftItems(
     loadUploadGroupsBySku(cleanSkus),
     loadIiqBySku(cleanSkus),
   ]);
+  const askMap = await loadAskBySku(cleanSkus, uploaderEmailsFromGroups(uploadMap.values()));
 
   const items: CuratedCatalogItem[] = cleanSkus.map((sku) => {
     const group = uploadMap.get(sku) || null;
     const iiq = iiqMap.get(sku) || null;
+    const ask = askMap.get(sku) || null;
     const inDb = !!group || !!iiq;
     const resolvedSku = group?.sku || sku;
     const title =
       String((iiq && (iiq.Title || iiq.title || iiq.productName)) || "").trim() ||
       group?.titleHint ||
       "";
-    const brand = String((iiq && (iiq.Brand || iiq.brand)) || group?.brand || "").trim();
+    const brand = resolveBrand(group, iiq, ask);
     const imageUrl = group?.imageUrls[0] || null;
     const iiqCost =
       iiq && typeof iiq.cost === "number" && Number.isFinite(iiq.cost as number)
@@ -554,13 +707,21 @@ export async function listCatalogProducts(
   const page = unique.slice(0, safeLimit);
   const hasMore = unique.length > safeLimit || snap.size >= uploadCap;
   const skus = page.map((g) => g.sku);
-  const [iiqMap, holds] = await Promise.all([
+  const [iiqMap, askMap, holds] = await Promise.all([
     loadIiqBySku(skus),
+    loadAskBySku(skus, uploaderEmailsFromGroups(page)),
     loadActiveHoldsBySku(skus),
   ]);
 
   const products: CatalogProduct[] = page.map((g) =>
-    toCatalogProduct(g.sku, g, iiqMap.get(g.sku) || null, holds.get(g.sku), buyerUsername),
+    toCatalogProduct(
+      g.sku,
+      g,
+      iiqMap.get(g.sku) || null,
+      askMap.get(g.sku) || null,
+      holds.get(g.sku),
+      buyerUsername,
+    ),
   );
 
   return { products, catalogSelection, orgName, hasMore };
@@ -630,8 +791,9 @@ export async function getCatalogProductBySku(
     groups.find((g) => g.sku.toUpperCase() === sku.toUpperCase()) || groups[0] || null;
   if (!group) return null;
 
-  const [iiqMap, holds] = await Promise.all([
+  const [iiqMap, askMap, holds] = await Promise.all([
     loadIiqBySku([group.sku]),
+    loadAskBySku([group.sku], uploaderEmailsFromGroups([group])),
     loadActiveHoldsBySku([group.sku]),
   ]);
 
@@ -639,6 +801,7 @@ export async function getCatalogProductBySku(
     group.sku,
     group,
     iiqMap.get(group.sku) || null,
+    askMap.get(group.sku) || null,
     holds.get(group.sku),
     buyerUsername,
   );

@@ -129,3 +129,52 @@ export async function notifyStaffOfRegistrationRequest(opts: {
   });
   return { sent, recipients };
 }
+
+/** Invite email for a new staff login. Non-blocking — callers should not fail if this returns false. */
+export async function sendStaffInviteEmail(opts: {
+  email: string;
+  temporaryPassword: string;
+}): Promise<boolean> {
+  const loginUrl = `${STOREFRONT_ORIGIN}/wholesaleportal/sign-in`;
+  const html = `<!DOCTYPE html>
+<html><body style="font-family:Segoe UI,Roboto,Helvetica,sans-serif;line-height:1.55;color:#333;max-width:640px;">
+  <p>You’ve been invited to the <strong>LuxeSupply wholesale portal</strong> staff console.</p>
+  <p>
+    <strong>Staff login:</strong> <a href="${loginUrl}">${escapeHtml(loginUrl)}</a><br/>
+    <strong>Email:</strong> ${escapeHtml(opts.email)}<br/>
+    <strong>Temporary password:</strong> ${escapeHtml(opts.temporaryPassword)}
+  </p>
+  <p>Sign in with this temporary password to manage quotes, clients, and catalog settings.</p>
+  <p style="color:#666;font-size:13px;">If you did not expect this invitation, you can ignore this email.</p>
+</body></html>`;
+
+  return sendEmail({
+    to: [opts.email],
+    subject: "Your LuxeSupply wholesale portal staff login",
+    html,
+  });
+}
+
+/** Password-reset email for an existing staff login. Non-blocking. */
+export async function sendStaffPasswordResetEmail(opts: {
+  email: string;
+  temporaryPassword: string;
+}): Promise<boolean> {
+  const loginUrl = `${STOREFRONT_ORIGIN}/wholesaleportal/sign-in`;
+  const html = `<!DOCTYPE html>
+<html><body style="font-family:Segoe UI,Roboto,Helvetica,sans-serif;line-height:1.55;color:#333;max-width:640px;">
+  <p>Your wholesale portal staff password was reset.</p>
+  <p>
+    <strong>Staff login:</strong> <a href="${loginUrl}">${escapeHtml(loginUrl)}</a><br/>
+    <strong>Email:</strong> ${escapeHtml(opts.email)}<br/>
+    <strong>Temporary password:</strong> ${escapeHtml(opts.temporaryPassword)}
+  </p>
+  <p>Sign in with this temporary password to continue managing the wholesale portal.</p>
+</body></html>`;
+
+  return sendEmail({
+    to: [opts.email],
+    subject: "Your wholesale portal staff password was reset",
+    html,
+  });
+}
