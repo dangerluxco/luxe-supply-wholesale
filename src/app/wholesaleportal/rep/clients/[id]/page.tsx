@@ -62,37 +62,47 @@ export default async function ClientDetailPage({
         <div className="space-y-6">
           <div className="rounded-card border border-border bg-surface p-5">
             <div className="micro-badge mb-3 text-[10px] tracking-[0.14em] text-accent">
-              RECENT INVOICE REQUESTS
+              RECENT ORDER REQUESTS
             </div>
             {quotes.length === 0 ? (
               <p className="text-[12.5px] text-muted">
-                No invoice requests from this buyer yet.
+                No order requests from this buyer yet.
               </p>
             ) : (
               <div className="overflow-hidden rounded-chip border border-border">
-                <div className="grid grid-cols-[1fr_80px_100px_110px] border-b border-border bg-ground px-4 py-2 font-mono text-[10px] uppercase tracking-[0.1em] text-muted">
+                <div className="grid grid-cols-[1fr_70px_90px_100px_72px] border-b border-border bg-ground px-4 py-2 font-mono text-[10px] uppercase tracking-[0.1em] text-muted">
                   <span>Submitted</span>
                   <span className="text-center">Items</span>
                   <span className="text-right">Total</span>
                   <span>Status</span>
+                  <span className="text-right"> </span>
                 </div>
                 {quotes.map((q) => (
-                  <Link
+                  <div
                     key={q.id}
-                    href={`/wholesaleportal/rep/quotes/${q.id}`}
-                    className="grid grid-cols-[1fr_80px_100px_110px] items-center border-b border-border/60 px-4 py-3 text-[12.5px] transition last:border-b-0 hover:bg-ground"
+                    className="grid grid-cols-[1fr_70px_90px_100px_72px] items-center border-b border-border/60 px-4 py-3 text-[12.5px] transition last:border-b-0 hover:bg-ground/70"
                   >
                     <span className="font-mono text-[11px] text-muted">
                       {fullDate(q.createdAt)}
                     </span>
                     <span className="text-center font-mono">{q.itemCount}</span>
                     <span className="text-right font-mono">
-                      {q.cartTotal != null ? money(Math.round(q.cartTotal)) : "—"}
+                      {q.cartTotal != null
+                        ? money(Math.round(q.cartTotal + (q.shipping || 0)))
+                        : "—"}
                     </span>
                     <span className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-muted">
                       {q.status}
                     </span>
-                  </Link>
+                    <div className="text-right">
+                      <a
+                        href={`/wholesaleportal/rep/quotes/${q.id}`}
+                        className="inline-flex h-7 items-center rounded-chip bg-ink px-2.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-ground transition hover:opacity-90"
+                      >
+                        Open
+                      </a>
+                    </div>
+                  </div>
                 ))}
               </div>
             )}
@@ -225,7 +235,7 @@ export default async function ClientDetailPage({
           {quotes.length === 0 && cart.length === 0 ? (
             <EmptyState
               title="No activity yet."
-              hint="This buyer hasn't started an order or submitted an invoice request."
+              hint="This buyer hasn't started an order or submitted an order request."
             />
           ) : null}
         </div>

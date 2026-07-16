@@ -6,7 +6,7 @@ import { loadActiveHoldsBySku } from "@/lib/firestore/holds";
 import { getQuoteThresholds, evaluateQuoteThresholds } from "@/lib/firestore/settings";
 import { money } from "@/lib/format";
 import { EmptyState } from "@/components/EmptyState";
-import { SubmitInvoiceRequestButton } from "@/components/SubmitInvoiceRequestButton";
+import { CartCheckoutPanel } from "@/components/CartCheckoutPanel";
 import { RemoveCartItemButton } from "@/components/RemoveCartItemButton";
 import { HoldCountdown } from "@/components/HoldCountdown";
 import { InfoTip } from "@/components/InfoTip";
@@ -78,7 +78,7 @@ export default async function CartPage() {
           className="mt-8"
         />
       ) : (
-        <div className="mt-8 grid grid-cols-1 gap-10 lg:grid-cols-[1fr_320px]">
+        <div className="mt-8 grid grid-cols-1 gap-10 lg:grid-cols-[1fr_360px]">
           <div className="overflow-hidden rounded-card border border-border bg-surface">
             {cart.map((item, index) => {
               const lineSkus = item.isSuggestedLot
@@ -118,23 +118,13 @@ export default async function CartPage() {
             })}
           </div>
 
-          <div className="h-fit rounded-card border border-border bg-surface p-5">
-            <div className="flex justify-between text-[13px]">
-              <span className="text-secondary">Subtotal</span>
-              <span className="font-mono font-semibold">{money(total)}</span>
-            </div>
-            <p className="mt-3 text-[11px] text-muted">
-              Checkout submits your order for review. Soft holds continue for up to 7 days while
-              staff reviews the request.
-            </p>
+          <div className="space-y-3">
             {!thresholdCheck.met ? (
-              <p className="mt-3 rounded-chip border border-accent/40 bg-accent/5 px-3 py-2 text-[11.5px] text-secondary">
+              <p className="rounded-chip border border-accent/40 bg-accent/5 px-3 py-2 text-[11.5px] text-secondary">
                 {thresholdCheck.message}
               </p>
             ) : null}
-            <div className="mt-5">
-              <SubmitInvoiceRequestButton disabled={!thresholdCheck.met} />
-            </div>
+            <CartCheckoutPanel subtotal={total} submitDisabled={!thresholdCheck.met} />
           </div>
         </div>
       )}

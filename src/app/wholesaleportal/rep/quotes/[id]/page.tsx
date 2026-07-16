@@ -1,15 +1,14 @@
-import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { getSession } from "@/lib/auth";
+import { ROLE } from "@/lib/constants";
 import { getQuoteById } from "@/lib/firestore/quotes";
 import { QuoteStatusSelect } from "@/components/QuoteStatusSelect";
 import { QuoteNotesForm } from "@/components/QuoteNotesForm";
 import { QuoteItemsEditor } from "@/components/QuoteItemsEditor";
+import { QuoteClaimControls } from "@/components/QuoteClaimControls";
 import { GenerateInvoiceButton } from "@/components/GenerateInvoiceButton";
 import { InfoTip } from "@/components/InfoTip";
-import { fullDate } from "@/lib/format";
-import { setQuoteStatus } from "@/lib/actions/quote-status";
-import { saveQuoteNotes } from "@/lib/actions/quote-notes";
-import { saveQuoteLineItems } from "@/lib/actions/quote-line-items";
+import { fullDate, money } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -27,22 +26,22 @@ export default async function StaffQuoteDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const session = await getSession();
+  if (!session || session.role === ROLE.BUYER) redirect("/wholesaleportal/sign-in");
+
   const { id } = await params;
   const quote = await getQuoteById(id);
   if (!quote) notFound();
 
   return (
     <div className="px-10 pb-12 pt-8">
-      <Link
-        href="/wholesaleportal/rep"
-        className="text-[12px] text-muted transition hover:text-ink"
-      >
-        ‹ Back to invoice requests
-      </Link>
+      <a href="/wholesaleportal/rep" className="text-[12px] text-muted transition hover:text-ink">
+        ‹ Back to order requests
+      </a>
 
       <div className="mb-6 mt-3 flex flex-wrap items-baseline gap-4">
         <h1 className="flex items-center gap-2 text-[24px] font-semibold text-ink">
-          {quote.customerName || quote.buyerDisplayName || "Invoice request"}
+          {quote.customerName || quote.buyerDisplayName || "Order request"}
           <InfoTip label="Holds and sold status on this request">
             Line items stay soft-held for the buyer until you invoice (sold + off store),
             decline/close (holds released), remove a line (that SKU’s hold releases), or the
@@ -53,11 +52,7 @@ export default async function StaffQuoteDetailPage({
         <span className="font-mono text-[11px] text-muted">#{quote.id}</span>
         <div className="flex-1" />
         <div className="w-[160px]">
-          <QuoteStatusSelect
-            quoteId={quote.id}
-            status={quote.status}
-            action={setQuoteStatus}
-          />
+          <QuoteStatusSelect quoteId={quote.id} status={quote.status} />
         </div>
       </div>
 
@@ -76,11 +71,7 @@ export default async function StaffQuoteDetailPage({
               </div>
               <span className="text-[11px] text-muted">Remove products or adjust prices below.</span>
             </div>
-            <QuoteItemsEditor
-              quoteId={quote.id}
-              items={quote.items}
-              action={saveQuoteLineItems}
-            />
+            <QuoteItemsEditor quoteId={quote.id} items={quote.items} />
           </div>
 
           <div className="rounded-card border border-border bg-surface p-5">
@@ -96,15 +87,26 @@ export default async function StaffQuoteDetailPage({
             <div className="micro-badge mb-3 text-[10px] tracking-[0.14em] text-accent">
               ADMIN NOTES
             </div>
-            <QuoteNotesForm
-              quoteId={quote.id}
-              adminNotes={quote.adminNotes}
-              action={saveQuoteNotes}
-            />
+            <QuoteNotesForm quoteId={quote.id} adminNotes={quote.adminNotes} />
           </div>
         </div>
 
         <div className="space-y-6">
+          <div className="rounded-card border border-border bg-surface p-5">
+            <div className="micro-badge mb-3 text-[10px] tracking-[0.14em] text-accent">
+              WORKING ON
+            </div>
+            <QuoteClaimControls
+              quoteId={quote.id}
+              claimedByEmail={quote.claimedByEmail}
+              claimedByName={quote.claimedByName}
+              currentStaffEmail={session.email}
+            />
+            {quote.claimedAt ? (
+              <p className="mt-3 text-[11px] text-muted">Claimed {fullDate(quote.claimedAt)}</p>
+            ) : null}
+          </div>
+
           <div className="rounded-card border border-border bg-surface p-5">
             <div className="micro-badge mb-3 text-[10px] tracking-[0.14em] text-accent">
               INVOICE
@@ -116,12 +118,12 @@ export default async function StaffQuoteDetailPage({
                   <span className="font-mono text-ink">{quote.invoiceNumber}</span> has been
                   generated from this request.
                 </p>
-                <Link
+                <a
                   href={`/wholesaleportal/rep/invoices/${quote.invoiceId}`}
                   className="inline-flex h-9 items-center rounded-chip border border-border px-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-secondary transition hover:border-accent hover:text-ink"
                 >
                   View invoice →
-                </Link>
+                </a>
               </div>
             ) : (
               <div className="space-y-2">
@@ -132,6 +134,30 @@ export default async function StaffQuoteDetailPage({
                 <GenerateInvoiceButton quoteId={quote.id} disabled={quote.items.length === 0} />
               </div>
             )}
+          </div>
+
+          <div className="rounded-card border border-border bg-surface p-5">
+            <div className="micro-badge mb-3 text-[10px] tracking-[0.14em] text-accent">
+              TOTALS
+            </div>
+            <div className="space-y-2 text-[12.5px]">
+              <Row
+                label="Merchandise"
+                value={quote.cartTotal != null ? money(Math.round(quote.cartTotal)) : "—"}
+              />
+              <Row
+                label={quote.shippingLabel ? `Shipping · ${quote.shippingLabel}` : "Shipping"}
+                value={money(Math.round(quote.shipping || 0))}
+              />
+              <Row
+                label="Order total"
+                value={
+                  quote.cartTotal != null
+                    ? money(Math.round(quote.cartTotal + (quote.shipping || 0)))
+                    : "—"
+                }
+              />
+            </div>
           </div>
 
           <div className="rounded-card border border-border bg-surface p-5">

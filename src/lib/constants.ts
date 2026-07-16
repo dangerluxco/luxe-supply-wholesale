@@ -64,6 +64,47 @@ export const MIN_ORDER_VALUE = 2500;
 /** Prisma/legacy cart hold length in hours (aligned with HOLD_TTL_MS = 7 days). */
 export const HOLD_HOURS = 7 * 24;
 export const INSURED_SHIPPING = 185;
+
+/**
+ * Buyer-selectable shipping methods on the wholesale cart.
+ * Prices are placeholders — update this list anytime; existing order requests
+ * keep whatever method/price was saved at submit.
+ */
+export const SHIPPING_OPTIONS = [
+  {
+    id: "standard",
+    label: "Standard ground",
+    price: 95,
+    description: "Insured ground freight · 5–10 business days",
+  },
+  {
+    id: "insured",
+    label: "Insured express",
+    price: INSURED_SHIPPING,
+    description: "Fully insured · 3–5 business days",
+  },
+  {
+    id: "white_glove",
+    label: "White glove",
+    price: 450,
+    description: "White-glove delivery · appointment required",
+  },
+  {
+    id: "pickup",
+    label: "Local pickup",
+    price: 0,
+    description: "Buyer arranges pickup · no shipping charge",
+  },
+] as const;
+
+export type ShippingOptionId = (typeof SHIPPING_OPTIONS)[number]["id"];
+export const DEFAULT_SHIPPING_METHOD_ID: ShippingOptionId = "insured";
+
+export function resolveShippingOption(id?: string | null) {
+  const match = SHIPPING_OPTIONS.find((o) => o.id === id);
+  return match ?? SHIPPING_OPTIONS.find((o) => o.id === DEFAULT_SHIPPING_METHOD_ID)!;
+}
+
 /** Soft-hold TTL for cart and invoice-request holds alike. */
 export const HOLD_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 /** Soft-hold while an invoice request is pending (aligned with request timeout). */
@@ -95,7 +136,7 @@ export const CARRIERS = ["FERRARI GRP", "MALCA-AMIT", "BRINK'S FINE ART"];
 
 // Firestore salesPortalQuotes statuses. Kept as "quote" internally (collection
 // name + these values) to avoid a data migration — buyer/staff-facing copy now
-// calls this an "invoice request" (see BRIDGE.md).
+// calls this an "order request" (see BRIDGE.md).
 export const QUOTE_STATUSES = [
   "open",
   "contacted",

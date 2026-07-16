@@ -1,55 +1,66 @@
 "use client";
 
-import { useActionState } from "react";
-
-type NotesState = {
-  error?: string;
-  message?: string;
-};
-
-type NotesAction = (
-  prev: NotesState | undefined,
-  formData: FormData,
-) => Promise<NotesState>;
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 
 /**
- * Server action is passed from the Server Component page so this client
- * module never imports a `"use server"` file (avoids soft-nav webpack stub collisions).
+ * Notes save via API — no `"use server"` imports (soft-nav safe).
  */
 export function QuoteNotesForm({
   quoteId,
   adminNotes,
-  action: saveAction,
 }: {
   quoteId: string;
   adminNotes: string;
-  action: NotesAction;
 }) {
-  const [state, action, pending] = useActionState(saveAction, {} as NotesState);
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [value, setValue] = useState(adminNotes);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   return (
-    <form action={action} className="space-y-3">
-      <input type="hidden" name="quoteId" value={quoteId} />
+    <div className="space-y-3">
       <textarea
-        name="adminNotes"
         rows={5}
-        defaultValue={adminNotes}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
         placeholder="Internal notes — not visible to the buyer."
         className="w-full rounded-chip border border-border bg-ground px-3 py-2 text-[12.5px] text-ink outline-none focus:border-accent"
       />
       <div className="flex items-center gap-3">
         <button
-          type="submit"
+          type="button"
           disabled={pending}
+          onClick={() => {
+            setError(null);
+            setMessage(null);
+            start(async () => {
+              const res = await fetch(`/api/staff/quotes/${quoteId}/notes`, {
+                method: "POST",
+                credentials: "same-origin",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ adminNotes: value }),
+              });
+              const data = (await res.json().catch(() => ({}))) as {
+                error?: string;
+                message?: string;
+              };
+              if (!res.ok || data.error) {
+                setError(data.error || "Could not save notes.");
+                return;
+              }
+              setMessage(data.message || "Notes saved.");
+              router.refresh();
+            });
+          }}
           className="h-9 rounded-chip bg-ink px-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-ground disabled:opacity-60"
         >
           {pending ? "Saving…" : "Save notes"}
         </button>
-        {state?.message ? (
-          <span className="text-[12px] text-[#4E9A6A]">{state.message}</span>
-        ) : null}
-        {state?.error ? <span className="text-[12px] text-danger">{state.error}</span> : null}
+        {message ? <span className="text-[12px] text-[#4E9A6A]">{message}</span> : null}
+        {error ? <span className="text-[12px] text-danger">{error}</span> : null}
       </div>
-    </form>
+    </div>
   );
 }

@@ -484,9 +484,15 @@ export async function createBuyerQuote(opts: {
   buyer: PortalBuyer;
   items: CartItem[];
   message?: string;
+  shippingMethodId?: string;
+  shippingLabel?: string;
+  shipping?: number;
 }): Promise<{ id: string }> {
   const org = await getLuxesupplyOrg();
   const cartTotal = opts.items.reduce((s, i) => s + (Number(i.price) || 0), 0);
+  const shipping = Math.max(0, Math.round(Number(opts.shipping) || 0));
+  const shippingMethodId = String(opts.shippingMethodId || "").slice(0, 64);
+  const shippingLabel = String(opts.shippingLabel || "").slice(0, 120);
   const ref = getDb().collection("salesPortalQuotes").doc();
   await ref.set({
     orgSlug: WHOLESALE_ORG_SLUG,
@@ -516,6 +522,9 @@ export async function createBuyerQuote(opts: {
     })),
     itemCount: opts.items.length,
     cartTotal,
+    shippingMethodId,
+    shippingLabel,
+    shipping,
     adminNotes: "",
     emailSent: false,
     createdAt: new Date(),

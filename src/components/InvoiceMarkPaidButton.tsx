@@ -1,9 +1,20 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { markInvoicePaid } from "@/lib/actions/invoices";
 
-export function InvoiceMarkPaidButton({ invoiceId }: { invoiceId: string }) {
+type MarkPaidAction = (invoiceId: string) => Promise<{ error?: string; ok?: boolean }>;
+
+/**
+ * Server action is passed from the Server Component page so this client
+ * module never imports a `"use server"` file (avoids soft-nav webpack stub collisions).
+ */
+export function InvoiceMarkPaidButton({
+  invoiceId,
+  action,
+}: {
+  invoiceId: string;
+  action: MarkPaidAction;
+}) {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -15,7 +26,7 @@ export function InvoiceMarkPaidButton({ invoiceId }: { invoiceId: string }) {
         onClick={() => {
           setError(null);
           start(async () => {
-            const res = await markInvoicePaid(invoiceId);
+            const res = await action(invoiceId);
             if (res?.error) setError(res.error);
           });
         }}

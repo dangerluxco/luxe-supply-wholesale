@@ -102,7 +102,7 @@ export default async function InvoiceDetail({ params }: { params: Promise<{ numb
 
         <div className="ml-auto mt-6 w-64 text-[12.5px]">
           <Total k="Subtotal" v={money(inv.subtotal)} />
-          <Total k="Insured shipping" v={money(inv.shipping)} />
+          <Total k="Shipping" v={money(inv.shipping)} />
           <div className="mt-2 flex items-baseline justify-between border-t border-border pt-3">
             <span className="text-[13px] font-semibold text-ink">Invoice total</span>
             <span className="font-mono text-[22px] font-semibold text-ink">{money(inv.total)}</span>

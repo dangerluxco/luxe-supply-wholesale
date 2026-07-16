@@ -28,7 +28,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ number:
     ...inv.items.map((l) => [l.sku, l.title, l.price]),
     [],
     ["Subtotal", "", inv.subtotal],
-    ["Insured shipping", "", inv.shipping],
+    ["Shipping", "", inv.shipping],
     ["Total", "", inv.total],
   ];
 

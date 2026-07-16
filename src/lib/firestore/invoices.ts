@@ -135,7 +135,7 @@ export async function createInvoiceFromQuote(
   staffEmail: string,
 ): Promise<PortalInvoice> {
   const quote = await getQuoteById(quoteId);
-  if (!quote) throw new Error("Invoice request not found.");
+  if (!quote) throw new Error("Order request not found.");
   if (quote.invoiceId) throw new Error("This request already has an invoice.");
   if (!quote.items.length) throw new Error("Cannot invoice an empty request.");
 
@@ -154,7 +154,7 @@ export async function createInvoiceFromQuote(
   }));
   const subtotal =
     quote.cartTotal != null ? Math.round(quote.cartTotal) : items.reduce((s, i) => s + i.price * i.quantity, 0);
-  const shipping = 0;
+  const shipping = Math.max(0, Math.round(Number(quote.shipping) || 0));
   const total = subtotal + shipping;
 
   const ref = getDb().collection("salesPortalInvoices").doc();

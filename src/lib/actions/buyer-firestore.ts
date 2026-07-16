@@ -21,6 +21,7 @@ import { listActiveBundledSkus } from "@/lib/firestore/suggestedLots";
 import { getQuoteThresholds, evaluateQuoteThresholds } from "@/lib/firestore/settings";
 import { getDb } from "@/lib/firestore/admin";
 import { notifyStaffOfInvoiceRequest } from "@/lib/notify";
+import { resolveShippingOption } from "@/lib/constants";
 
 export async function addSkuToCart(sku: string) {
   return addSkusToCart([sku]);
@@ -131,7 +132,10 @@ export async function removeSkuFromCart(sku: string) {
  * the staff queue), but the buyer- and staff-facing product is an "invoice
  * request" — not a price quote. Staff review/approve → formal invoice comes later.
  */
-export async function submitInvoiceRequest(message?: string) {
+export async function submitInvoiceRequest(opts?: {
+  message?: string;
+  shippingMethodId?: string;
+}) {
   const session = await getSession();
   if (!session || session.role !== "BUYER" || session.source !== "firestore") {
     return { error: "Sign in required." };
@@ -146,6 +150,7 @@ export async function submitInvoiceRequest(message?: string) {
   // Configurable minimum item count / order total (staff: /wholesaleportal/rep/settings).
   const itemCount = cart.length;
   const cartTotal = cart.reduce((s, i) => s + (Number(i.price) || 0), 0);
+  const shipping = resolveShippingOption(opts?.shippingMethodId);
   const thresholds = await getQuoteThresholds();
   const thresholdCheck = evaluateQuoteThresholds(thresholds, {
     itemCount,
@@ -157,7 +162,15 @@ export async function submitInvoiceRequest(message?: string) {
   }
 
   const holdSkus = cartHoldSkus(cart);
-  const { id } = await createBuyerQuote({ buyer, items: cart, message });
+  const message = opts?.message;
+  const { id } = await createBuyerQuote({
+    buyer,
+    items: cart,
+    message,
+    shippingMethodId: shipping.id,
+    shippingLabel: shipping.label,
+    shipping: shipping.price,
+  });
   await setBuyerCart(session.id, []);
   try {
     await convertCartHoldsToQuote({
@@ -183,6 +196,8 @@ export async function submitInvoiceRequest(message?: string) {
       items: cart.map((i) => ({ sku: i.sku, title: i.title, brand: i.brand, price: i.price })),
       itemCount,
       cartTotal,
+      shippingLabel: shipping.label,
+      shipping: shipping.price,
     });
     if (sent) {
       await getDb()

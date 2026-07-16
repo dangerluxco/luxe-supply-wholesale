@@ -25,7 +25,7 @@ export default async function OrdersPage() {
 
   return (
     <div className="px-8 pb-16 pt-8">
-      <h1 className="text-[24px] font-semibold text-ink">Invoice requests</h1>
+      <h1 className="text-[24px] font-semibold text-ink">Order requests</h1>
       <p className="mt-1 text-[13px] text-secondary">
         Orders you submit for review appear here as the sales team works them.
         Full order history is coming with Net-30 invoices.
@@ -33,7 +33,7 @@ export default async function OrdersPage() {
 
       {quotes.length === 0 ? (
         <EmptyState
-          title="You haven't submitted anything for invoicing yet."
+          title="You haven't submitted an order request yet."
           hint="Add pieces to your order and submit for review from your cart — it will show up here."
           className="mt-8"
         />
@@ -55,13 +55,15 @@ export default async function OrdersPage() {
               <span className="font-mono text-[11px] text-muted">{fullDate(q.createdAt)}</span>
               <div>
                 <div className="text-ink">
-                  {q.message ? q.message.slice(0, 70) : "Invoice request"}
+                  {q.message ? q.message.slice(0, 70) : "Order request"}
                 </div>
                 <div className="font-mono text-[11px] text-muted">#{q.id}</div>
               </div>
               <span className="text-center font-mono">{q.itemCount}</span>
               <span className="text-right font-mono">
-                {q.cartTotal != null ? money(Math.round(q.cartTotal)) : "—"}
+                {q.cartTotal != null
+                  ? money(Math.round(q.cartTotal + (q.shipping || 0)))
+                  : "—"}
               </span>
               <span className="text-center text-[11px] uppercase tracking-[0.08em] text-muted">
                 {STATUS_LABEL[q.status] || q.status}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { PortalItemLine } from "@/components/PortalItemLine";
 import { money } from "@/lib/format";
 
@@ -15,11 +16,6 @@ type EditableItem = {
   lotId: string;
   lotItems: Array<Record<string, unknown>>;
 };
-
-/**
- * Server action is passed from the Server Component page so this client
- * module never imports a `"use server"` file (avoids soft-nav webpack stub collisions).
- */
 
 function resolveImageUrl(it: Record<string, unknown>): string | null {
   const direct = typeof it.imageUrl === "string" && it.imageUrl ? it.imageUrl : null;
@@ -62,18 +58,17 @@ function toEditable(raw: Array<Record<string, unknown>>): EditableItem[] {
   });
 }
 
+/**
+ * Line-item edits via API — no `"use server"` imports (soft-nav safe).
+ */
 export function QuoteItemsEditor({
   quoteId,
   items,
-  action: saveAction,
 }: {
   quoteId: string;
   items: Array<Record<string, unknown>>;
-  action: (
-    quoteId: string,
-    rows: EditableItem[],
-  ) => Promise<{ error?: string; message?: string; ok?: boolean }>;
 }) {
+  const router = useRouter();
   const initial = useMemo(() => toEditable(items), [items]);
   const [rows, setRows] = useState<EditableItem[]>(initial);
   const [savedRows, setSavedRows] = useState<EditableItem[]>(initial);
@@ -105,13 +100,23 @@ export function QuoteItemsEditor({
     setError(null);
     setMessage(null);
     start(async () => {
-      const res = await saveAction(quoteId, rows);
-      if (res?.error) {
-        setError(res.error);
+      const res = await fetch(`/api/staff/quotes/${quoteId}/items`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: rows }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        message?: string;
+      };
+      if (!res.ok || data.error) {
+        setError(data.error || "Could not update order request.");
         return;
       }
       setSavedRows(rows);
-      setMessage(res?.message || "Invoice request updated.");
+      setMessage(data.message || "Order request updated.");
+      router.refresh();
     });
   }
 
@@ -119,7 +124,7 @@ export function QuoteItemsEditor({
     return (
       <div>
         <div className="rounded-chip border border-border px-4 py-6 text-center text-[12.5px] text-muted">
-          No items remaining on this invoice request.
+          No items remaining on this order request.
         </div>
         <div className="mt-4 flex items-center gap-3">
           <button

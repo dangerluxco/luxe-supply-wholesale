@@ -1,4 +1,4 @@
-// Staff notification email for new invoice requests. Non-blocking by design —
+// Staff notification email for new order requests. Non-blocking by design —
 // callers should try/catch and never fail the submit if this throws or returns false.
 import { sendEmail, escapeHtml } from "@/lib/email";
 import { listActiveStaffEmails } from "@/lib/firestore/staff";
@@ -17,6 +17,8 @@ export async function notifyStaffOfInvoiceRequest(opts: {
   items: Array<{ sku: string; title: string; brand?: string; price?: number | null }>;
   itemCount: number;
   cartTotal: number;
+  shippingLabel?: string;
+  shipping?: number;
 }): Promise<{ sent: boolean; recipients: string[] }> {
   const [staffEmails, extraEmails] = await Promise.all([
     listActiveStaffEmails(),
@@ -49,7 +51,7 @@ export async function notifyStaffOfInvoiceRequest(opts: {
 
   const html = `<!DOCTYPE html>
 <html><body style="font-family:Segoe UI,Roboto,Helvetica,sans-serif;line-height:1.55;color:#333;max-width:640px;">
-  <p>A buyer submitted a new <strong>invoice request</strong> on the LuxeSupply wholesale portal.</p>
+  <p>A buyer submitted a new <strong>order request</strong> on the LuxeSupply wholesale portal.</p>
   <p>
     <strong>From:</strong> ${escapeHtml(opts.customerName)} &lt;${escapeHtml(opts.customerEmail)}&gt;<br/>
     ${opts.customerCompany ? `<strong>Company:</strong> ${escapeHtml(opts.customerCompany)}<br/>` : ""}
@@ -71,16 +73,24 @@ export async function notifyStaffOfInvoiceRequest(opts: {
     </thead>
     <tbody>${rows}</tbody>
   </table>
-  <p><strong>${opts.itemCount}</strong> item${opts.itemCount === 1 ? "" : "s"} · order total ${escapeHtml(
+  <p><strong>${opts.itemCount}</strong> item${opts.itemCount === 1 ? "" : "s"} · merchandise ${escapeHtml(
     money(Math.round(opts.cartTotal)),
-  )}</p>
-  <p><a href="${STOREFRONT_ORIGIN}/wholesaleportal/rep/quotes/${opts.quoteId}">Open this invoice request</a> in the staff portal.</p>
+  )}${
+    opts.shippingLabel
+      ? ` · shipping ${escapeHtml(opts.shippingLabel)} (${escapeHtml(
+          money(Math.round(opts.shipping || 0)),
+        )}) · order total ${escapeHtml(
+          money(Math.round(opts.cartTotal + (opts.shipping || 0))),
+        )}`
+      : ""
+  }</p>
+  <p><a href="${STOREFRONT_ORIGIN}/wholesaleportal/rep/quotes/${opts.quoteId}">Open this order request</a> in the staff portal.</p>
   <p style="color:#666;font-size:13px;">Request ID: ${escapeHtml(opts.quoteId)}</p>
 </body></html>`;
 
   const sent = await sendEmail({
     to: recipients,
-    subject: `Invoice request from ${opts.customerName || "a buyer"} — LuxeSupply wholesale`,
+    subject: `Order request from ${opts.customerName || "a buyer"} — LuxeSupply wholesale`,
     html,
     replyTo: opts.customerEmail || undefined,
   });

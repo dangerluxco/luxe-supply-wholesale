@@ -7,7 +7,7 @@ import { archiveSuggestedLot } from "./suggestedLots";
 import { markSkusSold, resolveTitlesForSkus } from "./catalog";
 
 // Internal name matches the `salesPortalQuotes` Firestore collection so we don't
-// migrate live data. Buyer/staff UI presents these documents as "invoice requests".
+// migrate live data. Buyer/staff UI presents these documents as "order requests".
 export type PortalQuote = {
   id: string;
   status: string;
@@ -21,7 +21,14 @@ export type PortalQuote = {
   items: Array<Record<string, unknown>>;
   itemCount: number;
   cartTotal: number | null;
+  shippingMethodId: string;
+  shippingLabel: string;
+  shipping: number;
   adminNotes: string;
+  /** Staff member currently working this request (optional claim). */
+  claimedByEmail: string | null;
+  claimedByName: string | null;
+  claimedAt: string | null;
   createdAt: string | null;
   updatedAt: string | null;
   /** Set once staff generates a formal invoice from this request. */
@@ -110,7 +117,13 @@ function serializeQuote(id: string, d: Record<string, unknown>): PortalQuote {
     items,
     itemCount: Number(d.itemCount || items.length || 0),
     cartTotal: d.cartTotal != null ? Number(d.cartTotal) : null,
+    shippingMethodId: String(d.shippingMethodId || ""),
+    shippingLabel: String(d.shippingLabel || ""),
+    shipping: Number(d.shipping || 0),
     adminNotes: String(d.adminNotes || ""),
+    claimedByEmail: d.claimedByEmail ? String(d.claimedByEmail) : null,
+    claimedByName: d.claimedByName ? String(d.claimedByName) : null,
+    claimedAt: toIso(d.claimedAt),
     createdAt: toIso(d.createdAt),
     updatedAt: toIso(d.updatedAt),
     invoiceId: d.invoiceId ? String(d.invoiceId) : null,
@@ -242,6 +255,54 @@ export async function listQuotesForBuyer(
     .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
 }
 
+/** Claim an order request for the signed-in staff member (or take over). */
+export async function claimQuote(
+  quoteId: string,
+  staff: { email: string; name: string },
+): Promise<PortalQuote> {
+  const ref = getDb().collection("salesPortalQuotes").doc(quoteId);
+  const snap = await ref.get();
+  if (!snap.exists) throw new Error("Order request not found.");
+
+  const email = String(staff.email || "")
+    .trim()
+    .toLowerCase()
+    .slice(0, 200);
+  if (!email) throw new Error("Staff email required to claim.");
+
+  await ref.update({
+    claimedByEmail: email,
+    claimedByName: String(staff.name || email).slice(0, 120),
+    claimedAt: new Date(),
+    updatedAt: new Date(),
+    updatedBy: email,
+  });
+
+  const next = await ref.get();
+  return serializeQuote(next.id, next.data() || {});
+}
+
+/** Clear the staff claim so another rep can pick it up. */
+export async function releaseQuoteClaim(
+  quoteId: string,
+  updatedBy: string,
+): Promise<PortalQuote> {
+  const ref = getDb().collection("salesPortalQuotes").doc(quoteId);
+  const snap = await ref.get();
+  if (!snap.exists) throw new Error("Order request not found.");
+
+  await ref.update({
+    claimedByEmail: null,
+    claimedByName: null,
+    claimedAt: null,
+    updatedAt: new Date(),
+    updatedBy: String(updatedBy || "").slice(0, 200),
+  });
+
+  const next = await ref.get();
+  return serializeQuote(next.id, next.data() || {});
+}
+
 export async function updateQuoteStatus(
   quoteId: string,
   updates: { status?: string; adminNotes?: string },
@@ -274,7 +335,7 @@ export async function updateQuoteItems(
 ): Promise<PortalQuote> {
   const ref = getDb().collection("salesPortalQuotes").doc(quoteId);
   const snap = await ref.get();
-  if (!snap.exists) throw new Error("Invoice request not found.");
+  if (!snap.exists) throw new Error("Order request not found.");
 
   const cleanItems = items
     .map((i) => ({

@@ -6,6 +6,8 @@ import { InvoiceBadge, FulfillmentBadge } from "@/components/badges";
 import { InvoiceMarkPaidButton } from "@/components/InvoiceMarkPaidButton";
 import { InvoiceFulfillmentForm } from "@/components/InvoiceFulfillmentForm";
 import { PortalItemLine } from "@/components/PortalItemLine";
+import { markInvoicePaid } from "@/lib/actions/mark-invoice-paid";
+import { markInvoiceShippedAction } from "@/lib/actions/mark-invoice-shipped";
 
 export const dynamic = "force-dynamic";
 
@@ -96,7 +98,10 @@ export default async function StaffInvoiceDetailPage({
                 <Row label="Shipped" value={fullDate(invoice.shippedAt)} />
               </div>
             ) : (
-              <InvoiceFulfillmentForm invoiceId={invoice.id} />
+              <InvoiceFulfillmentForm
+                invoiceId={invoice.id}
+                action={markInvoiceShippedAction}
+              />
             )}
           </div>
         </div>
@@ -113,7 +118,10 @@ export default async function StaffInvoiceDetailPage({
               {invoice.paidAt ? <Row label="Paid" value={fullDate(invoice.paidAt)} /> : null}
               {status !== "PAID" ? (
                 <div className="pt-1">
-                  <InvoiceMarkPaidButton invoiceId={invoice.id} />
+                  <InvoiceMarkPaidButton
+                    invoiceId={invoice.id}
+                    action={markInvoicePaid}
+                  />
                 </div>
               ) : null}
             </div>
@@ -138,7 +146,7 @@ export default async function StaffInvoiceDetailPage({
             href={`/wholesaleportal/rep/quotes/${invoice.quoteId}`}
             className="block rounded-card border border-dashed border-border px-5 py-4 text-[12px] text-muted transition hover:border-accent hover:text-ink"
           >
-            ‹ Back to originating invoice request
+            ‹ Back to originating order request
           </Link>
         </div>
       </div>

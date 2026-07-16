@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-import { generateInvoiceFromQuote } from "@/lib/actions/invoices";
 
+/**
+ * Generate invoice via API — no `"use server"` imports (soft-nav safe).
+ */
 export function GenerateInvoiceButton({
   quoteId,
   disabled,
@@ -11,7 +12,6 @@ export function GenerateInvoiceButton({
   quoteId: string;
   disabled?: boolean;
 }) {
-  const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -23,12 +23,21 @@ export function GenerateInvoiceButton({
         onClick={() => {
           setError(null);
           start(async () => {
-            const res = await generateInvoiceFromQuote(quoteId);
-            if (res?.error) {
-              setError(res.error);
+            const res = await fetch(`/api/staff/quotes/${quoteId}/generate-invoice`, {
+              method: "POST",
+              credentials: "same-origin",
+            });
+            const data = (await res.json().catch(() => ({}))) as {
+              error?: string;
+              invoiceId?: string;
+            };
+            if (!res.ok || data.error) {
+              setError(data.error || "Could not generate invoice.");
               return;
             }
-            if (res?.invoiceId) router.push(`/wholesaleportal/rep/invoices/${res.invoiceId}`);
+            if (data.invoiceId) {
+              window.location.assign(`/wholesaleportal/rep/invoices/${data.invoiceId}`);
+            }
           });
         }}
         className="h-9 rounded-chip bg-ink px-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-ground transition disabled:opacity-60"

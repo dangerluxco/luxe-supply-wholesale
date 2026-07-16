@@ -40,7 +40,7 @@ export function ThresholdSettingsForm({
       className="max-w-2xl space-y-5 rounded-card border border-border bg-surface p-6"
     >
       <div className="micro-badge text-[10px] tracking-[0.14em] text-accent">
-        INVOICE REQUEST THRESHOLDS
+        ORDER REQUEST THRESHOLDS
       </div>
       <p className="text-[12.5px] text-secondary">
         Buyers must meet at least one active rule to submit their order for processing to
@@ -83,7 +83,7 @@ export function ThresholdSettingsForm({
         />
       </label>
       <p className="text-[11px] text-muted">
-        Active staff accounts are always notified when a buyer submits an invoice request. Add
+        Active staff accounts are always notified when a buyer submits an order request. Add
         extra recipients here if needed. Sending requires{" "}
         <code className="font-mono">SENDGRID_API_KEY</code> to be configured on the server.
       </p>

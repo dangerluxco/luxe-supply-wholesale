@@ -17,12 +17,12 @@ export async function saveQuoteLineItems(quoteId: string, items: QuoteItemInput[
     return { error: "Staff session required." };
   }
   const id = String(quoteId || "").trim();
-  if (!id) return { error: "Missing invoice request id." };
+  if (!id) return { error: "Missing order request id." };
   if (!Array.isArray(items)) return { error: "Invalid items." };
 
   try {
     const before = await getQuoteById(id);
-    if (!before) return { error: "Invoice request not found." };
+    if (!before) return { error: "Order request not found." };
 
     const keepSkus = new Set(
       items.flatMap((i) => expandQuoteItemSkus(i as Record<string, unknown>)),
@@ -46,10 +46,10 @@ export async function saveQuoteLineItems(quoteId: string, items: QuoteItemInput[
 
     revalidatePath("/wholesaleportal/rep");
     revalidatePath(`/wholesaleportal/rep/quotes/${id}`);
-    return { ok: true, message: "Invoice request updated." };
+    return { ok: true, message: "Order request updated." };
   } catch (err) {
     return {
-      error: err instanceof Error ? err.message : "Could not update invoice request.",
+      error: err instanceof Error ? err.message : "Could not update order request.",
     };
   }
 }

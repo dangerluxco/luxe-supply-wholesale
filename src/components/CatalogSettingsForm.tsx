@@ -86,6 +86,7 @@ export function CatalogSettingsForm({
     items: curatedCatalog?.items || [],
   });
   const [batchText, setBatchText] = useState("");
+  const [listQuery, setListQuery] = useState("");
   const [pending, start] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -103,6 +104,22 @@ export function CatalogSettingsForm({
     () => JSON.stringify(draft.items) !== JSON.stringify(savedItems),
     [draft.items, savedItems],
   );
+
+  const filteredDraft = useMemo(() => {
+    const q = listQuery.trim().toLowerCase().replace(/\s+/g, " ");
+    if (!q) {
+      return draft.items.map((item, index) => ({ item, index }));
+    }
+    return draft.items
+      .map((item, index) => ({ item, index }))
+      .filter(({ item }) => {
+        const hay = [item.title, item.sku, item.brand]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return hay.includes(q);
+      });
+  }, [draft.items, listQuery]);
 
   function addBatchToDraft() {
     setError(null);
@@ -240,6 +257,27 @@ export function CatalogSettingsForm({
           </span>
         </div>
 
+        {draft.items.length > 0 ? (
+          <label className="flex flex-col gap-1.5">
+            <span className="sr-only">Search working catalog</span>
+            <input
+              type="search"
+              value={listQuery}
+              onChange={(e) => setListQuery(e.target.value)}
+              placeholder="Search title, SKU, or brand to find items to remove…"
+              className="h-10 w-full rounded-chip border border-border bg-surface px-3 text-[12.5px] text-ink outline-none focus:border-accent"
+              autoComplete="off"
+              enterKeyHint="search"
+            />
+            {listQuery.trim() ? (
+              <span className="text-[11px] text-muted">
+                Showing {filteredDraft.length} of {draft.items.length}
+                {filteredDraft.length === 0 ? " — try a different search" : ""}
+              </span>
+            ) : null}
+          </label>
+        ) : null}
+
         {draftUnresolvedCount > 0 ? (
           <div className="rounded-chip border border-danger/40 bg-danger/5 px-3 py-2 text-[12px] text-danger">
             {draftUnresolvedCount} SKU{draftUnresolvedCount === 1 ? "" : "s"} not found in
@@ -250,6 +288,10 @@ export function CatalogSettingsForm({
         {draft.items.length === 0 ? (
           <div className="rounded-chip border border-border px-4 py-8 text-center text-[12.5px] text-muted">
             No items in the working catalog yet. Paste a SKU batch above to start.
+          </div>
+        ) : filteredDraft.length === 0 ? (
+          <div className="rounded-chip border border-border px-4 py-8 text-center text-[12.5px] text-muted">
+            No items match “{listQuery.trim()}”.
           </div>
         ) : (
           <div className="overflow-hidden rounded-chip border border-border">
@@ -264,11 +306,11 @@ export function CatalogSettingsForm({
               <span />
             </div>
             <div className="max-h-[520px] overflow-y-auto">
-              {draft.items.map((item, i) => {
+              {filteredDraft.map(({ item, index }) => {
                 const margin = marginFor(item.cost, item.price);
                 return (
                   <div
-                    key={`${item.sku}-${i}`}
+                    key={`${item.sku}-${index}`}
                     className="grid grid-cols-[88px_minmax(180px,1fr)_90px_60px_110px_90px_70px_56px] items-center border-b border-border/60 px-3 py-2.5 text-[12.5px] last:border-b-0"
                   >
                     <Placeholder
@@ -306,7 +348,7 @@ export function CatalogSettingsForm({
                         step="1"
                         value={item.price ?? ""}
                         disabled={pending}
-                        onChange={(e) => updateDraftPrice(i, e.target.value)}
+                        onChange={(e) => updateDraftPrice(index, e.target.value)}
                         className="w-[70px] rounded-chip border border-border bg-surface px-2 py-1 text-right text-[12.5px] text-ink outline-none focus:border-accent disabled:opacity-60"
                       />
                     </div>
@@ -330,7 +372,7 @@ export function CatalogSettingsForm({
                       <button
                         type="button"
                         disabled={pending}
-                        onClick={() => removeDraftRow(i)}
+                        onClick={() => removeDraftRow(index)}
                         className="text-[11px] text-muted hover:text-danger disabled:opacity-50"
                       >
                         Remove

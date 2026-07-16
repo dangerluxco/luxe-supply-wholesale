@@ -1,15 +1,29 @@
 "use client";
 
 import { useActionState } from "react";
-import { markInvoiceShippedAction } from "@/lib/actions/invoices";
 import { CARRIERS } from "@/lib/constants";
 
 const fieldClass =
   "h-9 rounded-chip border border-border bg-ground px-3 text-[12.5px] text-ink outline-none focus:border-accent";
 const labelClass = "micro-badge text-[10px] tracking-[0.14em] text-muted";
 
-export function InvoiceFulfillmentForm({ invoiceId }: { invoiceId: string }) {
-  const [state, action, pending] = useActionState(markInvoiceShippedAction, {} as {
+type ShippedAction = (
+  prev: { error?: string; message?: string } | undefined,
+  formData: FormData,
+) => Promise<{ error?: string; message?: string; ok?: boolean }>;
+
+/**
+ * Server action is passed from the Server Component page so this client
+ * module never imports a `"use server"` file (avoids soft-nav webpack stub collisions).
+ */
+export function InvoiceFulfillmentForm({
+  invoiceId,
+  action: shippedAction,
+}: {
+  invoiceId: string;
+  action: ShippedAction;
+}) {
+  const [state, action, pending] = useActionState(shippedAction, {} as {
     error?: string;
     message?: string;
   });

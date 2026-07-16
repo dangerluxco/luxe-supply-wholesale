@@ -3,26 +3,17 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { clsx } from "@/lib/clsx";
+import type { RepNavItem } from "@/lib/rep-nav";
+
 export function RepTopbar({
   user,
-  isManager,
+  nav,
 }: {
   user: { name: string; initials: string };
-  isManager: boolean;
+  nav: RepNavItem[];
 }) {
   const pathname = usePathname();
-
-  const nav = [
-    { label: "Invoice Requests", href: "/wholesaleportal/rep" },
-    { label: "Applications", href: "/wholesaleportal/rep/applications" },
-    { label: "Clients", href: "/wholesaleportal/rep/clients" },
-    { label: "Catalog", href: "/wholesaleportal/rep/catalog" },
-    { label: "Bundles", href: "/wholesaleportal/rep/bundles" },
-    { label: "Invoices", href: "/wholesaleportal/rep/invoices" },
-    { label: "Wishlist", href: "/wholesaleportal/rep/wishlist" },
-    ...(isManager ? [{ label: "Staff", href: "/wholesaleportal/rep/staff" }] : []),
-    { label: "Settings", href: "/wholesaleportal/rep/settings" },
-  ];
+  const isManager = nav.some((n) => n.href === "/wholesaleportal/rep/staff");
 
   function isActive(href: string) {
     if (href === "/wholesaleportal/rep") {

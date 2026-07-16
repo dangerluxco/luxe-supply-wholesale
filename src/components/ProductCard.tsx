@@ -92,13 +92,7 @@ export function ProductCard({
       </div>
       <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-[11px] text-[#3A3934]">
         {inCart ? (
-          <Link
-            href="/wholesale/cart"
-            className="inline-flex"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <MicroBadge tone="outline-gold">In cart</MicroBadge>
-          </Link>
+          <MicroBadge tone="outline-gold">In cart</MicroBadge>
         ) : heldByYou ? (
           <MicroBadge tone="outline-gold">Held for you</MicroBadge>
         ) : (

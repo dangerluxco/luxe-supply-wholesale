@@ -15,7 +15,7 @@ export default async function StaffSettingsPage() {
       <div className="mb-6 flex items-baseline gap-3">
         <h1 className="text-[24px] font-semibold text-ink">Settings</h1>
         <span className="text-[12px] text-muted">
-          Invoice request thresholds &amp; staff notifications
+          Order request thresholds &amp; staff notifications
         </span>
       </div>
 
