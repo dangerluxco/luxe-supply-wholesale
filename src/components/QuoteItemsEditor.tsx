@@ -1,8 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { Placeholder } from "@/components/Placeholder";
-import { saveQuoteLineItems } from "@/lib/actions/quote-line-items";
+import { PortalItemLine } from "@/components/PortalItemLine";
 import { money } from "@/lib/format";
 
 type EditableItem = {
@@ -16,6 +15,11 @@ type EditableItem = {
   lotId: string;
   lotItems: Array<Record<string, unknown>>;
 };
+
+/**
+ * Server action is passed from the Server Component page so this client
+ * module never imports a `"use server"` file (avoids soft-nav webpack stub collisions).
+ */
 
 function resolveImageUrl(it: Record<string, unknown>): string | null {
   const direct = typeof it.imageUrl === "string" && it.imageUrl ? it.imageUrl : null;
@@ -61,9 +65,14 @@ function toEditable(raw: Array<Record<string, unknown>>): EditableItem[] {
 export function QuoteItemsEditor({
   quoteId,
   items,
+  action: saveAction,
 }: {
   quoteId: string;
   items: Array<Record<string, unknown>>;
+  action: (
+    quoteId: string,
+    rows: EditableItem[],
+  ) => Promise<{ error?: string; message?: string; ok?: boolean }>;
 }) {
   const initial = useMemo(() => toEditable(items), [items]);
   const [rows, setRows] = useState<EditableItem[]>(initial);
@@ -96,7 +105,7 @@ export function QuoteItemsEditor({
     setError(null);
     setMessage(null);
     start(async () => {
-      const res = await saveQuoteLineItems(quoteId, rows);
+      const res = await saveAction(quoteId, rows);
       if (res?.error) {
         setError(res.error);
         return;
@@ -147,17 +156,16 @@ export function QuoteItemsEditor({
             key={`${item.sku}-${i}`}
             className="grid grid-cols-[1fr_100px_50px_110px_64px] items-center border-b border-border/60 px-4 py-3 text-[12.5px] last:border-b-0"
           >
-            <div className="flex min-w-0 items-center gap-3">
-              <Placeholder imageSrc={item.imageUrl} className="h-10 w-10 shrink-0 rounded-chip" />
-              <div className="min-w-0">
-                <div className="truncate text-ink">{item.title || "—"}</div>
-                <div className="font-mono text-[11px] text-muted">
-                  {item.isSuggestedLot
-                    ? `Suggested lot · ${item.lotItems.length} SKUs`
-                    : item.sku || "—"}
-                </div>
-              </div>
-            </div>
+            <PortalItemLine
+              imageUrl={item.imageUrl}
+              title={item.title}
+              sku={item.isSuggestedLot ? undefined : item.sku}
+              subtitle={
+                item.isSuggestedLot
+                  ? `Suggested lot · ${item.lotItems.length} SKUs`
+                  : undefined
+              }
+            />
             <span className="text-secondary">{item.brand || "—"}</span>
             <span className="text-center font-mono">{item.quantity}</span>
             <div className="flex items-center justify-end gap-1 font-mono">

@@ -4,7 +4,7 @@ import { getLuxesupplyOrg } from "./staff";
 import { INVOICE_REQUEST_TIMEOUT_DAYS } from "@/lib/constants";
 import { releaseAllHoldsForQuote } from "./holds";
 import { archiveSuggestedLot } from "./suggestedLots";
-import { markSkusSold } from "./catalog";
+import { markSkusSold, resolveTitlesForSkus } from "./catalog";
 
 // Internal name matches the `salesPortalQuotes` Firestore collection so we don't
 // migrate live data. Buyer/staff UI presents these documents as "invoice requests".
@@ -118,6 +118,48 @@ function serializeQuote(id: string, d: Record<string, unknown>): PortalQuote {
   };
 }
 
+function needsLiveTitle(title: unknown, sku: unknown): boolean {
+  const cleanTitle = String(title || "").trim();
+  const cleanSku = String(sku || "").trim();
+  return !cleanTitle || (!!cleanSku && cleanTitle.toLowerCase() === cleanSku.toLowerCase());
+}
+
+function applyLiveTitle(row: Record<string, unknown>, titles: Map<string, string>) {
+  const sku = String(row.sku || "").trim();
+  if (!sku || !needsLiveTitle(row.title, sku)) return row;
+  const liveTitle = titles.get(sku) || titles.get(sku.toUpperCase());
+  return liveTitle && !needsLiveTitle(liveTitle, sku) ? { ...row, title: liveTitle } : row;
+}
+
+async function hydrateQuoteItemTitles(quote: PortalQuote): Promise<PortalQuote> {
+  const skus: string[] = [];
+  for (const item of quote.items) {
+    if (needsLiveTitle(item.title, item.sku)) skus.push(String(item.sku || ""));
+    if (Array.isArray(item.lotItems)) {
+      for (const lotItem of item.lotItems as Array<Record<string, unknown>>) {
+        if (needsLiveTitle(lotItem.title, lotItem.sku)) skus.push(String(lotItem.sku || ""));
+      }
+    }
+  }
+  const cleanSkus = skus.map((sku) => sku.trim()).filter(Boolean);
+  if (!cleanSkus.length) return quote;
+
+  const titles = await resolveTitlesForSkus(cleanSkus);
+  return {
+    ...quote,
+    items: quote.items.map((item) => {
+      const row = applyLiveTitle(item, titles);
+      if (!Array.isArray(row.lotItems)) return row;
+      return {
+        ...row,
+        lotItems: (row.lotItems as Array<Record<string, unknown>>).map((lotItem) =>
+          applyLiveTitle(lotItem, titles),
+        ),
+      };
+    }),
+  };
+}
+
 export async function listQuotes(options?: {
   status?: string;
   limit?: number;
@@ -166,7 +208,7 @@ export async function getQuoteById(id: string): Promise<PortalQuote | null> {
   if (!id) return null;
   const snap = await getDb().collection("salesPortalQuotes").doc(id).get();
   if (!snap.exists) return null;
-  return serializeQuote(snap.id, snap.data() || {});
+  return hydrateQuoteItemTitles(serializeQuote(snap.id, snap.data() || {}));
 }
 
 export async function listQuotesForBuyer(

@@ -29,7 +29,7 @@ export async function addSuggestedLotToCart(lotId: string) {
   if (lot.lotPrice == null) return { error: "Lot price unavailable." };
 
   const username = (session.username || "").toLowerCase();
-  if (lot.buyerUsername && lot.buyerUsername !== username) {
+  if (lot.buyerUsername && !lot.publishedToAll && lot.buyerUsername !== username) {
     return { error: "This lot is for another client." };
   }
 

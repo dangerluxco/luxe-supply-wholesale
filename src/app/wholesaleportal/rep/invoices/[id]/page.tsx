@@ -5,7 +5,7 @@ import { money, fullDate } from "@/lib/format";
 import { InvoiceBadge, FulfillmentBadge } from "@/components/badges";
 import { InvoiceMarkPaidButton } from "@/components/InvoiceMarkPaidButton";
 import { InvoiceFulfillmentForm } from "@/components/InvoiceFulfillmentForm";
-import { Placeholder } from "@/components/Placeholder";
+import { PortalItemLine } from "@/components/PortalItemLine";
 
 export const dynamic = "force-dynamic";
 
@@ -63,13 +63,7 @@ export default async function StaffInvoiceDetailPage({
                   key={`${item.sku}-${i}`}
                   className="grid grid-cols-[1fr_100px_50px_110px] items-center border-b border-border/60 px-4 py-3 text-[12.5px] last:border-b-0"
                 >
-                  <div className="flex min-w-0 items-center gap-3">
-                    <Placeholder imageSrc={item.imageUrl} className="h-10 w-10 shrink-0 rounded-chip" />
-                    <div className="min-w-0">
-                      <div className="truncate text-ink">{item.title || "—"}</div>
-                      <div className="font-mono text-[11px] text-muted">{item.sku || "—"}</div>
-                    </div>
-                  </div>
+                  <PortalItemLine imageUrl={item.imageUrl} title={item.title} sku={item.sku} />
                   <span className="text-secondary">{item.brand || "—"}</span>
                   <span className="text-center font-mono">{item.quantity}</span>
                   <span className="text-right font-mono text-ink">{money(item.price)}</span>

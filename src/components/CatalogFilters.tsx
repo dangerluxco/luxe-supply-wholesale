@@ -95,7 +95,7 @@ export function CatalogFilters({
     "h-10 w-full rounded-chip border border-border bg-surface px-3 text-[12.5px] font-medium normal-case tracking-normal text-ink outline-none focus:border-accent";
 
   return (
-    <div className="border-b border-border bg-surface px-8 py-4">
+    <div className="sticky top-[60px] z-30 border-b border-border bg-surface/95 px-8 py-4 backdrop-blur-sm">
       <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(160px,1.4fr)_repeat(3,minmax(120px,0.7fr))]">
         <label className={field}>
           <span className="sr-only">Search catalog</span>

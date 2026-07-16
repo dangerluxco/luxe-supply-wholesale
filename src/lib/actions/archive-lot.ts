@@ -5,6 +5,14 @@ import { getSession } from "@/lib/auth";
 import { ROLE } from "@/lib/constants";
 import { archiveSuggestedLot } from "@/lib/firestore/suggestedLots";
 
+function revalidateCatalogSurfaces() {
+  // Buyer storefront (page + layout search index) and staff catalog/builder lists.
+  revalidatePath("/wholesale");
+  revalidatePath("/wholesale", "layout");
+  revalidatePath("/wholesaleportal/rep/bundles");
+  revalidatePath("/wholesaleportal/rep/catalog");
+}
+
 /**
  * Thin server-action entry for archive — kept separate so the Archive button’s
  * client import graph stays small and doesn’t drag unrelated action modules.
@@ -15,6 +23,5 @@ export async function archiveSuggestedLotAction(lotId: string) {
     throw new Error("Unauthorized");
   }
   await archiveSuggestedLot(lotId, session.email);
-  revalidatePath("/wholesaleportal/rep/bundles");
-  revalidatePath("/wholesale");
+  revalidateCatalogSurfaces();
 }

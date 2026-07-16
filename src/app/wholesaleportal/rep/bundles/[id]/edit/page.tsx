@@ -38,6 +38,7 @@ export default async function EditBundlePage({
     sku: string;
     name: string;
     wholesalePrice: number;
+    cost: number | null;
     imageUrl: string | null;
     brand: string;
     available: boolean;
@@ -69,6 +70,8 @@ export default async function EditBundlePage({
       sku: live?.sku || sku,
       name: live?.title || it.title || sku,
       wholesalePrice: Math.round(live?.price ?? 0),
+      cost:
+        live?.cost != null && Number.isFinite(live.cost) ? Math.round(live.cost) : null,
       imageUrl: live?.imageUrl || it.imageUrl || it.imageUrls?.[0] || null,
       brand: live?.brand || it.brand || "",
       available: true,
@@ -86,6 +89,7 @@ export default async function EditBundlePage({
       sku,
       name: p.title,
       wholesalePrice: Math.round(p.price),
+      cost: p.cost != null && Number.isFinite(p.cost) ? Math.round(p.cost) : null,
       imageUrl: p.imageUrl,
       brand: p.brand || "",
       available: !p.held,
@@ -137,6 +141,7 @@ export default async function EditBundlePage({
           title: lot.title,
           note: lot.note,
           buyerUsername: lot.buyerUsername,
+          publishedToAll: lot.publishedToAll,
           lotPrice: lot.lotPrice,
           skus: lot.items.map((it) => it.sku),
         }}

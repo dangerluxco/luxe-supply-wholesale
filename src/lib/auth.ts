@@ -11,6 +11,8 @@ import {
   roleCanAccess,
   encodeSession,
   sessionCookieOptions,
+  sessionMaxAgeFromForm,
+  SESSION_REMEMBER_MAX_AGE,
 } from "./auth-session";
 
 export {
@@ -18,6 +20,8 @@ export {
   encodeSession,
   decodeSession,
   sessionCookieOptions,
+  sessionMaxAgeFromForm,
+  SESSION_REMEMBER_MAX_AGE,
   homeForRole,
   roleCanAccess,
   type SessionUser,

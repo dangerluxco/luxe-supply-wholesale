@@ -4,6 +4,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { QuoteStatusSelect } from "@/components/QuoteStatusSelect";
 import { InfoTip } from "@/components/InfoTip";
 import { money } from "@/lib/format";
+import { setQuoteStatus } from "@/lib/actions/quote-status";
 
 export const dynamic = "force-dynamic";
 
@@ -118,7 +119,11 @@ export default async function RepDashboard({
                   {q.cartTotal != null ? money(Math.round(q.cartTotal)) : "—"}
                 </div>
                 <div className="text-center font-mono text-muted">{elapsed(q.createdAt)}</div>
-                <QuoteStatusSelect quoteId={q.id} status={q.status} />
+                <QuoteStatusSelect
+                  quoteId={q.id}
+                  status={q.status}
+                  action={setQuoteStatus}
+                />
               </div>
             );
           })}

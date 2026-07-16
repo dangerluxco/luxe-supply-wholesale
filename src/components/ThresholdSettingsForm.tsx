@@ -1,25 +1,38 @@
 "use client";
 
 import { useActionState } from "react";
-import { saveThresholdSettings } from "@/lib/actions/settings";
 
 const fieldClass =
   "h-10 rounded-chip border border-border bg-ground px-3 font-mono text-[13px] text-ink outline-none focus:border-accent";
 const labelClass = "micro-badge text-[10px] tracking-[0.14em] text-muted";
 
+type SettingsState = { error?: string; message?: string; ok?: boolean };
+
+type SettingsAction = (
+  prev: SettingsState | undefined,
+  formData: FormData,
+) => Promise<SettingsState>;
+
+/**
+ * Server action is passed from the Server Component page so this client
+ * module never imports a `"use server"` file (avoids soft-nav webpack stub
+ * collisions with Staff and other rep console pages).
+ */
 export function ThresholdSettingsForm({
   minItemCount,
   minCartTotal,
   notifyEmails,
+  action: saveAction,
 }: {
   minItemCount: number;
   minCartTotal: number;
   notifyEmails: string[];
+  action: SettingsAction;
 }) {
-  const [state, action, pending] = useActionState(saveThresholdSettings, {
+  const [state, action, pending] = useActionState(saveAction, {
     error: "",
     message: "",
-  } as { error?: string; message?: string; ok?: boolean });
+  } as SettingsState);
 
   return (
     <form

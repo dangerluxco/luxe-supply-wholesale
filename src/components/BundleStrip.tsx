@@ -30,6 +30,7 @@ export function BundleStrip({ lot }: { lot: LotForStrip }) {
 
   const saveAmt = Math.max(0, lot.individualSum - lot.lotPrice);
   const savePct = lot.individualSum > 0 ? Math.round((saveAmt / lot.individualSum) * 100) : 0;
+  const showIndividual = lot.individualSum > 0 && lot.individualSum !== lot.lotPrice;
   const galleryItem = gallerySku
     ? lot.items.find((it) => it.sku === gallerySku) || null
     : null;
@@ -83,10 +84,12 @@ export function BundleStrip({ lot }: { lot: LotForStrip }) {
           </div>
         </div>
         <div className="flex flex-col justify-center gap-[7px] border-t border-white/10 p-7 md:border-l md:border-t-0">
-          <div className="flex justify-between text-[12px] text-[#8B897F]">
-            Individually
-            <span className="font-mono line-through">{money(lot.individualSum)}</span>
-          </div>
+          {showIndividual ? (
+            <div className="flex justify-between text-[12px] text-[#8B897F]">
+              Individually
+              <span className="font-mono line-through">{money(lot.individualSum)}</span>
+            </div>
+          ) : null}
           <div className="flex items-baseline justify-between">
             <span className="text-[12px] text-[#C9C7BE]">Bundle</span>
             <span className="text-[26px] font-semibold text-ground">{money(lot.lotPrice)}</span>

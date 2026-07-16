@@ -1,4 +1,4 @@
-import { listCatalogProducts } from "@/lib/firestore/catalog";
+import { listCatalogProducts, resolveStorefrontPricesForSkus } from "@/lib/firestore/catalog";
 import { CatalogFilters } from "@/components/CatalogFilters";
 import { CatalogProductGrid } from "@/components/CatalogProductGrid";
 import { CatalogLoadMore } from "@/components/CatalogLoadMore";
@@ -7,6 +7,7 @@ import { BundleStrip } from "@/components/BundleStrip";
 import { PRODUCT_STATUS, ROLE } from "@/lib/constants";
 import { getSession } from "@/lib/auth";
 import { getActiveLotsForBuyer } from "@/lib/firestore/suggestedLots";
+import { cartHoldSkus, getBuyerCart } from "@/lib/firestore/buyers";
 import { Suspense } from "react";
 
 export const dynamic = "force-dynamic";
@@ -35,18 +36,23 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
   let all: Awaited<ReturnType<typeof listCatalogProducts>>["products"] = [];
   let hasMore = false;
   let lots: Awaited<ReturnType<typeof getActiveLotsForBuyer>> = [];
+  let cartSkus: string[] = [];
   try {
-    const [catalogResult, lotsResult] = await Promise.all([
+    const [catalogResult, lotsResult, cartResult] = await Promise.all([
       listCatalogProducts(pageLimit, {
         buyerUsername: isBuyer ? session?.username : null,
       }),
       isBuyer && session.username
         ? getActiveLotsForBuyer(session.username)
         : Promise.resolve([]),
+      isBuyer && session?.id
+        ? getBuyerCart(session.id).catch(() => [])
+        : Promise.resolve([]),
     ]);
     all = catalogResult.products;
     hasMore = catalogResult.hasMore;
     lots = lotsResult;
+    cartSkus = cartHoldSkus(cartResult);
   } catch (err) {
     console.warn("[wholesale catalog] Firestore unavailable:", err instanceof Error ? err.message : err);
   }
@@ -55,8 +61,34 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
     ...new Set(all.map((p) => p.brand).filter((b) => b && b !== "—")),
   ].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
 
-  const priceBySku = new Map(all.map((p) => [p.sku, p.price ?? 0]));
+  // Bundled SKUs are omitted from `all`, so resolve their individual wholesale
+  // prices separately — otherwise BundleStrip falls back to lotPrice for both lines.
+  const lotSkus = lots.flatMap((lot) => lot.items.map((it) => it.sku));
+  let lotPrices = new Map<string, number>();
+  if (lotSkus.length) {
+    try {
+      lotPrices = await resolveStorefrontPricesForSkus(lotSkus);
+    } catch (err) {
+      console.warn(
+        "[wholesale catalog] lot prices unavailable:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
+  const priceBySku = new Map<string, number>();
+  for (const p of all) {
+    if (p.price != null) {
+      priceBySku.set(p.sku, p.price);
+      priceBySku.set(p.sku.toUpperCase(), p.price);
+    }
+  }
+  for (const [sku, price] of lotPrices) {
+    priceBySku.set(sku, price);
+    priceBySku.set(sku.toUpperCase(), price);
+  }
   const catalogBySku = new Map(all.map((p) => [p.sku, p]));
+  for (const p of all) catalogBySku.set(p.sku.toUpperCase(), p);
 
   let products = all.filter((p) => {
     if (availability === "available") {
@@ -159,10 +191,13 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
         {lots
           .filter((lot) => lot.lotPrice != null && lot.items.length > 0)
           .map((lot) => {
-            const individualSum = lot.items.reduce(
-              (s, it) => s + Math.round(priceBySku.get(it.sku) ?? 0),
-              0,
-            );
+            const individualSum = lot.items.reduce((s, it) => {
+              const unit =
+                priceBySku.get(it.sku) ??
+                priceBySku.get(it.sku.toUpperCase()) ??
+                0;
+              return s + Math.round(unit);
+            }, 0);
             return (
               <BundleStrip
                 key={lot.id}
@@ -170,9 +205,11 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
                   id: lot.id,
                   title: lot.title,
                   lotPrice: lot.lotPrice!,
-                  individualSum: individualSum || lot.lotPrice!,
+                  individualSum,
                   items: lot.items.map((it) => {
-                    const cat = catalogBySku.get(it.sku);
+                    const cat =
+                      catalogBySku.get(it.sku) ||
+                      catalogBySku.get(it.sku.toUpperCase());
                     const imageUrls =
                       cat?.imageUrls?.length
                         ? cat.imageUrls
@@ -203,7 +240,11 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
           />
         ) : (
           <>
-            <CatalogProductGrid products={cards} pricesVisible={pricesVisible} />
+            <CatalogProductGrid
+              products={cards}
+              pricesVisible={pricesVisible}
+              cartSkus={cartSkus}
+            />
             <Suspense fallback={null}>
               <CatalogLoadMore currentLimit={pageLimit} hasMore={hasMore} />
             </Suspense>

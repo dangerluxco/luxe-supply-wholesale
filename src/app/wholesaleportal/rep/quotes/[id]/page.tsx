@@ -7,6 +7,9 @@ import { QuoteItemsEditor } from "@/components/QuoteItemsEditor";
 import { GenerateInvoiceButton } from "@/components/GenerateInvoiceButton";
 import { InfoTip } from "@/components/InfoTip";
 import { fullDate } from "@/lib/format";
+import { setQuoteStatus } from "@/lib/actions/quote-status";
+import { saveQuoteNotes } from "@/lib/actions/quote-notes";
+import { saveQuoteLineItems } from "@/lib/actions/quote-line-items";
 
 export const dynamic = "force-dynamic";
 
@@ -50,7 +53,11 @@ export default async function StaffQuoteDetailPage({
         <span className="font-mono text-[11px] text-muted">#{quote.id}</span>
         <div className="flex-1" />
         <div className="w-[160px]">
-          <QuoteStatusSelect quoteId={quote.id} status={quote.status} />
+          <QuoteStatusSelect
+            quoteId={quote.id}
+            status={quote.status}
+            action={setQuoteStatus}
+          />
         </div>
       </div>
 
@@ -69,7 +76,11 @@ export default async function StaffQuoteDetailPage({
               </div>
               <span className="text-[11px] text-muted">Remove products or adjust prices below.</span>
             </div>
-            <QuoteItemsEditor quoteId={quote.id} items={quote.items} />
+            <QuoteItemsEditor
+              quoteId={quote.id}
+              items={quote.items}
+              action={saveQuoteLineItems}
+            />
           </div>
 
           <div className="rounded-card border border-border bg-surface p-5">
@@ -85,7 +96,11 @@ export default async function StaffQuoteDetailPage({
             <div className="micro-badge mb-3 text-[10px] tracking-[0.14em] text-accent">
               ADMIN NOTES
             </div>
-            <QuoteNotesForm quoteId={quote.id} adminNotes={quote.adminNotes} />
+            <QuoteNotesForm
+              quoteId={quote.id}
+              adminNotes={quote.adminNotes}
+              action={saveQuoteNotes}
+            />
           </div>
         </div>
 

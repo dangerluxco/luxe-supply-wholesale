@@ -10,6 +10,8 @@ export type CatalogProduct = {
   brand: string;
   price: number | null;
   priceLabel: string;
+  /** Inventory / IIQ cost basis when known (staff-facing). */
+  cost: number | null;
   imageUrl: string | null;
   imageUrls: string[];
   hostCompAvgUsd: number | null;
@@ -76,24 +78,36 @@ function normEmail(email: unknown): string {
 }
 
 /** Brand fields commonly nested under uploadHistory.metadata. */
-type UploadBrandMeta = {
+type UploadMetadata = {
   brand?: string;
   Brand?: string;
   brands?: unknown[];
   rauBrand?: string;
+  listingTitle?: string;
+  title?: string;
+  Title?: string;
+  name?: string;
 };
 
-function extractBrandMeta(raw: unknown): UploadBrandMeta {
+function extractMetadata(raw: unknown): UploadMetadata {
   if (!raw || typeof raw !== "object") return {};
   const m = raw as Record<string, unknown>;
-  const out: UploadBrandMeta = {};
+  const out: UploadMetadata = {};
   const brand = takeText(m.brand);
   const Brand = takeText(m.Brand);
   const rauBrand = takeText(m.rauBrand);
+  const listingTitle = takeText(m.listingTitle);
+  const title = takeText(m.title);
+  const Title = takeText(m.Title);
+  const name = takeText(m.name);
   if (brand) out.brand = brand;
   if (Brand) out.Brand = Brand;
   if (rauBrand) out.rauBrand = rauBrand;
   if (Array.isArray(m.brands) && m.brands.length) out.brands = m.brands;
+  if (listingTitle) out.listingTitle = listingTitle;
+  if (title) out.title = title;
+  if (Title) out.Title = Title;
+  if (name) out.name = name;
   return out;
 }
 
@@ -125,12 +139,46 @@ function resolveBrand(
   );
 }
 
+/** Match the legacy sales portal's title chain so thumbnails never fall back to SKU too early. */
+export function resolveTitle(
+  upload: UploadGroup | null | undefined,
+  iiq: Record<string, unknown> | null | undefined,
+  ask: Record<string, unknown> | null | undefined,
+  sku: string,
+): string {
+  const meta = (upload && upload.metadata) || {};
+  const fromManual = takeText(iiq && iiq.title);
+  const fromAsk =
+    takeText(ask && ask.listingTitle) ||
+    takeText(ask && ask.specificModel) ||
+    takeText(ask && ask.productTitle) ||
+    takeText(ask && ask.title);
+  const fromIiq =
+    takeText(iiq && iiq.listingTitle) ||
+    takeText(iiq && iiq.productTitle) ||
+    takeText(iiq && iiq.Title) ||
+    takeText(iiq && iiq["Listing Title"]) ||
+    takeText(iiq && iiq.name);
+  const fromMeta =
+    takeText(meta.listingTitle) ||
+    takeText(meta.title) ||
+    takeText(meta.Title) ||
+    takeText(meta.name);
+  const title = fromManual || fromAsk || fromIiq || fromMeta;
+  if (title) return title;
+
+  const cleanSku = takeText(sku || upload?.sku);
+  const brand = resolveBrand(upload, iiq, ask);
+  if (brand && cleanSku) return `${brand} — ${cleanSku}`;
+  return cleanSku;
+}
+
 type UploadGroup = {
   sku: string;
   imageUrls: string[];
   brand: string;
   primaryBrandNorm: string;
-  metadata: UploadBrandMeta;
+  metadata: UploadMetadata;
   /** Uploader email — used to prefer matching askIIQResults rows. */
   userEmail: string;
   hostCompAvgUsd: number | null;
@@ -153,7 +201,7 @@ function groupUploads(docs: QueryDocumentSnapshot[]): UploadGroup[] {
         imageUrls: [],
         brand: takeText(d.brand),
         primaryBrandNorm: takeText(d.primaryBrandNorm),
-        metadata: extractBrandMeta(d.metadata),
+        metadata: extractMetadata(d.metadata),
         userEmail,
         hostCompAvgUsd: null,
         inventoryCost: null,
@@ -163,8 +211,8 @@ function groupUploads(docs: QueryDocumentSnapshot[]): UploadGroup[] {
     const g = grouped.get(key)!;
     if (!g.brand) g.brand = takeText(d.brand);
     if (!g.primaryBrandNorm) g.primaryBrandNorm = takeText(d.primaryBrandNorm);
-    if (!g.metadata.brand && !g.metadata.Brand && !g.metadata.rauBrand && !g.metadata.brands?.length) {
-      g.metadata = extractBrandMeta(d.metadata);
+    if (Object.keys(g.metadata).length === 0) {
+      g.metadata = extractMetadata(d.metadata);
     }
     if (Array.isArray(d.imageUrls)) {
       d.imageUrls.forEach((url: unknown) => {
@@ -200,11 +248,8 @@ function mergeUploadGroups(groups: UploadGroup[]): UploadGroup | null {
     if (!merged.brand && g.brand) merged.brand = g.brand;
     if (!merged.primaryBrandNorm && g.primaryBrandNorm) merged.primaryBrandNorm = g.primaryBrandNorm;
     if (
-      !merged.metadata.brand &&
-      !merged.metadata.Brand &&
-      !merged.metadata.rauBrand &&
-      !merged.metadata.brands?.length &&
-      (g.metadata.brand || g.metadata.Brand || g.metadata.rauBrand || g.metadata.brands?.length)
+      Object.keys(merged.metadata).length === 0 &&
+      Object.keys(g.metadata).length > 0
     ) {
       merged.metadata = { ...g.metadata };
     }
@@ -354,6 +399,112 @@ async function loadUploadGroupsBySku(skus: string[]): Promise<Map<string, Upload
   return map;
 }
 
+export async function resolveTitlesForSkus(skusRaw: string[]): Promise<Map<string, string>> {
+  const seen = new Set<string>();
+  const skus: string[] = [];
+  for (const raw of skusRaw) {
+    const sku = takeText(raw);
+    if (!sku) continue;
+    const key = sku.toUpperCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    skus.push(sku);
+  }
+  const titles = new Map<string, string>();
+  if (!skus.length) return titles;
+
+  const [uploadMap, iiqMap] = await Promise.all([
+    loadUploadGroupsBySku(skus),
+    loadIiqBySku(skus),
+  ]);
+  const askMap = await loadAskBySku(skus, uploaderEmailsFromGroups(uploadMap.values()));
+
+  for (const sku of skus) {
+    const group = uploadMap.get(sku) || null;
+    const resolvedSku = group?.sku || sku;
+    const title = resolveTitle(
+      group,
+      iiqMap.get(sku) || null,
+      askMap.get(sku) || null,
+      resolvedSku,
+    );
+    if (!title) continue;
+    titles.set(sku, title);
+    titles.set(sku.toUpperCase(), title);
+    titles.set(resolvedSku, title);
+    titles.set(resolvedSku.toUpperCase(), title);
+  }
+
+  return titles;
+}
+
+/**
+ * Wholesale prices for SKUs even when they are locked in an active bundle
+ * (and therefore omitted from `listCatalogProducts`). Keys include both the
+ * original and uppercase SKU for case-insensitive lookups.
+ */
+export async function resolveStorefrontPricesForSkus(
+  skusRaw: string[],
+): Promise<Map<string, number>> {
+  const seen = new Set<string>();
+  const skus: string[] = [];
+  for (const raw of skusRaw) {
+    const sku = takeText(raw);
+    if (!sku) continue;
+    const key = sku.toUpperCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    skus.push(sku);
+  }
+  const prices = new Map<string, number>();
+  if (!skus.length) return prices;
+
+  const setPrice = (sku: string, price: number) => {
+    const rounded = Math.round(price);
+    prices.set(sku, rounded);
+    prices.set(sku.toUpperCase(), rounded);
+  };
+
+  const org = await getLuxesupplyOrg();
+  const salesPortal = (org.data.salesPortal || {}) as Record<string, unknown>;
+  const catalogSelectionRaw = (salesPortal.catalogSelection || {}) as Record<string, unknown>;
+  const catalogMode = String(catalogSelectionRaw.mode || "all");
+
+  if (catalogMode === "sku_list") {
+    const curated = parseCuratedCatalog(salesPortal.curatedCatalog);
+    if (curated?.items.length) {
+      const byUpper = new Map(
+        curated.items.map((item) => [item.sku.toUpperCase(), item] as const),
+      );
+      for (const sku of skus) {
+        const item = byUpper.get(sku.toUpperCase());
+        if (item?.price != null && Number.isFinite(item.price)) {
+          setPrice(sku, item.price);
+          setPrice(item.sku, item.price);
+        }
+      }
+    }
+  }
+
+  const missing = skus.filter((sku) => !prices.has(sku.toUpperCase()));
+  if (missing.length) {
+    const products = await Promise.all(
+      missing.map((sku) =>
+        getCatalogProductBySku(sku, { includeBundled: true }).catch(() => null),
+      ),
+    );
+    products.forEach((product, i) => {
+      const sku = missing[i]!;
+      if (product?.price != null && Number.isFinite(product.price)) {
+        setPrice(sku, product.price);
+        setPrice(product.sku, product.price);
+      }
+    });
+  }
+
+  return prices;
+}
+
 function toCatalogProduct(
   sku: string,
   group: UploadGroup | null,
@@ -369,11 +520,12 @@ function toCatalogProduct(
   },
 ): CatalogProduct {
   const priceLabel = getIiqListingPrice(iiq);
+  const liveTitle = resolveTitle(group, iiq, ask, sku);
+  const overrideTitle = takeText(overrides?.title);
   const title =
-    String((iiq && (iiq.Title || iiq.title || iiq.productName)) || "").trim() ||
-    group?.titleHint ||
-    overrides?.title ||
-    sku;
+    overrideTitle && overrideTitle.toLowerCase() !== sku.toLowerCase()
+      ? overrideTitle
+      : liveTitle || sku;
   // Prefer a non-empty staff/saved override; otherwise run the full ask→iiq→upload chain.
   const brand = takeText(overrides?.brand) || resolveBrand(group, iiq, ask);
   const soldOut = !!(iiq && (iiq.sold === true || iiq.Sold === true));
@@ -388,6 +540,11 @@ function toCatalogProduct(
       ? [overrides.imageUrl]
       : [];
   const price = overrides && "price" in overrides ? overrides.price ?? null : parseMoney(priceLabel);
+  const iiqCost =
+    iiq && typeof iiq.cost === "number" && Number.isFinite(iiq.cost as number)
+      ? (iiq.cost as number)
+      : null;
+  const cost = group?.inventoryCost ?? iiqCost ?? null;
 
   return {
     sku,
@@ -395,6 +552,7 @@ function toCatalogProduct(
     brand,
     price,
     priceLabel,
+    cost,
     imageUrl: imageUrls[0] || null,
     imageUrls,
     hostCompAvgUsd: group?.hostCompAvgUsd ?? null,
@@ -509,10 +667,7 @@ export async function resolveCuratedDraftItems(
     const ask = askMap.get(sku) || null;
     const inDb = !!group || !!iiq;
     const resolvedSku = group?.sku || sku;
-    const title =
-      String((iiq && (iiq.Title || iiq.title || iiq.productName)) || "").trim() ||
-      group?.titleHint ||
-      "";
+    const title = resolveTitle(group, iiq, ask, resolvedSku);
     const brand = resolveBrand(group, iiq, ask);
     const imageUrl = group?.imageUrls[0] || null;
     const iiqCost =

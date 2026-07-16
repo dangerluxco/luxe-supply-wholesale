@@ -5,6 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Logo } from "./Logo";
 import { clsx } from "@/lib/clsx";
+import { useStorefrontAvailability } from "@/components/StorefrontAvailability";
 
 type IndexItem = { sku: string; name: string; era: string; material: string };
 
@@ -29,6 +30,7 @@ export function BuyerTopbar({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { isBundled } = useStorefrontAvailability();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const signedIn = !!user;
@@ -46,15 +48,20 @@ export function BuyerTopbar({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  const liveIndex = useMemo(
+    () => index.filter((i) => !isBundled(i.sku)),
+    [index, isBundled],
+  );
+
   const results = useMemo(() => {
     const term = q.trim().toLowerCase();
-    if (!term) return index.slice(0, 8);
-    return index
+    if (!term) return liveIndex.slice(0, 8);
+    return liveIndex
       .filter((i) =>
         `${i.name} ${i.era} ${i.material} ${i.sku}`.toLowerCase().includes(term),
       )
       .slice(0, 8);
-  }, [q, index]);
+  }, [q, liveIndex]);
 
   function isActive(href: string) {
     if (href === "/wholesale") return pathname === "/wholesale";
@@ -68,7 +75,7 @@ export function BuyerTopbar({
 
   return (
     <>
-      <header className="flex h-[60px] items-center gap-8 border-b border-border bg-surface px-8 print:hidden">
+      <header className="sticky top-0 z-40 flex h-[60px] items-center gap-8 border-b border-border bg-surface/95 px-8 backdrop-blur-sm print:hidden">
         <Link href="/wholesale">
           <Logo />
         </Link>

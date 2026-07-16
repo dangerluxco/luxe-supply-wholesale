@@ -65,14 +65,30 @@ export function publicOrigin(request: Request): string {
   return `${proto}://${host}`;
 }
 
-export function sessionCookieOptions(maxAge = 60 * 60 * 24 * 7) {
-  return {
+/** Persistent login when "Remember me" is checked (~30 days). */
+export const SESSION_REMEMBER_MAX_AGE = 60 * 60 * 24 * 30;
+
+/** Default login without remember — one browser session (cleared on close). */
+export function sessionCookieOptions(maxAge?: number) {
+  const base = {
     httpOnly: true,
     sameSite: "lax" as const,
     path: cookiePath(),
-    maxAge,
     secure: process.env.NODE_ENV === "production",
   };
+  if (maxAge === undefined) return base;
+  return { ...base, maxAge };
+}
+
+/** Resolve cookie lifetime from a login form's remember checkbox. */
+export function sessionMaxAgeFromForm(form: FormData): number | undefined {
+  const raw = form.get("remember");
+  if (raw == null) return undefined;
+  const v = String(raw).trim().toLowerCase();
+  if (v === "1" || v === "on" || v === "true" || v === "yes") {
+    return SESSION_REMEMBER_MAX_AGE;
+  }
+  return undefined;
 }
 
 export function homeForRole(role: string): string {

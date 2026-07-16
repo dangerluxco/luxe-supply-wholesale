@@ -57,8 +57,8 @@ export default async function CatalogPage() {
                 )}
               </div>
               <div className="space-y-1 p-3.5">
-                <div className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted">{p.sku}</div>
                 <div className="line-clamp-2 text-[13px] font-semibold text-ink">{p.title}</div>
+                <div className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted">{p.sku}</div>
                 <div className="text-[11px] text-secondary">{p.brand || "—"}</div>
                 <div className="flex items-center justify-between pt-1">
                   <span className="font-mono text-[12px] text-ink">

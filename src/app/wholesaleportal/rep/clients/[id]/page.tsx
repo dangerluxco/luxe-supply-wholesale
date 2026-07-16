@@ -6,7 +6,7 @@ import { loadActiveHoldsBySku } from "@/lib/firestore/holds";
 import { getActiveLotsForBuyer } from "@/lib/firestore/suggestedLots";
 import { EmptyState } from "@/components/EmptyState";
 import { ClientCartLimitsForm } from "@/components/ClientCartLimitsForm";
-import { Placeholder } from "@/components/Placeholder";
+import { PortalItemLine, PortalThumbnailTile } from "@/components/PortalItemLine";
 import { money, fullDate } from "@/lib/format";
 import { saveBuyerCartLimits } from "@/lib/actions/buyer-cart-limits";
 
@@ -117,31 +117,24 @@ export default async function ClientDetailPage({
                         key={`${item.sku}-${index}`}
                         className="flex items-center justify-between gap-3 text-[12.5px]"
                       >
-                        <div>
-                          <div className="text-ink">{item.title}</div>
-                          <div className="font-mono text-[11px] text-muted">
-                            {item.isSuggestedLot
-                              ? `Suggested lot · ${lotSkus.length || item.lotItems?.length || 0} SKUs`
-                              : item.sku}
-                            {hold?.heldUntil
-                              ? ` · held until ${new Date(hold.heldUntil).toLocaleString()}`
-                              : ""}
-                          </div>
-                          {item.isSuggestedLot && (item.lotItems || []).length > 0 ? (
-                            <ul className="mt-1 space-y-0.5">
-                              {(item.lotItems || []).map((li, liIdx) => (
-                                <li
-                                  key={`${item.lotId || item.sku}-${li.sku}-${liIdx}`}
-                                  className="font-mono text-[10.5px] text-muted"
-                                >
-                                  {li.sku}
-                                  {li.title ? ` · ${li.title}` : ""}
-                                </li>
-                              ))}
-                            </ul>
-                          ) : null}
-                        </div>
-                        <span className="font-mono">{money(item.price)}</span>
+                        <PortalItemLine
+                          imageUrl={item.imageUrl}
+                          title={item.title}
+                          sku={item.isSuggestedLot ? undefined : item.sku}
+                          subtitle={
+                            item.isSuggestedLot
+                              ? `Suggested lot · ${lotSkus.length || item.lotItems?.length || 0} SKUs${
+                                  hold?.heldUntil
+                                    ? ` · held until ${new Date(hold.heldUntil).toLocaleString()}`
+                                    : ""
+                                }`
+                              : hold?.heldUntil
+                                ? `Held until ${new Date(hold.heldUntil).toLocaleString()}`
+                                : undefined
+                          }
+                          size="md"
+                        />
+                        <span className="shrink-0 font-mono">{money(item.price)}</span>
                       </div>
                     );
                   })}
@@ -170,13 +163,13 @@ export default async function ClientDetailPage({
                         {lot.lotPrice != null ? money(lot.lotPrice) : "—"}
                       </span>
                     </div>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
+                    <div className="mt-2 flex flex-wrap gap-2">
                       {lot.items.map((it, i) => (
-                        <Placeholder
+                        <PortalThumbnailTile
                           key={`${lot.id}-${it.sku}-${i}`}
-                          imageSrc={it.imageUrl || it.imageUrls?.[0] || null}
-                          label={it.sku}
-                          className="h-12 w-12 items-end rounded border border-border pb-0.5 text-[7px]"
+                          imageUrl={it.imageUrl || it.imageUrls?.[0] || null}
+                          title={it.title}
+                          sku={it.sku}
                         />
                       ))}
                     </div>

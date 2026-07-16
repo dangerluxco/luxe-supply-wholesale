@@ -12,6 +12,14 @@ const spaceGrotesk = Space_Grotesk({
 export const metadata: Metadata = {
   title: "Luxe Supply Co. — Wholesale Portal",
   description: "One-of-one luxury goods, wholesale.",
+  // Luxe brand mark from luxesupply.co Shopify CDN (FAVICON_-_COLOR.png).
+  // src/app/icon.png + apple-icon.png are also auto-discovered by the App Router.
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon.png", type: "image/png", sizes: "256x256" },
+    ],
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

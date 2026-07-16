@@ -5,6 +5,7 @@ import {
   publicOrigin,
   SESSION_COOKIE,
   sessionCookieOptions,
+  sessionMaxAgeFromForm,
 } from "@/lib/auth-session";
 import { authenticateBuyer } from "@/lib/firestore/buyers";
 import { ROLE } from "@/lib/constants";
@@ -16,6 +17,7 @@ export async function POST(request: Request) {
   const form = await request.formData();
   const username = (formField(form, "username") || formField(form, "email")).trim();
   const password = formField(form, "password");
+  const cookieOpts = sessionCookieOptions(sessionMaxAgeFromForm(form));
 
   let auth: Awaited<ReturnType<typeof authenticateBuyer>> | null = null;
   try {
@@ -34,7 +36,7 @@ export async function POST(request: Request) {
     res.cookies.set(
       SESSION_COOKIE,
       encodeSession(auth.buyer.id, ROLE.BUYER, "firestore", auth.buyer.username),
-      sessionCookieOptions(),
+      cookieOpts,
     );
     res.headers.set("Cache-Control", "no-store");
     return res;

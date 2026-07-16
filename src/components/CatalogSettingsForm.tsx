@@ -4,9 +4,9 @@ import { useMemo, useState, useTransition } from "react";
 import {
   buildCuratedCatalogDraft,
   saveCuratedCatalogAction,
-  setCatalogModeAction,
 } from "@/lib/actions/catalog-settings";
 import { money } from "@/lib/format";
+import { portalDisplayTitle, portalShowSkuLine } from "@/components/PortalItemLine";
 import { Placeholder } from "@/components/Placeholder";
 
 type CuratedCatalogItem = {
@@ -41,6 +41,39 @@ function fmtDate(iso: string | null): string {
   }
 }
 
+function marginFor(cost: number | null, price: number | null): {
+  amount: number | null;
+  percent: number | null;
+} {
+  if (cost == null || price == null || !Number.isFinite(cost) || !Number.isFinite(price)) {
+    return { amount: null, percent: null };
+  }
+  const amount = price - cost;
+  const percent = price > 0 ? Math.round((amount / price) * 100) : null;
+  return { amount, percent };
+}
+
+function mergeCatalogItems(
+  existing: CuratedCatalogItem[],
+  incoming: CuratedCatalogItem[],
+): { items: CuratedCatalogItem[]; added: number; skipped: number } {
+  const seen = new Set(existing.map((i) => i.sku.trim().toLowerCase()).filter(Boolean));
+  const items = [...existing];
+  let added = 0;
+  let skipped = 0;
+  for (const item of incoming) {
+    const key = item.sku.trim().toLowerCase();
+    if (!key || seen.has(key)) {
+      skipped += 1;
+      continue;
+    }
+    seen.add(key);
+    items.push(item);
+    added += 1;
+  }
+  return { items, added, skipped };
+}
+
 export function CatalogSettingsForm({
   mode,
   curatedCatalog,
@@ -48,50 +81,46 @@ export function CatalogSettingsForm({
   mode: string;
   curatedCatalog: CuratedCatalog | null;
 }) {
-  const [savedMode, setSavedMode] = useState(mode === "sku_list" ? "sku_list" : "all");
-  const [selectedMode, setSelectedMode] = useState(savedMode);
   const [curated, setCurated] = useState<CuratedCatalog | null>(curatedCatalog);
-  const [skusText, setSkusText] = useState(
-    (curatedCatalog?.items || []).map((i) => i.sku).join("\n"),
-  );
-  const [draft, setDraft] = useState<{ items: CuratedCatalogItem[] } | null>(null);
+  const [draft, setDraft] = useState<{ items: CuratedCatalogItem[] }>({
+    items: curatedCatalog?.items || [],
+  });
+  const [batchText, setBatchText] = useState("");
   const [pending, start] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const draftUnresolvedCount = useMemo(
-    () => (draft ? draft.items.filter((i) => !i.inDb).length : 0),
+    () => draft.items.filter((i) => !i.inDb).length,
     [draft],
   );
   const draftTotal = useMemo(
-    () => (draft ? draft.items.reduce((sum, i) => sum + (i.price || 0), 0) : 0),
+    () => draft.items.reduce((sum, i) => sum + (i.price || 0), 0),
     [draft],
   );
+  const savedItems = curated?.items || [];
+  const dirty = useMemo(
+    () => JSON.stringify(draft.items) !== JSON.stringify(savedItems),
+    [draft.items, savedItems],
+  );
 
-  function saveMode() {
+  function addBatchToDraft() {
     setError(null);
     setMessage(null);
     start(async () => {
-      const res = await setCatalogModeAction(selectedMode);
-      if (res?.error) {
-        setError(res.error);
-        return;
-      }
-      setSavedMode(selectedMode);
-      setMessage(res?.message || "Mode saved.");
-    });
-  }
-
-  function buildDraft() {
-    setError(null);
-    setMessage(null);
-    start(async () => {
-      const res = await buildCuratedCatalogDraft(skusText);
+      const res = await buildCuratedCatalogDraft(batchText);
       if (!res || "error" in res) {
         setError(res?.error || "Could not resolve SKUs.");
         return;
       }
-      setDraft({ items: res.items });
+      const merged = mergeCatalogItems(draft.items, res.items);
+      setDraft({ items: merged.items });
+      setBatchText("");
+      setMessage(
+        `Added ${merged.added} item${merged.added === 1 ? "" : "s"}${
+          merged.skipped ? ` · skipped ${merged.skipped} already in catalog` : ""
+        }.`,
+      );
     });
   }
 
@@ -115,13 +144,12 @@ export function CatalogSettingsForm({
   }
 
   function discardDraft() {
-    setDraft(null);
+    setDraft({ items: curated?.items || [] });
     setError(null);
-    setMessage(null);
+    setMessage("Working changes discarded.");
   }
 
   function saveCatalog() {
-    if (!draft) return;
     setError(null);
     setMessage(null);
     const unresolvedSkus = draft.items.filter((i) => !i.inDb).map((i) => i.sku);
@@ -133,223 +161,207 @@ export function CatalogSettingsForm({
       }
       const now = new Date().toISOString();
       setCurated({ items: draft.items, unresolvedSkus, updatedAt: now, updatedBy: "you" });
-      setSkusText(draft.items.map((i) => i.sku).join("\n"));
-      setDraft(null);
-      setSavedMode("sku_list");
-      setSelectedMode("sku_list");
       setMessage(res?.message || "Curated catalog saved.");
     });
   }
 
   return (
     <div className="mt-6 max-w-4xl space-y-4 rounded-card border border-border bg-surface p-6">
-      <div className="micro-badge text-[10px] tracking-[0.14em] text-accent">CATALOG SELECTION</div>
+      <div className="micro-badge text-[10px] tracking-[0.14em] text-accent">
+        CATALOG MANAGEMENT
+      </div>
       <p className="text-[12.5px] text-secondary">
-        Controls which SKUs appear on the buyer storefront, and at what price.
+        The buyer storefront now uses this curated catalog. Remove items from the working list,
+        paste batches of new SKUs, adjust prices, then save when ready.
       </p>
 
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-5">
-        <label className="flex items-center gap-2 text-[12.5px]">
-          <input
-            type="radio"
-            name="mode"
-            value="all"
-            checked={selectedMode === "all"}
-            onChange={() => setSelectedMode("all")}
-          />
-          All catalog products (testing)
-        </label>
-        <label className="flex items-center gap-2 text-[12.5px]">
-          <input
-            type="radio"
-            name="mode"
-            value="sku_list"
-            checked={selectedMode === "sku_list"}
-            onChange={() => setSelectedMode("sku_list")}
-          />
-          Curated / SKU allowlist (live catalog)
-        </label>
-        <button
-          type="button"
-          disabled={pending || selectedMode === savedMode}
-          onClick={saveMode}
-          className="h-9 rounded-chip border border-border bg-ground px-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink disabled:opacity-50"
-        >
-          {pending ? "Saving…" : "Use this mode"}
-        </button>
-        <span className="text-[11px] text-muted">
-          Live: {savedMode === "sku_list" ? "Curated catalog" : "All products"}
-        </span>
-      </div>
-
-      {selectedMode === "sku_list" ? (
-        <div className="space-y-4 border-t border-border pt-4">
-          {curated && curated.items.length ? (
-            <div className="rounded-chip border border-border bg-ground p-4">
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <span className="micro-badge text-[10px] tracking-[0.14em] text-muted">
-                  CURRENT SAVED CATALOG
-                </span>
-                <span className="text-[11px] text-muted">
-                  {curated.items.length} item{curated.items.length === 1 ? "" : "s"}
-                  {curated.unresolvedSkus.length
-                    ? ` · ${curated.unresolvedSkus.length} unresolved`
-                    : ""}
-                  {" · updated "}
-                  {fmtDate(curated.updatedAt)}
-                  {curated.updatedBy ? ` by ${curated.updatedBy}` : ""}
-                </span>
-              </div>
-              <div className="mt-3 max-h-48 overflow-y-auto">
-                {curated.items.slice(0, 12).map((it, index) => (
-                  <div
-                    key={`${it.sku}-${index}`}
-                    className="flex items-center justify-between border-b border-border/60 py-1.5 text-[12px] last:border-b-0"
-                  >
-                    <span className="font-mono text-[11px] text-secondary">{it.sku}</span>
-                    <span className="truncate px-3 text-ink">{it.title}</span>
-                    <span className="font-mono text-ink">
-                      {it.price != null ? money(it.price) : "—"}
-                    </span>
-                  </div>
-                ))}
-                {curated.items.length > 12 ? (
-                  <div className="pt-1.5 text-[11px] text-muted">
-                    +{curated.items.length - 12} more…
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          ) : (
-            <p className="text-[12px] text-muted">
-              No curated catalog saved yet — paste SKUs below to build one.
-            </p>
-          )}
-
-          {!draft ? (
-            <div className="space-y-2">
-              <label className="flex flex-col gap-1.5">
-                <span className="micro-badge text-[10px] tracking-[0.14em] text-muted">
-                  PASTE SKUS TO BUILD / REPLACE THE CATALOG (ONE PER LINE OR COMMA-SEPARATED)
-                </span>
-                <textarea
-                  value={skusText}
-                  onChange={(e) => setSkusText(e.target.value)}
-                  rows={8}
-                  className="rounded-chip border border-border bg-ground px-3 py-2 font-mono text-[12px] text-ink outline-none focus:border-accent"
-                />
-              </label>
-              <button
-                type="button"
-                disabled={pending || !skusText.trim()}
-                onClick={buildDraft}
-                className="h-10 rounded-chip bg-ink px-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-ground disabled:opacity-60"
-              >
-                {pending ? "Resolving…" : "Build draft"}
-              </button>
-              <p className="text-[11px] text-muted">
-                Saving a draft overwrites the previously saved curated catalog entirely.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <span className="micro-badge text-[10px] tracking-[0.14em] text-muted">
-                  REVIEW DRAFT — {draft.items.length} ITEM{draft.items.length === 1 ? "" : "S"}
-                </span>
-                <span className="font-mono text-[12px] text-ink">{money(Math.round(draftTotal))} total</span>
-              </div>
-
-              {draftUnresolvedCount > 0 ? (
-                <div className="rounded-chip border border-danger/40 bg-danger/5 px-3 py-2 text-[12px] text-danger">
-                  {draftUnresolvedCount} SKU{draftUnresolvedCount === 1 ? "" : "s"} not found in
-                  inventory — remove or fix below before saving.
-                </div>
-              ) : null}
-
-              <div className="overflow-hidden rounded-chip border border-border">
-                <div className="grid grid-cols-[40px_1fr_90px_60px_110px_56px] items-center border-b border-border bg-ground px-3 py-2 font-mono text-[10px] uppercase tracking-[0.1em] text-muted">
-                  <span />
-                  <span>Item</span>
-                  <span className="text-right">Cost</span>
-                  <span className="text-center">In DB</span>
-                  <span className="text-right">Price</span>
-                  <span />
-                </div>
-                <div className="max-h-[420px] overflow-y-auto">
-                  {draft.items.map((item, i) => (
-                    <div
-                      key={`${item.sku}-${i}`}
-                      className="grid grid-cols-[40px_1fr_90px_60px_110px_56px] items-center border-b border-border/60 px-3 py-2.5 text-[12.5px] last:border-b-0"
-                    >
-                      <Placeholder imageSrc={item.imageUrl} className="h-8 w-8 shrink-0 rounded-[4px]" />
-                      <div className="min-w-0 px-2">
-                        <div className="truncate text-ink">{item.title || item.sku}</div>
-                        <div className="font-mono text-[11px] text-muted">
-                          {item.sku}
-                          {item.brand ? ` · ${item.brand}` : ""}
-                        </div>
-                      </div>
-                      <span className="text-right font-mono text-secondary">
-                        {item.cost != null ? money(Math.round(item.cost)) : "missing"}
-                      </span>
-                      <span
-                        className={
-                          "text-center text-[11px] font-semibold " +
-                          (item.inDb ? "text-[#4E9A6A]" : "text-danger")
-                        }
-                      >
-                        {item.inDb ? "Yes" : "No"}
-                      </span>
-                      <div className="flex items-center justify-end gap-1 font-mono">
-                        <span className="text-muted">$</span>
-                        <input
-                          type="number"
-                          min={0}
-                          step="1"
-                          value={item.price ?? ""}
-                          disabled={pending}
-                          onChange={(e) => updateDraftPrice(i, e.target.value)}
-                          className="w-[70px] rounded-chip border border-border bg-surface px-2 py-1 text-right text-[12.5px] text-ink outline-none focus:border-accent disabled:opacity-60"
-                        />
-                      </div>
-                      <div className="text-right">
-                        <button
-                          type="button"
-                          disabled={pending}
-                          onClick={() => removeDraftRow(i)}
-                          className="text-[11px] text-muted hover:text-danger disabled:opacity-50"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  disabled={pending || draft.items.length === 0}
-                  onClick={saveCatalog}
-                  className="h-9 rounded-chip bg-ink px-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-ground disabled:opacity-60"
-                >
-                  {pending ? "Saving…" : "Save catalog"}
-                </button>
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={discardDraft}
-                  className="text-[11px] text-muted hover:text-ink disabled:opacity-50"
-                >
-                  Discard draft
-                </button>
-              </div>
-            </div>
-          )}
+      {mode !== "sku_list" ? (
+        <div className="rounded-chip border border-accent/30 bg-accent/5 px-3 py-2 text-[12px] text-secondary">
+          Saving this catalog will switch the storefront to curated catalog mode.
         </div>
       ) : null}
+
+      <div className="rounded-chip border border-border bg-ground p-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <span className="micro-badge text-[10px] tracking-[0.14em] text-muted">
+            LIVE SAVED CATALOG
+          </span>
+          <span className="text-[11px] text-muted">
+            {savedItems.length} item{savedItems.length === 1 ? "" : "s"}
+            {curated?.unresolvedSkus.length
+              ? ` · ${curated.unresolvedSkus.length} unresolved`
+              : ""}
+            {curated?.updatedAt ? ` · updated ${fmtDate(curated.updatedAt)}` : ""}
+            {curated?.updatedBy ? ` by ${curated.updatedBy}` : ""}
+          </span>
+        </div>
+        <p className="mt-2 text-[11.5px] text-muted">
+          The working list below starts from this saved catalog. Removing rows or adding a batch
+          does not affect buyers until you click Save catalog.
+        </p>
+      </div>
+
+      <div className="space-y-2 rounded-card border border-border bg-ground p-4">
+        <label className="flex flex-col gap-1.5">
+          <span className="micro-badge text-[10px] tracking-[0.14em] text-muted">
+            ADD SKU BATCH
+          </span>
+          <textarea
+            value={batchText}
+            onChange={(e) => setBatchText(e.target.value)}
+            rows={5}
+            placeholder="Paste new SKUs here — one per line, comma, or space separated."
+            className="rounded-chip border border-border bg-surface px-3 py-2 font-mono text-[12px] text-ink outline-none focus:border-accent"
+          />
+        </label>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            disabled={pending || !batchText.trim()}
+            onClick={addBatchToDraft}
+            className="h-10 rounded-chip bg-ink px-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-ground disabled:opacity-60"
+          >
+            {pending ? "Resolving…" : "Add batch to working list"}
+          </button>
+          <span className="text-[11px] text-muted">
+            Existing SKUs are skipped so batches can be pasted repeatedly.
+          </span>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <span className="micro-badge text-[10px] tracking-[0.14em] text-muted">
+            WORKING CATALOG — {draft.items.length} ITEM{draft.items.length === 1 ? "" : "S"}
+          </span>
+          <span className="font-mono text-[12px] text-ink">
+            {money(Math.round(draftTotal))} total
+            {dirty ? " · unsaved changes" : " · saved"}
+          </span>
+        </div>
+
+        {draftUnresolvedCount > 0 ? (
+          <div className="rounded-chip border border-danger/40 bg-danger/5 px-3 py-2 text-[12px] text-danger">
+            {draftUnresolvedCount} SKU{draftUnresolvedCount === 1 ? "" : "s"} not found in
+            inventory — remove or fix before saving.
+          </div>
+        ) : null}
+
+        {draft.items.length === 0 ? (
+          <div className="rounded-chip border border-border px-4 py-8 text-center text-[12.5px] text-muted">
+            No items in the working catalog yet. Paste a SKU batch above to start.
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-chip border border-border">
+            <div className="grid grid-cols-[88px_minmax(180px,1fr)_90px_60px_110px_90px_70px_56px] items-center border-b border-border bg-ground px-3 py-2 font-mono text-[10px] uppercase tracking-[0.1em] text-muted">
+              <span />
+              <span>Item</span>
+              <span className="text-right">Cost</span>
+              <span className="text-center">In DB</span>
+              <span className="text-right">Price</span>
+              <span className="text-right">Margin $</span>
+              <span className="text-right">Margin %</span>
+              <span />
+            </div>
+            <div className="max-h-[520px] overflow-y-auto">
+              {draft.items.map((item, i) => {
+                const margin = marginFor(item.cost, item.price);
+                return (
+                  <div
+                    key={`${item.sku}-${i}`}
+                    className="grid grid-cols-[88px_minmax(180px,1fr)_90px_60px_110px_90px_70px_56px] items-center border-b border-border/60 px-3 py-2.5 text-[12.5px] last:border-b-0"
+                  >
+                    <Placeholder
+                      imageSrc={item.imageUrl}
+                      alt={portalDisplayTitle(item.title, item.sku)}
+                      className="h-20 w-20 shrink-0 rounded-chip"
+                    />
+                    <div className="min-w-0 px-2">
+                      <div className="truncate text-ink">
+                        {portalDisplayTitle(item.title, item.sku)}
+                      </div>
+                      {portalShowSkuLine(item.title, item.sku) ? (
+                        <div className="truncate font-mono text-[11px] text-muted">{item.sku}</div>
+                      ) : null}
+                      {item.brand ? (
+                        <div className="truncate text-[11px] text-muted">{item.brand}</div>
+                      ) : null}
+                    </div>
+                    <span className="text-right font-mono text-secondary">
+                      {item.cost != null ? money(Math.round(item.cost)) : "missing"}
+                    </span>
+                    <span
+                      className={
+                        "text-center text-[11px] font-semibold " +
+                        (item.inDb ? "text-[#4E9A6A]" : "text-danger")
+                      }
+                    >
+                      {item.inDb ? "Yes" : "No"}
+                    </span>
+                    <div className="flex items-center justify-end gap-1 font-mono">
+                      <span className="text-muted">$</span>
+                      <input
+                        type="number"
+                        min={0}
+                        step="1"
+                        value={item.price ?? ""}
+                        disabled={pending}
+                        onChange={(e) => updateDraftPrice(i, e.target.value)}
+                        className="w-[70px] rounded-chip border border-border bg-surface px-2 py-1 text-right text-[12.5px] text-ink outline-none focus:border-accent disabled:opacity-60"
+                      />
+                    </div>
+                    <span
+                      className={
+                        "text-right font-mono " +
+                        (margin.amount != null && margin.amount < 0 ? "text-danger" : "text-ink")
+                      }
+                    >
+                      {margin.amount != null ? money(Math.round(margin.amount)) : "—"}
+                    </span>
+                    <span
+                      className={
+                        "text-right font-mono " +
+                        (margin.percent != null && margin.percent < 0 ? "text-danger" : "text-secondary")
+                      }
+                    >
+                      {margin.percent != null ? `${margin.percent}%` : "—"}
+                    </span>
+                    <div className="text-right">
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => removeDraftRow(i)}
+                        className="text-[11px] text-muted hover:text-danger disabled:opacity-50"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            disabled={pending || draft.items.length === 0 || !dirty}
+            onClick={saveCatalog}
+            className="h-9 rounded-chip bg-ink px-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-ground disabled:opacity-60"
+          >
+            {pending ? "Saving…" : "Save catalog"}
+          </button>
+          <button
+            type="button"
+            disabled={pending || !dirty}
+            onClick={discardDraft}
+            className="text-[11px] text-muted hover:text-ink disabled:opacity-50"
+          >
+            Discard changes
+          </button>
+        </div>
+      </div>
 
       {error ? <p className="text-[12px] text-danger">{error}</p> : null}
       {message ? <p className="text-[12px] text-[#4E9A6A]">{message}</p> : null}

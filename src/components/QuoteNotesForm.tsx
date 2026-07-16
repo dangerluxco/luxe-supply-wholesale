@@ -1,19 +1,31 @@
 "use client";
 
 import { useActionState } from "react";
-import { saveQuoteNotes } from "@/lib/actions/quote-notes";
 
+type NotesState = {
+  error?: string;
+  message?: string;
+};
+
+type NotesAction = (
+  prev: NotesState | undefined,
+  formData: FormData,
+) => Promise<NotesState>;
+
+/**
+ * Server action is passed from the Server Component page so this client
+ * module never imports a `"use server"` file (avoids soft-nav webpack stub collisions).
+ */
 export function QuoteNotesForm({
   quoteId,
   adminNotes,
+  action: saveAction,
 }: {
   quoteId: string;
   adminNotes: string;
+  action: NotesAction;
 }) {
-  const [state, action, pending] = useActionState(saveQuoteNotes, {} as {
-    error?: string;
-    message?: string;
-  });
+  const [state, action, pending] = useActionState(saveAction, {} as NotesState);
 
   return (
     <form action={action} className="space-y-3">

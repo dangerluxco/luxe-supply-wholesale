@@ -2,7 +2,6 @@
 
 import { useTransition } from "react";
 import { QUOTE_STATUSES } from "@/lib/constants";
-import { setQuoteStatus } from "@/lib/actions/quote-status";
 
 const STATUS_LABEL: Record<string, string> = {
   open: "Open",
@@ -13,12 +12,24 @@ const STATUS_LABEL: Record<string, string> = {
   timed_out: "Timed out",
 };
 
+type SetStatusAction = (
+  quoteId: string,
+  status: string,
+) => Promise<{ error?: string; ok?: boolean }>;
+
+/**
+ * Server action is passed from the Server Component page so this client
+ * module never imports a `"use server"` file (avoids soft-nav webpack stub
+ * collisions with Staff / Clients / Catalog pages).
+ */
 export function QuoteStatusSelect({
   quoteId,
   status,
+  action: setStatusAction,
 }: {
   quoteId: string;
   status: string;
+  action: SetStatusAction;
 }) {
   const [pending, start] = useTransition();
 
@@ -29,7 +40,7 @@ export function QuoteStatusSelect({
       onChange={(e) => {
         const next = e.target.value;
         start(async () => {
-          await setQuoteStatus(quoteId, next);
+          await setStatusAction(quoteId, next);
         });
       }}
       className="h-8 w-full rounded-chip border border-border bg-ground px-2 text-[11px] disabled:opacity-60"

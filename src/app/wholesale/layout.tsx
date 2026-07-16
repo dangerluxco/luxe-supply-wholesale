@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { getSession, decodeSession, SESSION_COOKIE } from "@/lib/auth";
 import { BuyerTopbar } from "@/components/BuyerTopbar";
+import { StorefrontAvailabilityProvider } from "@/components/StorefrontAvailability";
 import { ROLE } from "@/lib/constants";
 import { getBuyerCart } from "@/lib/firestore/buyers";
 import { listCatalogProducts } from "@/lib/firestore/catalog";
@@ -29,20 +30,24 @@ export default async function WholesaleLayout({ children }: { children: React.Re
   // Staff or invalid cookie → guest chrome (no Firestore staff lookup hang)
   if (!decoded || decoded.role !== ROLE.BUYER) {
     return (
-      <div className="min-h-screen bg-ground">
-        <BuyerTopbar user={null} cartCount={0} index={index} />
-        {children}
-      </div>
+      <StorefrontAvailabilityProvider>
+        <div className="min-h-screen bg-ground">
+          <BuyerTopbar user={null} cartCount={0} index={index} />
+          {children}
+        </div>
+      </StorefrontAvailabilityProvider>
     );
   }
 
   const session = await getSession();
   if (!session || session.role !== ROLE.BUYER) {
     return (
-      <div className="min-h-screen bg-ground">
-        <BuyerTopbar user={null} cartCount={0} index={index} />
-        {children}
-      </div>
+      <StorefrontAvailabilityProvider>
+        <div className="min-h-screen bg-ground">
+          <BuyerTopbar user={null} cartCount={0} index={index} />
+          {children}
+        </div>
+      </StorefrontAvailabilityProvider>
     );
   }
 
@@ -54,13 +59,15 @@ export default async function WholesaleLayout({ children }: { children: React.Re
   }
 
   return (
-    <div className="min-h-screen bg-ground">
-      <BuyerTopbar
-        user={{ name: session.name, initials: session.initials }}
-        cartCount={cartCount}
-        index={index}
-      />
-      {children}
-    </div>
+    <StorefrontAvailabilityProvider>
+      <div className="min-h-screen bg-ground">
+        <BuyerTopbar
+          user={{ name: session.name, initials: session.initials }}
+          cartCount={cartCount}
+          index={index}
+        />
+        {children}
+      </div>
+    </StorefrontAvailabilityProvider>
   );
 }

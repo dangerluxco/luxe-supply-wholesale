@@ -1,16 +1,38 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Logo } from "@/components/Logo";
 
 const isDev = process.env.NODE_ENV === "development";
+const REMEMBER_KEY = "luxe-wholesale-buyer-remember";
+const USERNAME_KEY = "luxe-wholesale-buyer-username";
 
 export default function BuyerLoginForm() {
   const params = useSearchParams();
   const error = params.get("error") || "";
   const next = params.get("next") || "";
   const [pending, setPending] = useState(false);
+  const [username, setUsername] = useState(isDev ? "howcouldyouforget" : "");
+  const [password, setPassword] = useState(isDev ? "Gmoney2026" : "");
+  const [remember, setRemember] = useState(true);
+  const [usernameLocked, setUsernameLocked] = useState(isDev);
+  const [passwordLocked, setPasswordLocked] = useState(isDev);
+
+  useEffect(() => {
+    if (isDev) return;
+    try {
+      const savedRemember = localStorage.getItem(REMEMBER_KEY) === "1";
+      setRemember(savedRemember);
+      const savedUser = localStorage.getItem(USERNAME_KEY);
+      if (savedRemember && savedUser) {
+        setUsername(savedUser);
+        setUsernameLocked(false);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-ground px-6 py-16">
@@ -28,7 +50,20 @@ export default function BuyerLoginForm() {
           action="/api/buyer-login"
           className="mt-8 flex flex-col gap-4"
           autoComplete={isDev ? "off" : "on"}
-          onSubmit={() => setPending(true)}
+          onSubmit={() => {
+            try {
+              if (remember) {
+                localStorage.setItem(REMEMBER_KEY, "1");
+                localStorage.setItem(USERNAME_KEY, username.trim());
+              } else {
+                localStorage.removeItem(REMEMBER_KEY);
+                localStorage.removeItem(USERNAME_KEY);
+              }
+            } catch {
+              /* ignore */
+            }
+            setPending(true);
+          }}
         >
           {next ? <input type="hidden" name="next" value={next} /> : null}
           <label className="flex flex-col gap-1.5">
@@ -36,8 +71,11 @@ export default function BuyerLoginForm() {
             <input
               name="username"
               type="text"
-              defaultValue={isDev ? "howcouldyouforget" : undefined}
-              autoComplete={isDev ? "off" : "username"}
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              readOnly={usernameLocked}
+              onFocus={() => setUsernameLocked(false)}
+              autoComplete={isDev ? "one-time-code" : "username"}
               required
               className="h-10 rounded-chip border border-border bg-ground px-3 font-mono text-[12.5px] text-ink outline-none focus:border-accent"
             />
@@ -47,11 +85,25 @@ export default function BuyerLoginForm() {
             <input
               name="password"
               type="password"
-              defaultValue={isDev ? "Gmoney2026" : undefined}
-              autoComplete={isDev ? "off" : "current-password"}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              readOnly={passwordLocked}
+              onFocus={() => setPasswordLocked(false)}
+              autoComplete={isDev ? "one-time-code" : "current-password"}
               required
               className="h-10 rounded-chip border border-border bg-ground px-3 font-mono text-[12.5px] text-ink outline-none focus:border-accent"
             />
+          </label>
+          <label className="flex cursor-pointer items-center gap-2 text-[12.5px] text-secondary">
+            <input
+              type="checkbox"
+              name="remember"
+              value="1"
+              checked={remember}
+              onChange={(e) => setRemember(e.target.checked)}
+              className="h-3.5 w-3.5 accent-[var(--accent,#B08D3E)]"
+            />
+            Remember me for 30 days
           </label>
           {error ? (
             <div className="flex items-center gap-2 text-[12px] text-danger">

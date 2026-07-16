@@ -7,30 +7,49 @@ import { addSkusToCart } from "@/lib/actions/buyer-firestore";
 import { PRODUCT_STATUS } from "@/lib/constants";
 import { clsx } from "@/lib/clsx";
 import { money } from "@/lib/format";
+import { useStorefrontAvailability } from "@/components/StorefrontAvailability";
 
 const STORAGE_KEY = "luxe-wholesale-catalog-view";
 
 export function CatalogProductGrid({
   products,
   pricesVisible = true,
+  cartSkus = [],
 }: {
   products: CatalogProduct[];
   pricesVisible?: boolean;
+  /** SKUs already in the buyer's cart (including pieces inside suggested lots). */
+  cartSkus?: string[];
 }) {
   const router = useRouter();
+  const { isBundled } = useStorefrontAvailability();
   const [layout, setLayout] = useState<"grid" | "list">("grid");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [pending, start] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
 
+  const inCart = useMemo(() => {
+    const set = new Set(cartSkus.map((s) => String(s || "").trim().toUpperCase()).filter(Boolean));
+    return (sku: string) => set.has(String(sku || "").trim().toUpperCase());
+  }, [cartSkus]);
+
+  // Drop pieces the moment they enter an active bundle (live poll), before RSC refresh.
+  const visibleProducts = useMemo(
+    () => products.filter((p) => !isBundled(p.sku)),
+    [products, isBundled],
+  );
+
   const selectableSkus = useMemo(
     () =>
-      products
+      visibleProducts
         .filter(
-          (p) => p.status !== PRODUCT_STATUS.ON_HOLD && p.status !== PRODUCT_STATUS.SOLD,
+          (p) =>
+            p.status !== PRODUCT_STATUS.ON_HOLD &&
+            p.status !== PRODUCT_STATUS.SOLD &&
+            !inCart(p.sku),
         )
         .map((p) => p.sku),
-    [products],
+    [visibleProducts, inCart],
   );
 
   useEffect(() => {
@@ -42,14 +61,14 @@ export function CatalogProductGrid({
     }
   }, []);
 
-  // Drop selection for products no longer in the filtered list
+  // Drop selection for products no longer selectable (filtered out, sold, or already in cart)
   useEffect(() => {
-    const visible = new Set(products.map((p) => p.sku));
+    const allowed = new Set(selectableSkus);
     setSelected((prev) => {
-      const next = new Set([...prev].filter((sku) => visible.has(sku)));
+      const next = new Set([...prev].filter((sku) => allowed.has(sku)));
       return next.size === prev.size ? prev : next;
     });
-  }, [products]);
+  }, [selectableSkus]);
 
   function setView(next: "grid" | "list") {
     setLayout(next);
@@ -61,6 +80,7 @@ export function CatalogProductGrid({
   }
 
   function toggle(sku: string) {
+    if (inCart(sku)) return;
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(sku)) next.delete(sku);
@@ -78,7 +98,7 @@ export function CatalogProductGrid({
   }
 
   const selectedList = [...selected];
-  const selectedTotal = products
+  const selectedTotal = visibleProducts
     .filter((p) => selected.has(p.sku))
     .reduce((s, p) => s + (p.wholesalePrice || 0), 0);
   const allSelected =
@@ -158,15 +178,18 @@ export function CatalogProductGrid({
             : "flex flex-col gap-3",
         )}
       >
-        {products.map((p, i) => (
+        {visibleProducts.map((p, i) => (
           <ProductCard
             key={`${p.sku}-${i}`}
             p={p}
             layout={layout}
             pricesVisible={pricesVisible}
             selected={selected.has(p.sku)}
+            inCart={inCart(p.sku)}
             selectable={
-              p.status !== PRODUCT_STATUS.ON_HOLD && p.status !== PRODUCT_STATUS.SOLD
+              p.status !== PRODUCT_STATUS.ON_HOLD &&
+              p.status !== PRODUCT_STATUS.SOLD &&
+              !inCart(p.sku)
             }
             onToggleSelect={toggle}
           />

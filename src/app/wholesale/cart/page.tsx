@@ -92,7 +92,7 @@ export default async function CartPage() {
                   key={`${item.sku}-${index}`}
                   className="flex items-center gap-4 border-b border-border/60 px-5 py-4 last:border-b-0"
                 >
-                  <div className="h-16 w-16 overflow-hidden rounded-chip bg-ground">
+                  <div className="h-24 w-24 overflow-hidden rounded-chip bg-ground">
                     {item.imageUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={item.imageUrl} alt="" className="h-full w-full object-cover" />

@@ -4,7 +4,7 @@ import { money } from "@/lib/format";
 import { BundleBuilder } from "@/components/BundleBuilder";
 import { MicroBadge } from "@/components/badges";
 import { InfoTip } from "@/components/InfoTip";
-import { Placeholder } from "@/components/Placeholder";
+import { PortalThumbnailTile } from "@/components/PortalItemLine";
 import { listCatalogProducts } from "@/lib/firestore/catalog";
 import { listBuyers } from "@/lib/firestore/buyers";
 import { listSuggestedLots } from "@/lib/firestore/suggestedLots";
@@ -17,6 +17,7 @@ function uniqueCatalogItems(
     sku: string;
     title: string;
     price: number | null;
+    cost: number | null;
     imageUrl: string | null;
     brand: string;
     held: boolean;
@@ -28,6 +29,7 @@ function uniqueCatalogItems(
     sku: string;
     name: string;
     wholesalePrice: number;
+    cost: number | null;
     imageUrl: string | null;
     brand: string;
     available: boolean;
@@ -43,6 +45,7 @@ function uniqueCatalogItems(
       sku,
       name: p.title,
       wholesalePrice: Math.round(p.price),
+      cost: p.cost != null && Number.isFinite(p.cost) ? Math.round(p.cost) : null,
       imageUrl: p.imageUrl,
       brand: p.brand || "",
       available: !p.held,
@@ -112,24 +115,27 @@ export default async function BundlesPage({
                   <MicroBadge tone="solid-green">ACTIVE</MicroBadge>
                 </div>
                 <div className="mt-1.5 text-[11.5px] text-muted">
-                  {b.items.length || b.itemCount} pieces · @{b.buyerUsername}
-                  {b.buyerDisplayName && b.buyerDisplayName !== b.buyerUsername
-                    ? ` · ${b.buyerDisplayName}`
-                    : ""}
+                  {b.items.length || b.itemCount} pieces ·{" "}
+                  {b.publishedToAll
+                    ? "All clients"
+                    : `@${b.buyerUsername}${
+                        b.buyerDisplayName && b.buyerDisplayName !== b.buyerUsername
+                          ? ` · ${b.buyerDisplayName}`
+                          : ""
+                      }`}
                 </div>
 
                 {b.items.length > 0 ? (
-                  <div className="mt-3 flex flex-wrap gap-1.5">
+                  <div className="mt-3 flex flex-wrap gap-2">
                     {b.items.slice(0, 6).map((it, i) => (
-                      <Placeholder
+                      <PortalThumbnailTile
                         key={`${it.sku}-${i}`}
-                        imageSrc={it.imageUrl || it.imageUrls?.[0] || null}
-                        label={
-                          i === 5 && b.items.length > 6
-                            ? `+${b.items.length - 5}`
-                            : it.sku
+                        imageUrl={it.imageUrl || it.imageUrls?.[0] || null}
+                        title={it.title}
+                        sku={it.sku}
+                        overlay={
+                          i === 5 && b.items.length > 6 ? `+${b.items.length - 5}` : undefined
                         }
-                        className="h-14 w-14 items-end rounded border border-border pb-0.5 text-[7px]"
                       />
                     ))}
                   </div>

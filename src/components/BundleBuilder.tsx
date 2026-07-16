@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { saveSuggestedLotAction } from "@/lib/actions/bundles-firestore";
-import { bundlePricing, bundleMargin } from "@/lib/bundle";
+import { bundlePricing } from "@/lib/bundle";
 import { BUNDLE_DEFAULT_DISCOUNT_PERCENT } from "@/lib/constants";
 import { money } from "@/lib/format";
 import { Placeholder } from "./Placeholder";
@@ -14,6 +14,7 @@ type Item = {
   sku: string;
   name: string;
   wholesalePrice: number;
+  cost: number | null;
   imageUrl: string | null;
   brand?: string;
   available: boolean;
@@ -30,10 +31,14 @@ export type BundleBuilderInitialLot = {
   title: string;
   note?: string;
   buyerUsername: string;
+  publishedToAll?: boolean;
   lotPrice: number | null;
   /** SKUs already on the lot — pre-selected; must also appear in `items` where possible. */
   skus: string[];
 };
+
+/** Sentinel select value for publishing a lot to every buyer. */
+export const BUNDLE_AUDIENCE_ALL = "__all__";
 
 function uniqueBySku(items: Item[]): Item[] {
   const seen = new Set<string>();
@@ -47,6 +52,15 @@ function uniqueBySku(items: Item[]): Item[] {
     out.push({ ...it, sku });
   }
   return out;
+}
+
+function pieceMargin(cost: number | null, price: number) {
+  if (cost == null || !Number.isFinite(cost) || !Number.isFinite(price)) {
+    return { amount: null as number | null, percent: null as number | null };
+  }
+  const amount = price - cost;
+  const percent = price > 0 ? Math.round((amount / price) * 100) : null;
+  return { amount, percent };
 }
 
 export function BundleBuilder({
@@ -79,7 +93,9 @@ export function BundleBuilder({
   const [name, setName] = useState(initialLot?.title || "The Collector's Edit");
   const [note, setNote] = useState(initialLot?.note || "");
   const [buyerUsername, setBuyerUsername] = useState(
-    initialLot?.buyerUsername || buyers[0]?.username || "",
+    initialLot?.publishedToAll
+      ? BUNDLE_AUDIENCE_ALL
+      : initialLot?.buyerUsername || buyers[0]?.username || BUNDLE_AUDIENCE_ALL,
   );
 
   const initialPrices = useMemo(() => {
@@ -135,8 +151,24 @@ export function BundleBuilder({
     () => bundlePricing(prices, discountType, discountValue),
     [prices, discountType, discountValue],
   );
-  const margin = bundleMargin(bundlePrice, sum);
-  const buyer = buyers.find((b) => b.username === buyerUsername);
+  const sumCost = useMemo(
+    () =>
+      chosen.reduce((s, i) => (i.cost != null && Number.isFinite(i.cost) ? s + i.cost : s), 0),
+    [chosen],
+  );
+  const knownCostCount = useMemo(
+    () => chosen.filter((i) => i.cost != null && Number.isFinite(i.cost)).length,
+    [chosen],
+  );
+  const marginAmount = knownCostCount > 0 ? bundlePrice - sumCost : null;
+  const marginPct =
+    marginAmount != null && bundlePrice > 0
+      ? Math.round((marginAmount / bundlePrice) * 100)
+      : null;
+  const publishedToAll = buyerUsername === BUNDLE_AUDIENCE_ALL;
+  const buyer = publishedToAll
+    ? null
+    : buyers.find((b) => b.username === buyerUsername);
 
   const filtered = useMemo(() => {
     const matches = (i: Item) =>
@@ -176,18 +208,20 @@ export function BundleBuilder({
         </div>
         <p className="mb-5 text-[12px] text-muted">
           {editing
-            ? "Update this suggested lot — changes publish to the client’s storefront."
-            : "Curate a suggested lot for one client — live from Firestore inventory. They see it on their storefront."}
+            ? "Update this suggested lot — changes publish to the selected audience on the storefront."
+            : "Curate a suggested lot for one client or every client. Active lot SKUs stay off individual sale."}
         </p>
 
         <label className="mb-4 block">
-          <div className="mb-1.5 micro-badge text-[10px] tracking-[0.14em] text-accent">CLIENT</div>
+          <div className="mb-1.5 micro-badge text-[10px] tracking-[0.14em] text-accent">
+            AUDIENCE
+          </div>
           <select
             value={buyerUsername}
             onChange={(e) => setBuyerUsername(e.target.value)}
             className="h-10 w-full rounded-chip border border-border bg-ground px-3.5 text-[13px] text-ink outline-none focus:border-accent"
           >
-            {buyers.length === 0 ? <option value="">No portal clients yet</option> : null}
+            <option value={BUNDLE_AUDIENCE_ALL}>All clients</option>
             {buyers.map((b) => (
               <option key={b.username} value={b.username}>
                 {b.displayName || b.username}
@@ -195,6 +229,12 @@ export function BundleBuilder({
               </option>
             ))}
           </select>
+          {publishedToAll ? (
+            <p className="mt-1.5 text-[11px] text-muted">
+              Every signed-in buyer will see this lot. SKUs still leave the individual catalog while
+              the lot is active.
+            </p>
+          ) : null}
         </label>
 
         <input
@@ -204,24 +244,28 @@ export function BundleBuilder({
           className="mb-4 h-9 w-full rounded-chip border border-border bg-ground px-3.5 text-[12.5px] text-ink outline-none focus:border-accent"
         />
 
-        <div className="grid grid-cols-[32px_48px_1fr_100px_80px] border-b border-ink/20 pb-2 font-mono text-[10px] uppercase tracking-[0.12em] text-muted">
+        <div className="grid grid-cols-[32px_88px_1fr_80px_90px_72px_64px_72px] border-b border-ink/20 pb-2 font-mono text-[10px] uppercase tracking-[0.12em] text-muted">
           <span />
           <span />
           <span>Piece</span>
+          <span className="text-right">Cost</span>
           <span className="text-right">Wholesale</span>
+          <span className="text-right">Margin $</span>
+          <span className="text-right">Margin %</span>
           <span className="text-center">Status</span>
         </div>
 
         <div className="max-h-[420px] overflow-auto">
           {filtered.map((it, index) => {
             const on = selected.has(it.sku);
+            const margin = pieceMargin(it.cost, it.wholesalePrice);
             return (
               <button
                 key={`${it.sku}-${index}`}
                 type="button"
                 onClick={() => toggle(it.sku, it.available)}
                 className={clsx(
-                  "grid w-full grid-cols-[32px_48px_1fr_100px_80px] items-center border-b border-border/60 py-2.5 text-left text-[12.5px] transition",
+                  "grid w-full grid-cols-[32px_88px_1fr_80px_90px_72px_64px_72px] items-center border-b border-border/60 py-2.5 text-left text-[12.5px] transition",
                   !it.available && "cursor-not-allowed opacity-45",
                   on && "bg-accent/5",
                 )}
@@ -236,12 +280,31 @@ export function BundleBuilder({
                     {on ? "✓" : ""}
                   </span>
                 </span>
-                <Placeholder imageSrc={it.imageUrl} className="h-10 w-10 rounded" />
-                <span className="text-ink">
-                  {it.name}{" "}
-                  <span className="font-mono text-[10.5px] text-muted">{it.sku}</span>
+                <Placeholder imageSrc={it.imageUrl} alt={it.name} className="h-20 w-20 rounded" />
+                <span className="min-w-0 text-ink">
+                  <span className="block truncate">{it.name}</span>
+                  <span className="block truncate font-mono text-[10.5px] text-muted">{it.sku}</span>
+                </span>
+                <span className="text-right font-mono text-secondary">
+                  {it.cost != null ? money(it.cost) : "—"}
                 </span>
                 <span className="text-right font-mono">{money(it.wholesalePrice)}</span>
+                <span
+                  className={clsx(
+                    "text-right font-mono",
+                    margin.amount != null && margin.amount < 0 ? "text-danger" : "text-ink",
+                  )}
+                >
+                  {margin.amount != null ? money(Math.round(margin.amount)) : "—"}
+                </span>
+                <span
+                  className={clsx(
+                    "text-right font-mono",
+                    margin.percent != null && margin.percent < 0 ? "text-danger" : "text-secondary",
+                  )}
+                >
+                  {margin.percent != null ? `${margin.percent}%` : "—"}
+                </span>
                 <span
                   className="text-center font-mono text-[10px] tracking-[0.08em]"
                   style={{ color: it.available ? "#4E9A6A" : "#B08D3E" }}
@@ -258,7 +321,12 @@ export function BundleBuilder({
             <input type="hidden" name="lotId" value={initialLot.id} />
           ) : null}
           <input type="hidden" name="buyerUsername" value={buyerUsername} />
-          <input type="hidden" name="buyerDisplayName" value={buyer?.displayName || buyerUsername} />
+          <input
+            type="hidden"
+            name="buyerDisplayName"
+            value={publishedToAll ? "All clients" : buyer?.displayName || buyerUsername}
+          />
+          <input type="hidden" name="publishedToAll" value={publishedToAll ? "1" : "0"} />
           <input type="hidden" name="lotPrice" value={bundlePrice} />
           <input type="hidden" name="note" value={note} />
           {chosen.map((c, index) => (
@@ -322,7 +390,11 @@ export function BundleBuilder({
             <input
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="Optional note for the client…"
+              placeholder={
+                publishedToAll
+                  ? "Optional note for all clients…"
+                  : "Optional note for the client…"
+              }
               className="h-10 w-full rounded-chip border border-border bg-ground px-3.5 text-[13px] text-ink outline-none focus:border-accent"
             />
           </label>
@@ -330,10 +402,14 @@ export function BundleBuilder({
           <div className="mt-5 flex flex-wrap items-center gap-3">
             <button
               type="submit"
-              disabled={chosen.length === 0 || !buyerUsername}
+              disabled={chosen.length === 0 || (!publishedToAll && !buyerUsername)}
               className="h-11 rounded-chip bg-ink px-8 text-[11.5px] uppercase tracking-[0.14em] text-ground disabled:opacity-40"
             >
-              {editing ? "Save changes" : "Publish to client"}
+              {editing
+                ? "Save changes"
+                : publishedToAll
+                  ? "Publish to all clients"
+                  : "Publish to client"}
             </button>
             <span className="text-[11.5px] text-muted">
               {editing ? "Updates" : "Saves as"} a suggested lot · lot price {money(bundlePrice)}
@@ -345,7 +421,8 @@ export function BundleBuilder({
       <div className="bg-[#EFECE2] p-8">
         <div className="mb-4 flex items-center gap-2 micro-badge text-[10px] tracking-[0.14em] text-muted">
           <span className="h-[7px] w-[7px] rounded-full bg-success" />
-          LIVE PREVIEW — AS THIS CLIENT WILL SEE IT
+          LIVE PREVIEW —{" "}
+          {publishedToAll ? "AS ALL CLIENTS WILL SEE IT" : "AS THIS CLIENT WILL SEE IT"}
         </div>
 
         <div className="overflow-hidden rounded-card bg-ink p-6">
@@ -358,12 +435,14 @@ export function BundleBuilder({
           <div className="mt-3 text-[23px] font-semibold text-ground">
             {name || "Untitled bundle"}
           </div>
-          {buyerUsername ? (
+          {publishedToAll ? (
+            <div className="mt-1 font-mono text-[11px] text-[#8B897F]">for all clients</div>
+          ) : buyerUsername ? (
             <div className="mt-1 font-mono text-[11px] text-[#8B897F]">for @{buyerUsername}</div>
           ) : null}
           <div className="mt-3 flex gap-2">
             {chosen.length === 0 ? (
-              <div className="flex h-[72px] w-full items-center justify-center rounded border border-white/10 font-mono text-[10px] text-white/40">
+              <div className="flex h-[120px] w-full items-center justify-center rounded border border-white/10 font-mono text-[10px] text-white/40">
                 select pieces to preview
               </div>
             ) : (
@@ -372,8 +451,9 @@ export function BundleBuilder({
                   key={`${c.sku}-${i}`}
                   variant="dark"
                   imageSrc={c.imageUrl}
-                  label={i === 4 && chosen.length > 5 ? `+${chosen.length - 4}` : c.sku}
-                  className="h-[72px] w-[72px] items-end rounded border border-white/10 pb-1 text-[8px]"
+                  alt={c.name}
+                  label={i === 4 && chosen.length > 5 ? `+${chosen.length - 4}` : undefined}
+                  className="h-[120px] w-[120px] items-center justify-center rounded border border-white/10 text-[10px]"
                 />
               ))
             )}
@@ -396,6 +476,16 @@ export function BundleBuilder({
           <Row k="Pieces selected" v={String(chosen.length)} />
           <Row k="Sum of wholesale" v={money(sum)} />
           <Row
+            k={
+              knownCostCount === chosen.length
+                ? "Sum of cost"
+                : knownCostCount > 0
+                  ? `Sum of cost (${knownCostCount}/${chosen.length} known)`
+                  : "Sum of cost"
+            }
+            v={knownCostCount > 0 ? money(Math.round(sumCost)) : "—"}
+          />
+          <Row
             k={`Discount (${discountType === "PERCENT" ? discountValue + "%" : "$" + discountValue})`}
             v={`−${money(saveAmt)}`}
             danger
@@ -405,9 +495,20 @@ export function BundleBuilder({
             <span className="font-mono font-semibold text-ink">{money(bundlePrice)}</span>
           </div>
           <Row
-            k="Margin after discount"
-            v={`${margin}% ${margin >= 30 ? "✓" : "⚠"}`}
-            good={margin >= 30}
+            k="Margin $"
+            v={marginAmount != null ? money(Math.round(marginAmount)) : "—"}
+            danger={marginAmount != null && marginAmount < 0}
+            good={marginAmount != null && marginAmount >= 0}
+          />
+          <Row
+            k="Margin %"
+            v={
+              marginPct != null
+                ? `${marginPct}% ${marginPct >= 20 ? "✓" : "⚠"}`
+                : "—"
+            }
+            danger={marginPct != null && marginPct < 0}
+            good={marginPct != null && marginPct >= 20}
           />
         </div>
       </div>

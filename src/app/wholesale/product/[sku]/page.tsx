@@ -7,6 +7,7 @@ import { ProductPdpGallery } from "@/components/ProductPdpGallery";
 import { money } from "@/lib/format";
 import { AddToOrderButton } from "@/components/AddToOrderButton";
 import { HoldAlertButton } from "@/components/HoldAlertButton";
+import { LiveBundledSkuGuard } from "@/components/StorefrontAvailability";
 import { getHoldAlertForBuyerSku } from "@/lib/firestore/holdAlerts";
 
 export const dynamic = "force-dynamic";
@@ -41,6 +42,7 @@ export default async function ProductPage({
 
   return (
     <div className="px-8 pb-16 pt-6">
+      <LiveBundledSkuGuard sku={product.sku} />
       <div className="mb-6 font-mono text-[11px] uppercase tracking-[0.1em] text-muted">
         <Link href="/wholesale" className="hover:text-ink">
           Collection

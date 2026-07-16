@@ -5,6 +5,7 @@ import {
   publicOrigin,
   SESSION_COOKIE,
   sessionCookieOptions,
+  sessionMaxAgeFromForm,
 } from "@/lib/auth-session";
 import { authenticateStaff, staffToAppRole } from "@/lib/firestore/staff";
 import { prisma } from "@/lib/db";
@@ -25,6 +26,7 @@ export async function POST(request: Request) {
   const form = await request.formData();
   const email = formField(form, "email").trim().toLowerCase();
   const password = formField(form, "password");
+  const cookieOpts = sessionCookieOptions(sessionMaxAgeFromForm(form));
 
   let staffOk: Awaited<ReturnType<typeof authenticateStaff>> | null = null;
   try {
@@ -39,7 +41,7 @@ export async function POST(request: Request) {
     res.cookies.set(
       SESSION_COOKIE,
       encodeSession(staffOk.staff.id, role, "firestore"),
-      sessionCookieOptions(),
+      cookieOpts,
     );
     res.headers.set("Cache-Control", "no-store");
     return res;
@@ -52,7 +54,7 @@ export async function POST(request: Request) {
       res.cookies.set(
         SESSION_COOKIE,
         encodeSession(user.id, user.role, "prisma"),
-        sessionCookieOptions(),
+        cookieOpts,
       );
       res.headers.set("Cache-Control", "no-store");
       return res;

@@ -3,12 +3,19 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { encodeSession, homeForRole, SESSION_COOKIE, sessionCookieOptions } from "@/lib/auth";
+import {
+  encodeSession,
+  homeForRole,
+  SESSION_COOKIE,
+  sessionCookieOptions,
+  sessionMaxAgeFromForm,
+} from "@/lib/auth";
 import { authenticateStaff, staffToAppRole } from "@/lib/firestore/staff";
 
 export async function login(_prev: unknown, formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
+  const cookieOpts = sessionCookieOptions(sessionMaxAgeFromForm(formData));
 
   // Keep redirect() outside try/catch — Next throws NEXT_REDIRECT on success.
   let staffOk: Awaited<ReturnType<typeof authenticateStaff>> | null = null;
@@ -21,7 +28,7 @@ export async function login(_prev: unknown, formData: FormData) {
   if (staffOk?.ok) {
     const role = staffToAppRole(staffOk.staff);
     const store = await cookies();
-    store.set(SESSION_COOKIE, encodeSession(staffOk.staff.id, role, "firestore"), sessionCookieOptions());
+    store.set(SESSION_COOKIE, encodeSession(staffOk.staff.id, role, "firestore"), cookieOpts);
     redirect(homeForRole(role));
   }
 
@@ -31,7 +38,7 @@ export async function login(_prev: unknown, formData: FormData) {
   }
 
   const store = await cookies();
-  store.set(SESSION_COOKIE, encodeSession(user.id, user.role, "prisma"), sessionCookieOptions());
+  store.set(SESSION_COOKIE, encodeSession(user.id, user.role, "prisma"), cookieOpts);
 
   redirect(homeForRole(user.role));
 }

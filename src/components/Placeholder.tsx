@@ -9,6 +9,7 @@ export function Placeholder({
   labelClassName,
   children,
   imageSrc,
+  alt,
 }: {
   label?: string;
   className?: string;
@@ -16,6 +17,7 @@ export function Placeholder({
   labelClassName?: string;
   children?: React.ReactNode;
   imageSrc?: string | null;
+  alt?: string;
 }) {
   const stripe =
     variant === "dark" ? "ph-stripe-dark" : variant === "vault" ? "ph-stripe-vault" : "ph-stripe";
@@ -34,7 +36,7 @@ export function Placeholder({
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={imageSrc}
-          alt={label || ""}
+          alt={alt || label || ""}
           className="absolute inset-0 h-full w-full object-cover"
         />
       ) : label ? (

@@ -33,6 +33,7 @@ export function ProductCard({
   pricesVisible = true,
   selected = false,
   selectable = true,
+  inCart = false,
   onToggleSelect,
 }: {
   p: CatalogProduct;
@@ -40,6 +41,7 @@ export function ProductCard({
   pricesVisible?: boolean;
   selected?: boolean;
   selectable?: boolean;
+  inCart?: boolean;
   onToggleSelect?: (sku: string) => void;
 }) {
   const [galleryOpen, setGalleryOpen] = useState(false);
@@ -47,7 +49,7 @@ export function ProductCard({
   const onHold = p.status === PRODUCT_STATUS.ON_HOLD;
   const soldOut = p.status === PRODUCT_STATUS.SOLD;
   const heldByYou = !!p.heldByYou;
-  const canSelect = selectable && !onHold && !soldOut;
+  const canSelect = selectable && !onHold && !soldOut && !inCart;
   const metaBits = [p.brand || p.origin, p.era.split(" · ")[1] ?? p.era, p.material].filter(
     Boolean,
   );
@@ -88,8 +90,16 @@ export function ProductCard({
       <div className="mt-1 font-mono text-[11px] uppercase text-muted">
         {metaBits.join(" · ")}
       </div>
-      <div className="mt-2.5 flex items-center gap-1.5 text-[11px] text-[#3A3934]">
-        {heldByYou ? (
+      <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-[11px] text-[#3A3934]">
+        {inCart ? (
+          <Link
+            href="/wholesale/cart"
+            className="inline-flex"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <MicroBadge tone="outline-gold">In cart</MicroBadge>
+          </Link>
+        ) : heldByYou ? (
           <MicroBadge tone="outline-gold">Held for you</MicroBadge>
         ) : (
           <>
@@ -115,13 +125,31 @@ export function ProductCard({
       <div
         className={clsx(
           "group relative overflow-hidden rounded-card border bg-surface transition",
-          selected ? "border-accent ring-1 ring-accent/30" : "border-border hover:border-accent",
+          inCart
+            ? "border-accent/50 ring-1 ring-accent/20"
+            : selected
+              ? "border-accent ring-1 ring-accent/30"
+              : "border-border hover:border-accent",
           layout === "list" && "flex flex-row items-stretch",
-          onHold && "opacity-80",
+          onHold && !inCart && "opacity-80",
           soldOut && "opacity-70",
         )}
       >
-        {canSelect && onToggleSelect ? (
+        {inCart ? (
+          <div
+            className="absolute left-2.5 top-2.5 z-10 flex h-7 w-7 items-center justify-center rounded-chip border border-accent/40 bg-surface/95 shadow-sm"
+            title="Already in your cart"
+          >
+            <input
+              type="checkbox"
+              checked
+              disabled
+              readOnly
+              className="h-3.5 w-3.5 accent-[var(--accent,#B08D3E)] opacity-90"
+              aria-label={`${p.name} is already in your cart`}
+            />
+          </div>
+        ) : canSelect && onToggleSelect ? (
           <label
             className="absolute left-2.5 top-2.5 z-10 flex h-7 w-7 cursor-pointer items-center justify-center rounded-chip border border-border bg-surface/95 shadow-sm"
             onClick={(e) => e.stopPropagation()}
@@ -156,14 +184,18 @@ export function ProductCard({
               layout === "grid" ? "aspect-square" : "h-full min-h-[140px] aspect-square",
             )}
           >
-            <OneOfOneBadge className={canSelect ? "left-11" : undefined} />
+            <OneOfOneBadge className={canSelect || inCart ? "left-11" : undefined} />
             {soldOut ? (
               <MicroBadge tone="outline-gray" className="absolute bottom-2.5 left-2.5">
                 SOLD
               </MicroBadge>
-            ) : onHold ? (
+            ) : onHold && !inCart ? (
               <MicroBadge tone="solid-gold" className="absolute bottom-2.5 left-2.5">
                 HOLD · 24H
+              </MicroBadge>
+            ) : inCart ? (
+              <MicroBadge tone="solid-dark" className="absolute bottom-2.5 left-2.5">
+                IN CART
               </MicroBadge>
             ) : null}
             {urls.length > 0 ? (

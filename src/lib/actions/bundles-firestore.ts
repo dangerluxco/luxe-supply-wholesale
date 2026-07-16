@@ -28,8 +28,13 @@ export async function saveSuggestedLotAction(formData: FormData) {
   };
 
   const lotId = get("lotId").trim();
-  const buyerUsername = get("buyerUsername").trim();
-  const buyerDisplayName = get("buyerDisplayName").trim();
+  const buyerUsernameRaw = get("buyerUsername").trim();
+  const publishedToAll =
+    buyerUsernameRaw === "__all__" || get("publishedToAll").trim() === "1";
+  const buyerUsername = publishedToAll ? "" : buyerUsernameRaw;
+  const buyerDisplayName = publishedToAll
+    ? "All clients"
+    : get("buyerDisplayName").trim();
   const title = get("name").trim() || "Suggested lot";
   const note = get("note").trim();
   const lotPrice = Number(get("lotPrice") || 0);
@@ -53,10 +58,10 @@ export async function saveSuggestedLotAction(formData: FormData) {
     uniqueEntries.push({ sku, index });
   });
 
-  if (!buyerUsername || !uniqueEntries.length || !(lotPrice >= 0)) {
+  if ((!publishedToAll && !buyerUsername) || !uniqueEntries.length || !(lotPrice >= 0)) {
     redirect(
       `${errorPath}?error=` +
-        encodeURIComponent("Client, pieces, and lot price are required."),
+        encodeURIComponent("Audience, pieces, and lot price are required."),
     );
   }
 
@@ -97,6 +102,7 @@ export async function saveSuggestedLotAction(formData: FormData) {
     lotId: lotId || undefined,
     buyerUsername,
     buyerDisplayName: buyerDisplayName || buyerUsername,
+    publishedToAll,
     title,
     note,
     lotPrice,
@@ -107,5 +113,7 @@ export async function saveSuggestedLotAction(formData: FormData) {
   revalidatePath(bundlesPath);
   if (lotId) revalidatePath(`${bundlesPath}/${lotId}/edit`);
   revalidatePath("/wholesale");
+  revalidatePath("/wholesale", "layout");
+  revalidatePath("/wholesaleportal/rep/catalog");
   redirect(bundlesPath);
 }
