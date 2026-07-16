@@ -156,13 +156,21 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
 
   return (
     <div>
-      <CatalogFilters
-        brands={brands}
-        resultCount={products.length}
-        totalCount={all.length}
-        pricesVisible={pricesVisible}
-        hasMore={hasMore}
-      />
+      <Suspense
+        fallback={
+          <div className="border-b border-border bg-surface/95 px-8 py-4">
+            <div className="h-10 animate-pulse rounded-chip bg-ground" />
+          </div>
+        }
+      >
+        <CatalogFilters
+          brands={brands}
+          resultCount={products.length}
+          totalCount={all.length}
+          pricesVisible={pricesVisible}
+          hasMore={hasMore}
+        />
+      </Suspense>
 
       <div className="px-8 pb-16 pt-7">
         <div className="mb-5 flex flex-wrap items-baseline gap-3">
@@ -196,7 +204,7 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
                 priceBySku.get(it.sku) ??
                 priceBySku.get(it.sku.toUpperCase()) ??
                 0;
-              return s + Math.round(unit);
+              return s + Math.round(Number(unit) || 0);
             }, 0);
             return (
               <BundleStrip
@@ -204,8 +212,8 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
                 lot={{
                   id: lot.id,
                   title: lot.title,
-                  lotPrice: lot.lotPrice!,
-                  individualSum,
+                  lotPrice: Math.round(Number(lot.lotPrice) || 0),
+                  individualSum: Math.round(individualSum),
                   items: lot.items.map((it) => {
                     const cat =
                       catalogBySku.get(it.sku) ||

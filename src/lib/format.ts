@@ -1,7 +1,15 @@
 // Formatting helpers — money is whole USD, data is rendered in mono elsewhere.
 
 export function money(n: number): string {
-  return "$" + Math.round(n).toLocaleString("en-US");
+  const amount = Math.round(Number(n) || 0);
+  // Fixed en-US formatting — avoid runtime locale drift between server and browser.
+  return (
+    "$" +
+    amount.toLocaleString("en-US", {
+      maximumFractionDigits: 0,
+      minimumFractionDigits: 0,
+    })
+  );
 }
 
 export function moneyRange(low: number, high: number): string {

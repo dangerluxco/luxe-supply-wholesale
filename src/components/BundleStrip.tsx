@@ -28,9 +28,11 @@ export function BundleStrip({ lot }: { lot: LotForStrip }) {
   const [gallerySku, setGallerySku] = useState<string | null>(null);
   const [galleryIndex, setGalleryIndex] = useState(0);
 
-  const saveAmt = Math.max(0, lot.individualSum - lot.lotPrice);
-  const savePct = lot.individualSum > 0 ? Math.round((saveAmt / lot.individualSum) * 100) : 0;
-  const showIndividual = lot.individualSum > 0 && lot.individualSum !== lot.lotPrice;
+  // Normalize once so SSR HTML and client hydration always see the same integers.
+  const lotPrice = Math.round(Number(lot.lotPrice) || 0);
+  const individualSum = Math.round(Number(lot.individualSum) || 0);
+  const saveAmt = Math.max(0, individualSum - lotPrice);
+  const savePct = individualSum > 0 ? Math.round((saveAmt / individualSum) * 100) : 0;
   const galleryItem = gallerySku
     ? lot.items.find((it) => it.sku === gallerySku) || null
     : null;
@@ -84,15 +86,22 @@ export function BundleStrip({ lot }: { lot: LotForStrip }) {
           </div>
         </div>
         <div className="flex flex-col justify-center gap-[7px] border-t border-white/10 p-7 md:border-l md:border-t-0">
-          {showIndividual ? (
+          {/*
+            Keep this row always mounted when we know an individual sum.
+            Conditionally omitting it (e.g. when sum === lotPrice) caused SSR/client
+            hydration mismatches after deploys and soft navigations.
+          */}
+          {individualSum > 0 ? (
             <div className="flex justify-between text-[12px] text-[#8B897F]">
               Individually
-              <span className="font-mono line-through">{money(lot.individualSum)}</span>
+              <span className={saveAmt > 0 ? "font-mono line-through" : "font-mono"}>
+                {money(individualSum)}
+              </span>
             </div>
           ) : null}
           <div className="flex items-baseline justify-between">
             <span className="text-[12px] text-[#C9C7BE]">Bundle</span>
-            <span className="text-[26px] font-semibold text-ground">{money(lot.lotPrice)}</span>
+            <span className="text-[26px] font-semibold text-ground">{money(lotPrice)}</span>
           </div>
           {saveAmt > 0 ? (
             <div className="self-end font-mono text-[10px] font-semibold tracking-[0.08em] text-accent">
