@@ -74,6 +74,34 @@
             "serviceId": "luxe-wholesale-portal",
             "region": "us-central1"
           }
+        },
+        {
+          "source": "/favicon.ico",
+          "run": {
+            "serviceId": "luxe-wholesale-portal",
+            "region": "us-central1"
+          }
+        },
+        {
+          "source": "/favicon.png",
+          "run": {
+            "serviceId": "luxe-wholesale-portal",
+            "region": "us-central1"
+          }
+        },
+        {
+          "source": "/icon.png",
+          "run": {
+            "serviceId": "luxe-wholesale-portal",
+            "region": "us-central1"
+          }
+        },
+        {
+          "source": "/apple-icon.png",
+          "run": {
+            "serviceId": "luxe-wholesale-portal",
+            "region": "us-central1"
+          }
         }
       ],
       "headers": [
@@ -158,6 +186,34 @@
         },
         {
           "source": "/api/**",
+          "run": {
+            "serviceId": "luxe-wholesale-portal",
+            "region": "us-central1"
+          }
+        },
+        {
+          "source": "/favicon.ico",
+          "run": {
+            "serviceId": "luxe-wholesale-portal",
+            "region": "us-central1"
+          }
+        },
+        {
+          "source": "/favicon.png",
+          "run": {
+            "serviceId": "luxe-wholesale-portal",
+            "region": "us-central1"
+          }
+        },
+        {
+          "source": "/icon.png",
+          "run": {
+            "serviceId": "luxe-wholesale-portal",
+            "region": "us-central1"
+          }
+        },
+        {
+          "source": "/apple-icon.png",
           "run": {
             "serviceId": "luxe-wholesale-portal",
             "region": "us-central1"
