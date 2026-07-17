@@ -6,14 +6,32 @@ type BookCallResult = { curationUrl: string; sellerCurationUrl: string };
 
 /**
  * Spins up a fresh curation link from this order request's items, then opens a
- * pre-filled Google Calendar event (buyer as guest, curation link + order summary
- * in the description) plus the rep's own curation manager for that same link —
- * so a rep can go straight from "book the call" to "run the call".
+ * pre-filled Google Calendar event (buyer as guest; both the buyer-facing link
+ * and the seller's own curation manager link included in the description). The
+ * call is usually scheduled for later, so only Calendar opens right away — the
+ * seller curation manager link stays available here and in the invite itself,
+ * ready whenever the rep is ready to run the call.
+ *
+ * The most recent links are persisted on the order request itself (server-side),
+ * so they're still here — not just in this component's state — after navigating
+ * away and back.
  */
-export function BookCallButton({ quoteId }: { quoteId: string }) {
+export function BookCallButton({
+  quoteId,
+  initialCurationUrl,
+  initialSellerCurationUrl,
+}: {
+  quoteId: string;
+  initialCurationUrl?: string | null;
+  initialSellerCurationUrl?: string | null;
+}) {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<BookCallResult | null>(null);
+  const [result, setResult] = useState<BookCallResult | null>(
+    initialCurationUrl && initialSellerCurationUrl
+      ? { curationUrl: initialCurationUrl, sellerCurationUrl: initialSellerCurationUrl }
+      : null,
+  );
 
   return (
     <div>
@@ -41,15 +59,15 @@ export function BookCallButton({ quoteId }: { quoteId: string }) {
               curationUrl: data.curationUrl || "",
               sellerCurationUrl: data.sellerCurationUrl,
             });
-            // Calendar first (buyer invite + buyer-facing link), then straight into the
-            // seller's own curation manager for this same link — the rep's next step.
+            // Only Calendar opens automatically — the call is usually for later, so
+            // don't force the seller curation manager open now. It's linked inside
+            // the invite itself and shown below, ready for whenever the call happens.
             window.open(data.calendarUrl, "_blank", "noopener,noreferrer");
-            window.open(data.sellerCurationUrl, "_blank", "noopener,noreferrer");
           });
         }}
         className="inline-flex h-9 items-center gap-1.5 rounded-chip bg-ink px-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-ground transition disabled:opacity-60"
       >
-        {pending ? "Preparing…" : "Book call"}
+        {pending ? "Preparing…" : result ? "Book another call" : "Book call"}
       </button>
       {error ? <p className="mt-2 text-[12px] text-danger">{error}</p> : null}
       {result ? (

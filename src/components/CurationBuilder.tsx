@@ -89,6 +89,9 @@ export function CurationBuilder({ initialShares }: { initialShares: ActiveShare[
   const [expiresHours, setExpiresHours] = useState(4);
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [shares, setShares] = useState(initialShares);
+  const [revokingToken, setRevokingToken] = useState<string | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
 
   const total = useMemo(
     () => draft.reduce((sum, it) => sum + (it.price || 0), 0),
@@ -192,6 +195,34 @@ export function CurationBuilder({ initialShares }: { initialShares: ActiveShare[
       // that's the "sales call" screen, not this builder.
       window.location.assign(`/wholesaleportal/rep/curation/${data.share.token}`);
     });
+  }
+
+  async function revokeShare(token: string, label: string) {
+    if (
+      !window.confirm(
+        `Revoke the curation link for "${label || "this client"}"? They'll immediately lose access — this can't be undone.`,
+      )
+    ) {
+      return;
+    }
+    setListError(null);
+    setRevokingToken(token);
+    try {
+      const res = await fetch(`/api/staff/curation/${token}/revoke`, {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok || data.error) {
+        setListError(data.error || "Could not revoke that link.");
+        return;
+      }
+      setShares((prev) => prev.filter((s) => s.token !== token));
+    } catch {
+      setListError("Could not revoke that link.");
+    } finally {
+      setRevokingToken(null);
+    }
   }
 
   return (
@@ -397,52 +428,73 @@ export function CurationBuilder({ initialShares }: { initialShares: ActiveShare[
       <div>
         <div className="mb-3 flex items-baseline gap-3">
           <h2 className="text-[16px] font-semibold text-ink">Active links</h2>
-          <span className="text-[12px] text-muted">{initialShares.length} live</span>
+          <span className="text-[12px] text-muted">{shares.length} live</span>
         </div>
-        {initialShares.length === 0 ? (
+        {listError ? <p className="mb-3 text-[12.5px] text-danger">{listError}</p> : null}
+        {shares.length === 0 ? (
           <div className="rounded-chip border border-border px-4 py-6 text-center text-[12.5px] text-muted">
             No active curation links yet.
           </div>
         ) : (
           <div className="overflow-hidden rounded-chip border border-border">
-            <div className="grid grid-cols-[1.2fr_80px_160px_160px_100px] border-b border-border bg-ground px-4 py-2 font-mono text-[10px] uppercase tracking-[0.1em] text-muted">
+            <div className="grid grid-cols-[1.2fr_80px_160px_160px_90px_44px] border-b border-border bg-ground px-4 py-2 font-mono text-[10px] uppercase tracking-[0.1em] text-muted">
               <span>Client</span>
               <span className="text-center">Items</span>
               <span>Decisions</span>
               <span>Created / expires</span>
               <span className="text-right"> </span>
+              <span />
             </div>
-            {initialShares.map((s) => {
+            {shares.map((s) => {
               const counts = decisionCounts(s.items);
               return (
-                <a
+                <div
                   key={s.token}
-                  href={`/wholesaleportal/rep/curation/${s.token}`}
-                  className="grid grid-cols-[1.2fr_80px_160px_160px_100px] items-center border-b border-border/60 px-4 py-3 text-[12.5px] text-[#3A3934] transition last:border-b-0 hover:bg-ground/70"
+                  className="grid grid-cols-[1.2fr_80px_160px_160px_90px_44px] items-center border-b border-border/60 px-4 py-3 text-[12.5px] text-[#3A3934] transition last:border-b-0 hover:bg-ground/70"
                 >
-                  <div className="min-w-0">
-                    <div className="truncate font-semibold text-ink">
-                      {s.clientName || "Untitled link"}
-                    </div>
-                    {s.sessionEnded ? (
-                      <div className="text-[10.5px] uppercase tracking-[0.08em] text-muted">
-                        Session ended
+                  <a
+                    href={`/wholesaleportal/rep/curation/${s.token}`}
+                    className="col-span-4 grid min-w-0 grid-cols-[1.2fr_80px_160px_160px] items-center"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate font-semibold text-ink">
+                        {s.clientName || "Untitled link"}
                       </div>
-                    ) : null}
-                  </div>
-                  <div className="text-center font-mono">{s.itemCount}</div>
-                  <div className="font-mono text-[11px] text-secondary">
-                    ✓{counts.approve} ~{counts.maybe} ✕{counts.decline} ·{counts.pending} pending
-                  </div>
-                  <div className="text-[11px] text-muted">
-                    {fmtDateTime(s.createdAt)}
-                    <br />
-                    {s.sessionEnded ? "ended" : expiresLabel(s.expiresAt)}
-                  </div>
-                  <div className="text-right text-[11px] font-semibold uppercase tracking-[0.1em] text-accent">
+                      {s.sessionEnded ? (
+                        <div className="text-[10.5px] uppercase tracking-[0.08em] text-muted">
+                          Session ended
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="text-center font-mono">{s.itemCount}</div>
+                    <div className="font-mono text-[11px] text-secondary">
+                      ✓{counts.approve} ~{counts.maybe} ✕{counts.decline} ·{counts.pending} pending
+                    </div>
+                    <div className="text-[11px] text-muted">
+                      {fmtDateTime(s.createdAt)}
+                      <br />
+                      {s.sessionEnded ? "ended" : expiresLabel(s.expiresAt)}
+                    </div>
+                  </a>
+                  <a
+                    href={`/wholesaleportal/rep/curation/${s.token}`}
+                    className="text-right text-[11px] font-semibold uppercase tracking-[0.1em] text-accent"
+                  >
                     Manage →
+                  </a>
+                  <div className="text-right">
+                    <button
+                      type="button"
+                      disabled={revokingToken === s.token}
+                      onClick={() => revokeShare(s.token, s.clientName)}
+                      aria-label="Revoke link"
+                      title="Revoke link"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-chip text-muted transition hover:bg-danger/10 hover:text-danger disabled:opacity-50"
+                    >
+                      <TrashIcon className="h-4 w-4" />
+                    </button>
                   </div>
-                </a>
+                </div>
               );
             })}
           </div>

@@ -34,6 +34,10 @@ export type PortalQuote = {
   /** Set once staff generates a formal invoice from this request. */
   invoiceId: string | null;
   invoiceNumber: string | null;
+  /** Most recent "Book call" curation-share token, if any — kept so the buyer/seller
+   *  links stay visible on this request after navigating away and back. */
+  curationToken: string | null;
+  curationCreatedAt: string | null;
 };
 
 export type QuoteItemInput = {
@@ -176,6 +180,8 @@ function serializeQuote(id: string, d: Record<string, unknown>): PortalQuote {
     updatedAt: toIso(d.updatedAt),
     invoiceId: d.invoiceId ? String(d.invoiceId) : null,
     invoiceNumber: d.invoiceNumber ? String(d.invoiceNumber) : null,
+    curationToken: d.curationToken ? String(d.curationToken) : null,
+    curationCreatedAt: toIso(d.curationCreatedAt),
   };
 }
 
@@ -422,6 +428,15 @@ export async function linkQuoteToInvoice(
     invoiceId: invoice.id,
     invoiceNumber: invoice.invoiceNumber,
     status: "quoted",
+    updatedAt: new Date(),
+  });
+}
+
+/** Record the curation-share token created by "Book call" so its links persist on this request. */
+export async function linkQuoteToCurationShare(quoteId: string, token: string): Promise<void> {
+  await getDb().collection("salesPortalQuotes").doc(quoteId).update({
+    curationToken: token,
+    curationCreatedAt: new Date(),
     updatedAt: new Date(),
   });
 }

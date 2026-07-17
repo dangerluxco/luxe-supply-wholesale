@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { requireStaffSession } from "@/lib/staff-api-auth";
-import { getQuoteById, curationItemsFromQuoteItems } from "@/lib/firestore/quotes";
+import {
+  getQuoteById,
+  curationItemsFromQuoteItems,
+  linkQuoteToCurationShare,
+} from "@/lib/firestore/quotes";
 import { createCurationShare } from "@/lib/firestore/curation";
 import { buyerStorefrontOrigin, staffPortalOrigin } from "@/lib/notify";
 
@@ -79,6 +83,7 @@ export async function POST(
       createdByEmail: session.email,
       createdByDisplayName: session.name,
     });
+    await linkQuoteToCurationShare(quote.id, share.token);
     const curationUrl = `${buyerStorefrontOrigin()}/curation/${share.token}`;
     const sellerCurationUrl = `${staffPortalOrigin()}/wholesaleportal/rep/curation/${share.token}`;
     const quoteUrl = `${staffPortalOrigin()}/wholesaleportal/rep/quotes/${quote.id}`;
@@ -98,6 +103,7 @@ export async function POST(
       orderTotal != null ? `Order total: $${orderTotal.toLocaleString()}` : null,
       "",
       `Curation view for the call: ${curationUrl}`,
+      `Seller curation manager: ${sellerCurationUrl}`,
       `Order request: ${quoteUrl}`,
     ].filter((line): line is string => line != null);
 

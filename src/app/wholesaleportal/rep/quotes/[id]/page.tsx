@@ -10,6 +10,7 @@ import { GenerateInvoiceButton } from "@/components/GenerateInvoiceButton";
 import { BookCallButton } from "@/components/BookCallButton";
 import { InfoTip } from "@/components/InfoTip";
 import { fullDate, money } from "@/lib/format";
+import { buyerStorefrontOrigin, staffPortalOrigin } from "@/lib/notify";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +34,13 @@ export default async function StaffQuoteDetailPage({
   const { id } = await params;
   const quote = await getQuoteById(id);
   if (!quote) notFound();
+
+  const initialCurationUrl = quote.curationToken
+    ? `${buyerStorefrontOrigin()}/curation/${quote.curationToken}`
+    : null;
+  const initialSellerCurationUrl = quote.curationToken
+    ? `${staffPortalOrigin()}/wholesaleportal/rep/curation/${quote.curationToken}`
+    : null;
 
   return (
     <div className="px-10 pb-12 pt-8">
@@ -70,13 +78,18 @@ export default async function StaffQuoteDetailPage({
           <div className="mb-2 flex items-center gap-1.5">
             <div className="micro-badge text-[10px] tracking-[0.14em] text-accent">CLIENT CALL</div>
             <InfoTip label="What happens when you book a call">
-              Creates a fresh curation link from this request&apos;s items (valid 7 days), opens a
-              pre-filled Google Calendar event with the buyer added as a guest and the buyer link
-              + order summary in the description, and opens your own curation manager for that
-              same link in a second tab so you can go straight into running the call.
+              Creates a fresh curation link from this request&apos;s items (valid 7 days) and opens
+              a pre-filled Google Calendar event with the buyer added as a guest. The invite&apos;s
+              description includes both the buyer link and your seller curation manager link, so
+              whenever the call actually happens you can open the invite and jump straight in —
+              no digging through past order requests.
             </InfoTip>
           </div>
-          <BookCallButton quoteId={quote.id} />
+          <BookCallButton
+            quoteId={quote.id}
+            initialCurationUrl={initialCurationUrl}
+            initialSellerCurationUrl={initialSellerCurationUrl}
+          />
         </div>
       </div>
 
