@@ -1,8 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import Link from "next/link";
-import { saveSuggestedLotAction } from "@/lib/actions/bundles-firestore";
+import { useMemo, useState, useTransition } from "react";
 import { bundlePricing } from "@/lib/bundle";
 import { BUNDLE_DEFAULT_DISCOUNT_PERCENT } from "@/lib/constants";
 import { money } from "@/lib/format";
@@ -97,6 +95,8 @@ export function BundleBuilder({
       ? BUNDLE_AUDIENCE_ALL
       : initialLot?.buyerUsername || buyers[0]?.username || BUNDLE_AUDIENCE_ALL,
   );
+  const [saving, startSave] = useTransition();
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const initialPrices = useMemo(() => {
     if (!initialLot?.skus?.length) return null;
@@ -198,12 +198,12 @@ export function BundleBuilder({
             {editing ? "Edit bundle" : "New bundle"}
           </h1>
           {editing ? (
-            <Link
+            <a
               href="/wholesaleportal/rep/bundles"
               className="text-[11px] uppercase tracking-[0.1em] text-muted hover:text-ink"
             >
               ← Cancel
-            </Link>
+            </a>
           ) : null}
         </div>
         <p className="mb-5 text-[12px] text-muted">
@@ -316,28 +316,44 @@ export function BundleBuilder({
           })}
         </div>
 
-        <form action={saveSuggestedLotAction} className="mt-6">
-          {editing && initialLot ? (
-            <input type="hidden" name="lotId" value={initialLot.id} />
-          ) : null}
-          <input type="hidden" name="buyerUsername" value={buyerUsername} />
-          <input
-            type="hidden"
-            name="buyerDisplayName"
-            value={publishedToAll ? "All clients" : buyer?.displayName || buyerUsername}
-          />
-          <input type="hidden" name="publishedToAll" value={publishedToAll ? "1" : "0"} />
-          <input type="hidden" name="lotPrice" value={bundlePrice} />
-          <input type="hidden" name="note" value={note} />
-          {chosen.map((c, index) => (
-            <span key={`${c.sku}-${index}`}>
-              <input type="hidden" name="skus" value={c.sku} />
-              <input type="hidden" name="titles" value={c.name} />
-              <input type="hidden" name="brands" value={c.brand || ""} />
-              <input type="hidden" name="imageUrls" value={c.imageUrl || ""} />
-            </span>
-          ))}
-
+        <form
+          className="mt-6"
+          onSubmit={(e) => {
+            e.preventDefault();
+            setSaveError(null);
+            startSave(async () => {
+              const res = await fetch("/api/staff/bundles/save", {
+                method: "POST",
+                credentials: "same-origin",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  lotId: editing && initialLot ? initialLot.id : "",
+                  buyerUsername,
+                  buyerDisplayName: publishedToAll
+                    ? "All clients"
+                    : buyer?.displayName || buyerUsername,
+                  publishedToAll,
+                  name,
+                  note,
+                  lotPrice: bundlePrice,
+                  skus: chosen.map((c) => c.sku),
+                  titles: chosen.map((c) => c.name),
+                  brands: chosen.map((c) => c.brand || ""),
+                  imageUrls: chosen.map((c) => c.imageUrl || ""),
+                }),
+              });
+              const data = (await res.json().catch(() => ({}))) as {
+                error?: string;
+                redirectTo?: string;
+              };
+              if (!res.ok || data.error) {
+                setSaveError(data.error || "Could not save bundle.");
+                return;
+              }
+              window.location.assign(data.redirectTo || "/wholesaleportal/rep/bundles");
+            });
+          }}
+        >
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-[1fr_200px]">
             <label>
               <div className="mb-1.5 micro-badge text-[10px] tracking-[0.14em] text-accent">
@@ -402,19 +418,26 @@ export function BundleBuilder({
           <div className="mt-5 flex flex-wrap items-center gap-3">
             <button
               type="submit"
-              disabled={chosen.length === 0 || (!publishedToAll && !buyerUsername)}
+              disabled={
+                saving ||
+                chosen.length === 0 ||
+                (!publishedToAll && !buyerUsername)
+              }
               className="h-11 rounded-chip bg-ink px-8 text-[11.5px] uppercase tracking-[0.14em] text-ground disabled:opacity-40"
             >
-              {editing
-                ? "Save changes"
-                : publishedToAll
-                  ? "Publish to all clients"
-                  : "Publish to client"}
+              {saving
+                ? "Saving…"
+                : editing
+                  ? "Save changes"
+                  : publishedToAll
+                    ? "Publish to all clients"
+                    : "Publish to client"}
             </button>
             <span className="text-[11.5px] text-muted">
               {editing ? "Updates" : "Saves as"} a suggested lot · lot price {money(bundlePrice)}
             </span>
           </div>
+          {saveError ? <p className="mt-3 text-[12px] text-danger">{saveError}</p> : null}
         </form>
       </div>
 

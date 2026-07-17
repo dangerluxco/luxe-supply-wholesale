@@ -11,6 +11,7 @@ export function repNavItems(isManager: boolean): RepNavItem[] {
     { label: "Clients", href: "/wholesaleportal/rep/clients" },
     { label: "Catalog", href: "/wholesaleportal/rep/catalog" },
     { label: "Bundles", href: "/wholesaleportal/rep/bundles" },
+    { label: "Curation", href: "/wholesaleportal/rep/curation" },
     { label: "Invoices", href: "/wholesaleportal/rep/invoices" },
     { label: "Wishlist", href: "/wholesaleportal/rep/wishlist" },
     ...(isManager ? [{ label: "Staff", href: "/wholesaleportal/rep/staff" }] : []),

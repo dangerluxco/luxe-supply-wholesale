@@ -1,121 +1,170 @@
 "use client";
 
-import { useActionState } from "react";
-
-type ActionState = {
-  error?: string;
-  message?: string;
-  ok?: boolean;
-  temporaryPassword?: string;
-  emailSent?: boolean;
-};
-
-type StaffAction = (
-  prev: ActionState | undefined,
-  formData: FormData,
-) => Promise<ActionState>;
+import { useState, useTransition } from "react";
 
 const btnClass =
   "rounded-chip border border-border px-2.5 py-1.5 text-[11px] text-secondary transition hover:border-accent hover:text-ink disabled:opacity-50";
 
 /**
- * Per-row staff actions. Actions are passed from the Server Component so this
- * client module never imports `"use server"` files (soft-nav stub safety).
+ * Per-row staff actions via fetch APIs — no `"use server"` props (soft-nav safe).
  */
 export function StaffMemberActions({
   staffId,
   isAdmin,
   status,
   isSelf,
-  setAdminAction,
-  setStatusAction,
-  resetPasswordAction,
 }: {
   staffId: string;
   isAdmin: boolean;
   status: string;
   isSelf: boolean;
-  setAdminAction: StaffAction;
-  setStatusAction: StaffAction;
-  resetPasswordAction: StaffAction;
 }) {
-  const [adminState, adminFormAction, adminPending] = useActionState(
-    setAdminAction,
-    {} as ActionState,
-  );
-  const [statusState, statusFormAction, statusPending] = useActionState(
-    setStatusAction,
-    {} as ActionState,
-  );
-  const [resetState, resetFormAction, resetPending] = useActionState(
-    resetPasswordAction,
-    {} as ActionState,
-  );
+  const [pending, start] = useTransition();
+  const [busyAction, setBusyAction] = useState<"admin" | "reset" | "status" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [resetOk, setResetOk] = useState<{
+    message: string;
+    temporaryPassword: string;
+    emailSent: boolean;
+  } | null>(null);
 
   const disabled = status === "disabled";
-  const pending = adminPending || statusPending || resetPending;
-  const feedback =
-    adminState?.error ||
-    statusState?.error ||
-    resetState?.error ||
-    (adminState?.ok ? adminState.message : null) ||
-    (statusState?.ok ? statusState.message : null) ||
-    (resetState?.ok
-      ? `${resetState.message || ""}${
-          resetState.temporaryPassword
-            ? ` Temporary password: ${resetState.temporaryPassword}`
-            : ""
-        }`
-      : null);
-  const isError = !!(adminState?.error || statusState?.error || resetState?.error);
+
+  async function postJson(url: string, body?: Record<string, unknown>) {
+    const res = await fetch(url, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      message?: string;
+      temporaryPassword?: string;
+      emailSent?: boolean;
+    };
+    if (!res.ok || data.error) {
+      throw new Error(data.error || "Request failed.");
+    }
+    return data;
+  }
 
   return (
     <div className="flex flex-col items-end gap-1.5">
       <div className="flex flex-wrap justify-end gap-1.5">
-        <form action={adminFormAction}>
-          <input type="hidden" name="staffId" value={staffId} />
-          <input type="hidden" name="isAdmin" value={isAdmin ? "false" : "true"} />
-          <button type="submit" disabled={pending} className={btnClass}>
-            {isAdmin ? "Remove admin" : "Make admin"}
-          </button>
-        </form>
-
-        <form
-          action={resetFormAction}
-          onSubmit={(e) => {
-            if (
-              !window.confirm(
-                "Reset this staff member’s password and email a temporary password?",
-              )
-            ) {
-              e.preventDefault();
-            }
+        <button
+          type="button"
+          disabled={pending}
+          className={btnClass}
+          onClick={() => {
+            setError(null);
+            setMessage(null);
+            setResetOk(null);
+            setBusyAction("admin");
+            start(async () => {
+              try {
+                const data = await postJson(
+                  `/api/staff/members/${encodeURIComponent(staffId)}/admin`,
+                  { isAdmin: !isAdmin },
+                );
+                setMessage(data.message || "Updated.");
+                window.location.reload();
+              } catch (err) {
+                setError(err instanceof Error ? err.message : "Could not update admin.");
+                setBusyAction(null);
+              }
+            });
           }}
         >
-          <input type="hidden" name="staffId" value={staffId} />
-          <button type="submit" disabled={pending} className={btnClass}>
-            Reset password
-          </button>
-        </form>
+          {isAdmin ? "Remove admin" : "Make admin"}
+        </button>
 
-        <form action={statusFormAction}>
-          <input type="hidden" name="staffId" value={staffId} />
-          <input type="hidden" name="status" value={disabled ? "active" : "disabled"} />
-          <button
-            type="submit"
-            disabled={pending || isSelf}
-            title={isSelf ? "You cannot disable your own account" : undefined}
-            className={btnClass}
-          >
-            {disabled ? "Re-enable" : "Disable"}
-          </button>
-        </form>
+        <button
+          type="button"
+          disabled={pending || disabled}
+          title={disabled ? "Re-enable the account before resetting password" : undefined}
+          className={btnClass}
+          onClick={() => {
+            if (
+              !window.confirm(
+                "Generate a new temporary password for this staff member and email it to them?",
+              )
+            ) {
+              return;
+            }
+            setError(null);
+            setMessage(null);
+            setResetOk(null);
+            setBusyAction("reset");
+            start(async () => {
+              try {
+                const data = await postJson(
+                  `/api/staff/members/${encodeURIComponent(staffId)}/reset-password`,
+                );
+                setResetOk({
+                  message: data.message || "Password generated.",
+                  temporaryPassword: data.temporaryPassword || "",
+                  emailSent: !!data.emailSent,
+                });
+              } catch (err) {
+                setError(err instanceof Error ? err.message : "Could not generate password.");
+              } finally {
+                setBusyAction(null);
+              }
+            });
+          }}
+        >
+          {busyAction === "reset" ? "Generating…" : "Generate new password"}
+        </button>
+
+        <button
+          type="button"
+          disabled={pending || isSelf}
+          title={isSelf ? "You cannot disable your own account" : undefined}
+          className={btnClass}
+          onClick={() => {
+            setError(null);
+            setMessage(null);
+            setResetOk(null);
+            setBusyAction("status");
+            start(async () => {
+              try {
+                const data = await postJson(
+                  `/api/staff/members/${encodeURIComponent(staffId)}/status`,
+                  { status: disabled ? "active" : "disabled" },
+                );
+                setMessage(data.message || "Updated.");
+                window.location.reload();
+              } catch (err) {
+                setError(err instanceof Error ? err.message : "Could not update status.");
+                setBusyAction(null);
+              }
+            });
+          }}
+        >
+          {disabled ? "Re-enable" : "Disable"}
+        </button>
       </div>
 
-      {feedback ? (
-        <p className={`max-w-md text-right text-[11px] ${isError ? "text-danger" : "text-[#4E9A6A]"}`}>
-          {feedback}
-        </p>
+      {error ? <p className="max-w-md text-right text-[11px] text-danger">{error}</p> : null}
+      {message ? (
+        <p className="max-w-md text-right text-[11px] text-[#4E9A6A]">{message}</p>
+      ) : null}
+
+      {resetOk ? (
+        <div className="max-w-md rounded-chip border border-border bg-ground px-3 py-2 text-right text-[11px] text-secondary">
+          <p className="text-[#4E9A6A]">{resetOk.message}</p>
+          {resetOk.temporaryPassword ? (
+            <p className="mt-1">
+              Temp password:{" "}
+              <span className="font-mono text-ink">{resetOk.temporaryPassword}</span>
+            </p>
+          ) : null}
+          {!resetOk.emailSent ? (
+            <p className="mt-1 text-muted">Copy and send manually if needed.</p>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );

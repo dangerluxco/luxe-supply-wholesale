@@ -13,6 +13,13 @@ import { formField } from "@/lib/form";
 
 export const dynamic = "force-dynamic";
 
+function isAuthInfraError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err || "");
+  return /invalid_grant|invalid_rapt|Getting metadata|UNAUTHENTICATED|permission-denied|ECONNREFUSED|ENOTFOUND|unavailable/i.test(
+    msg,
+  );
+}
+
 export async function POST(request: Request) {
   const form = await request.formData();
   const username = (formField(form, "username") || formField(form, "email")).trim();
@@ -20,10 +27,15 @@ export async function POST(request: Request) {
   const cookieOpts = sessionCookieOptions(sessionMaxAgeFromForm(form));
 
   let auth: Awaited<ReturnType<typeof authenticateBuyer>> | null = null;
+  let firestoreDown = false;
   try {
     auth = await authenticateBuyer(username, password);
   } catch (err) {
-    console.warn("[api/buyer-login] Firestore unavailable:", err instanceof Error ? err.message : err);
+    firestoreDown = isAuthInfraError(err);
+    console.warn(
+      "[api/buyer-login] Firestore unavailable:",
+      err instanceof Error ? err.message : err,
+    );
   }
 
   if (auth?.ok) {
@@ -48,9 +60,13 @@ export async function POST(request: Request) {
       ? `&next=${encodeURIComponent(nextRaw)}`
       : "";
 
+  const message = firestoreDown
+    ? "Sign-in temporarily unavailable (server credentials). Try again in a moment, or ask an admin to refresh local Google auth."
+    : "Invalid username or password.";
+
   const res = NextResponse.redirect(
     new URL(
-      `/wholesale/sign-in?error=${encodeURIComponent("Invalid username or password.")}${nextQs}`,
+      `/wholesale/sign-in?error=${encodeURIComponent(message)}${nextQs}`,
       publicOrigin(request),
     ),
     303,

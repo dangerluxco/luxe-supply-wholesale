@@ -130,11 +130,17 @@ export default async function RegistrationDetailPage({
           </p>
           {app.reviewNote ? <p className="mt-2 text-ink">{app.reviewNote}</p> : null}
           {app.status === "approved" && app.temporaryPassword ? (
-            <p className="mt-2 text-[#4E9A6A]">
-              Buyer login created
-              {app.buyerId ? ` (id ${app.buyerId})` : ""}. Temp password stored on this
-              application record for staff reference.
-            </p>
+            <div className="mt-2 space-y-1 text-[#4E9A6A]">
+              <p>
+                Buyer login created
+                {app.buyerId ? ` (id ${app.buyerId})` : ""}.
+              </p>
+              <p>
+                Temporary password{" "}
+                <span className="font-mono text-ink">{app.temporaryPassword}</span>
+                {" — "}also emailed to the buyer when SendGrid is configured.
+              </p>
+            </div>
           ) : null}
         </div>
       )}

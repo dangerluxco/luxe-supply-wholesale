@@ -1,36 +1,60 @@
 "use client";
 
-import { useActionState } from "react";
+import { useState, useTransition } from "react";
 
 const fieldClass =
   "h-10 rounded-chip border border-border bg-ground px-3 text-[12.5px] text-ink outline-none focus:border-accent";
 const labelClass = "micro-badge text-[10px] tracking-[0.14em] text-muted";
 
-type InviteState = {
-  error?: string;
-  message?: string;
-  ok?: boolean;
-  email?: string;
-  temporaryPassword?: string;
-  emailSent?: boolean;
-};
-
-type InviteAction = (
-  prev: InviteState | undefined,
-  formData: FormData,
-) => Promise<InviteState>;
-
 /**
- * Server action is passed from the Server Component page so this client
- * module never imports a `"use server"` file (avoids soft-nav webpack stub collisions).
+ * Invite staff via fetch API — no `"use server"` props (soft-nav safe).
  */
-export function InviteStaffForm({ action: inviteAction }: { action: InviteAction }) {
-  const [state, action, pending] = useActionState(inviteAction, {} as InviteState);
+export function InviteStaffForm() {
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [ok, setOk] = useState<{
+    message: string;
+    temporaryPassword?: string;
+  } | null>(null);
 
   return (
     <form
-      action={action}
       className="mb-8 max-w-3xl space-y-4 rounded-card border border-border bg-surface p-6"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const form = e.currentTarget;
+        const fd = new FormData(form);
+        setError(null);
+        setOk(null);
+        start(async () => {
+          const res = await fetch("/api/staff/members/invite", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email: String(fd.get("email") || ""),
+              displayName: String(fd.get("displayName") || ""),
+              password: String(fd.get("password") || ""),
+              isAdmin: fd.get("isAdmin") === "on",
+              sendEmail: fd.get("sendEmail") === "on",
+            }),
+          });
+          const data = (await res.json().catch(() => ({}))) as {
+            error?: string;
+            message?: string;
+            temporaryPassword?: string;
+          };
+          if (!res.ok || data.error) {
+            setError(data.error || "Could not invite staff.");
+            return;
+          }
+          setOk({
+            message: data.message || "Staff created.",
+            temporaryPassword: data.temporaryPassword,
+          });
+          form.reset();
+        });
+      }}
     >
       <div className="micro-badge text-[10px] tracking-[0.14em] text-accent">INVITE STAFF</div>
       <p className="text-[12.5px] text-secondary">
@@ -63,14 +87,13 @@ export function InviteStaffForm({ action: inviteAction }: { action: InviteAction
         </div>
       </div>
 
-      {state?.error ? <p className="text-[12px] text-danger">{state.error}</p> : null}
-      {state?.ok ? (
+      {error ? <p className="text-[12px] text-danger">{error}</p> : null}
+      {ok ? (
         <p className="text-[12px] text-[#4E9A6A]">
-          {state.message}{" "}
-          {state.temporaryPassword ? (
+          {ok.message}{" "}
+          {ok.temporaryPassword ? (
             <>
-              Temporary password{" "}
-              <span className="font-mono">{state.temporaryPassword}</span>
+              Temporary password <span className="font-mono">{ok.temporaryPassword}</span>
             </>
           ) : null}
         </p>

@@ -1,4 +1,6 @@
 /** @type {import('next').NextConfig} */
+const isProd = process.env.NODE_ENV === "production";
+
 const nextConfig = {
   output: "standalone",
   eslint: { ignoreDuringBuilds: true },
@@ -17,17 +19,29 @@ const nextConfig = {
     ],
   },
   async headers() {
+    // HTML/RSC: never cache. Static chunks: immutable only in production
+    // (content-hashed filenames). In dev, long-lived immutable caching of
+    // `/_next/static/*` leaves stale webpack modules after `.next` wipes —
+    // which surfaces as "Cannot read properties of undefined (reading 'call')".
     return [
       {
         source: "/:path*",
         headers: [
-          { key: "Cache-Control", value: "private, no-cache, no-store, max-age=0, must-revalidate" },
+          {
+            key: "Cache-Control",
+            value: "private, no-cache, no-store, max-age=0, must-revalidate",
+          },
         ],
       },
       {
         source: "/_next/static/:path*",
         headers: [
-          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
+          {
+            key: "Cache-Control",
+            value: isProd
+              ? "public, max-age=31536000, immutable"
+              : "private, no-cache, no-store, max-age=0, must-revalidate",
+          },
         ],
       },
     ];

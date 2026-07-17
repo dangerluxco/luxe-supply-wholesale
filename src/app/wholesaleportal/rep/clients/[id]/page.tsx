@@ -6,9 +6,9 @@ import { loadActiveHoldsBySku } from "@/lib/firestore/holds";
 import { getActiveLotsForBuyer } from "@/lib/firestore/suggestedLots";
 import { EmptyState } from "@/components/EmptyState";
 import { ClientCartLimitsForm } from "@/components/ClientCartLimitsForm";
+import { ClientPasswordResetButton } from "@/components/ClientPasswordResetButton";
 import { PortalItemLine, PortalThumbnailTile } from "@/components/PortalItemLine";
 import { money, fullDate } from "@/lib/format";
-import { saveBuyerCartLimits } from "@/lib/actions/buyer-cart-limits";
 
 export const dynamic = "force-dynamic";
 
@@ -213,11 +213,16 @@ export default async function ClientDetailPage({
             <div className="micro-badge mb-3 text-[10px] tracking-[0.14em] text-accent">
               ACCOUNT
             </div>
-            <div className="space-y-2 text-[12.5px]">
+            <div className="mb-4 space-y-2 text-[12.5px]">
               <Row label="Created" value={fullDate(buyer.createdAt)} />
               <Row label="Last login" value={fullDate(buyer.lastLoginAt)} />
               <Row label="Status" value={buyer.status} />
             </div>
+            <ClientPasswordResetButton
+              buyerId={buyer.id}
+              buyerEmail={buyer.email}
+              disabled={buyer.status === "disabled"}
+            />
           </div>
 
           <div className="rounded-card border border-border bg-surface p-5">
@@ -225,7 +230,6 @@ export default async function ClientDetailPage({
               ORDER HOLD LIMITS
             </div>
             <ClientCartLimitsForm
-              action={saveBuyerCartLimits}
               buyerId={buyer.id}
               maxCartItems={buyer.maxCartItems}
               maxCartValue={buyer.maxCartValue}

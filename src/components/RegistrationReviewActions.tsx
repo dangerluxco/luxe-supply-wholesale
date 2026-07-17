@@ -1,14 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-import {
-  approveBuyerRegistration,
-  rejectBuyerRegistration,
-} from "@/lib/actions/registration";
 
+/** Approve/reject via fetch API — no `"use server"` (soft-nav safe). */
 export function RegistrationReviewActions({ applicationId }: { applicationId: string }) {
-  const router = useRouter();
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [credentials, setCredentials] = useState<{
@@ -20,30 +15,55 @@ export function RegistrationReviewActions({ applicationId }: { applicationId: st
   function onApprove() {
     setError(null);
     startTransition(async () => {
-      const res = await approveBuyerRegistration(applicationId, note);
-      if (res.error) {
-        setError(res.error);
+      const res = await fetch(
+        `/api/staff/applications/${encodeURIComponent(applicationId)}/approve`,
+        {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reviewNote: note }),
+        },
+      );
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        username?: string;
+        temporaryPassword?: string;
+      };
+      if (!res.ok || data.error) {
+        setError(data.error || "Could not approve.");
         return;
       }
-      if (res.username && res.temporaryPassword) {
+      if (data.username && data.temporaryPassword) {
         setCredentials({
-          username: res.username,
-          temporaryPassword: res.temporaryPassword,
+          username: data.username,
+          temporaryPassword: data.temporaryPassword,
         });
+        // Stay on page so staff can copy credentials; password is also on the
+        // application record after reload.
+        return;
       }
-      router.refresh();
+      window.location.reload();
     });
   }
 
   function onReject() {
     setError(null);
     startTransition(async () => {
-      const res = await rejectBuyerRegistration(applicationId, note);
-      if (res.error) {
-        setError(res.error);
+      const res = await fetch(
+        `/api/staff/applications/${encodeURIComponent(applicationId)}/reject`,
+        {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reviewNote: note }),
+        },
+      );
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok || data.error) {
+        setError(data.error || "Could not reject.");
         return;
       }
-      router.refresh();
+      window.location.reload();
     });
   }
 
@@ -64,13 +84,26 @@ export function RegistrationReviewActions({ applicationId }: { applicationId: st
 
       {error ? <p className="text-[12px] text-danger">{error}</p> : null}
       {credentials ? (
-        <p className="text-[12px] text-[#4E9A6A]">
-          Approved. Username <span className="font-mono">@{credentials.username}</span> · Temp
-          password <span className="font-mono">{credentials.temporaryPassword}</span>
-          {" — "}share these securely with the buyer.
-        </p>
+        <div className="space-y-2 rounded-chip border border-border bg-ground px-3 py-3 text-[12px] text-[#4E9A6A]">
+          <p>
+            Approved. Username <span className="font-mono text-ink">@{credentials.username}</span> ·
+            Temp password{" "}
+            <span className="font-mono text-ink">{credentials.temporaryPassword}</span>
+          </p>
+          <p className="text-secondary">
+            Login details were emailed to the buyer when SendGrid succeeded. Copy above if they
+            need them again — or use Generate new password on their client page.
+          </p>
+          <a
+            href={`/wholesaleportal/rep/applications/${applicationId}`}
+            className="inline-block text-[11px] uppercase tracking-[0.1em] text-muted hover:text-ink"
+          >
+            Refresh application →
+          </a>
+        </div>
       ) : null}
 
+      {!credentials ? (
       <div className="flex flex-wrap gap-3">
         <button
           type="button"
@@ -89,6 +122,7 @@ export function RegistrationReviewActions({ applicationId }: { applicationId: st
           Reject
         </button>
       </div>
+      ) : null}
     </div>
   );
 }

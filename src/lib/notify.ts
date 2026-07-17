@@ -1,11 +1,38 @@
 // Staff notification email for new order requests. Non-blocking by design —
 // callers should try/catch and never fail the submit if this throws or returns false.
-import { sendEmail, escapeHtml } from "@/lib/email";
+import { sendEmail, escapeHtml, isEmailConfigured } from "@/lib/email";
 import { listActiveStaffEmails } from "@/lib/firestore/staff";
 import { getNotifyEmails } from "@/lib/firestore/settings";
 import { money } from "@/lib/format";
 
-const STOREFRONT_ORIGIN = "https://photography-964f5.web.app";
+/** localhost/127.* never has a real TLS cert in dev — use http:// for those hosts. */
+function schemeFor(host: string): "http" | "https" {
+  return /^(localhost|127\.0\.0\.1)(:\d+)?$/.test(host) ? "http" : "https";
+}
+
+const BUYER_ORIGIN =
+  process.env.BUYER_ORIGIN ||
+  process.env.PUBLIC_ORIGIN ||
+  (process.env.PUBLIC_HOST
+    ? `${schemeFor(process.env.PUBLIC_HOST)}://${process.env.PUBLIC_HOST}`
+    : "https://wholesale.luxesupply.co");
+
+const STAFF_ORIGIN =
+  process.env.STAFF_ORIGIN ||
+  (process.env.PUBLIC_HOST
+    ? `${schemeFor(process.env.PUBLIC_HOST)}://${process.env.PUBLIC_HOST}`
+    : "https://wholesaleportal.luxesupply.co");
+
+/** @deprecated Prefer BUYER_ORIGIN / STAFF_ORIGIN — kept for any leftover call sites. */
+const STOREFRONT_ORIGIN = BUYER_ORIGIN;
+
+export function buyerStorefrontOrigin(): string {
+  return BUYER_ORIGIN.replace(/\/$/, "");
+}
+
+export function staffPortalOrigin(): string {
+  return STAFF_ORIGIN.replace(/\/$/, "");
+}
 
 export async function notifyStaffOfInvoiceRequest(opts: {
   quoteId: string;
@@ -84,7 +111,7 @@ export async function notifyStaffOfInvoiceRequest(opts: {
         )}`
       : ""
   }</p>
-  <p><a href="${STOREFRONT_ORIGIN}/wholesaleportal/rep/quotes/${opts.quoteId}">Open this order request</a> in the staff portal.</p>
+  <p><a href="${STAFF_ORIGIN}/wholesaleportal/rep/quotes/${opts.quoteId}">Open this order request</a> in the staff portal.</p>
   <p style="color:#666;font-size:13px;">Request ID: ${escapeHtml(opts.quoteId)}</p>
 </body></html>`;
 
@@ -128,7 +155,7 @@ export async function notifyStaffOfRegistrationRequest(opts: {
     ${opts.company ? `<strong>Company:</strong> ${escapeHtml(opts.company)}<br/>` : ""}
     ${opts.phone ? `<strong>Phone:</strong> ${escapeHtml(opts.phone)}<br/>` : ""}
   </p>
-  <p><a href="${STOREFRONT_ORIGIN}/wholesaleportal/rep/applications/${opts.applicationId}">Review application</a> in the staff portal — you can approve (creates a buyer login) or reject.</p>
+  <p><a href="${STAFF_ORIGIN}/wholesaleportal/rep/applications/${opts.applicationId}">Review application</a> in the staff portal — you can approve (creates a buyer login) or reject.</p>
 </body></html>`;
 
   const sent = await sendEmail({
@@ -140,12 +167,63 @@ export async function notifyStaffOfRegistrationRequest(opts: {
   return { sent, recipients };
 }
 
+/** Invite email for a new buyer storefront login. Non-blocking. */
+export async function sendBuyerInviteEmail(opts: {
+  email: string;
+  username: string;
+  temporaryPassword: string;
+}): Promise<boolean> {
+  const loginUrl = `${buyerStorefrontOrigin()}/wholesale/sign-in`;
+  const html = `<!DOCTYPE html>
+<html><body style="font-family:Segoe UI,Roboto,Helvetica,sans-serif;line-height:1.55;color:#333;max-width:640px;">
+  <p>You’ve been invited to the <strong>LuxeSupply wholesale storefront</strong>.</p>
+  <p>
+    <strong>Sign in:</strong> <a href="${loginUrl}">${escapeHtml(loginUrl)}</a><br/>
+    <strong>Username:</strong> ${escapeHtml(opts.username)}<br/>
+    <strong>Temporary password:</strong> ${escapeHtml(opts.temporaryPassword)}
+  </p>
+  <p>Sign in with this temporary password, then change it from your account settings if you’d like.</p>
+  <p style="color:#666;font-size:13px;">If you did not expect this invitation, you can ignore this email.</p>
+</body></html>`;
+
+  return sendEmail({
+    to: [opts.email],
+    subject: "Your LuxeSupply wholesale login",
+    html,
+  });
+}
+
+/** Staff-triggered buyer password reset (emails a temporary password). Non-blocking. */
+export async function sendBuyerPasswordResetEmail(opts: {
+  email: string;
+  username: string;
+  temporaryPassword: string;
+}): Promise<boolean> {
+  const loginUrl = `${buyerStorefrontOrigin()}/wholesale/sign-in`;
+  const html = `<!DOCTYPE html>
+<html><body style="font-family:Segoe UI,Roboto,Helvetica,sans-serif;line-height:1.55;color:#333;max-width:640px;">
+  <p>Your LuxeSupply wholesale storefront password was reset.</p>
+  <p>
+    <strong>Sign in:</strong> <a href="${loginUrl}">${escapeHtml(loginUrl)}</a><br/>
+    <strong>Username:</strong> ${escapeHtml(opts.username)}<br/>
+    <strong>Temporary password:</strong> ${escapeHtml(opts.temporaryPassword)}
+  </p>
+  <p>Sign in with this temporary password to continue shopping.</p>
+</body></html>`;
+
+  return sendEmail({
+    to: [opts.email],
+    subject: "Your LuxeSupply wholesale password was reset",
+    html,
+  });
+}
+
 /** Invite email for a new staff login. Non-blocking — callers should not fail if this returns false. */
 export async function sendStaffInviteEmail(opts: {
   email: string;
   temporaryPassword: string;
 }): Promise<boolean> {
-  const loginUrl = `${STOREFRONT_ORIGIN}/wholesaleportal/sign-in`;
+  const loginUrl = `${STAFF_ORIGIN}/wholesaleportal/sign-in`;
   const html = `<!DOCTYPE html>
 <html><body style="font-family:Segoe UI,Roboto,Helvetica,sans-serif;line-height:1.55;color:#333;max-width:640px;">
   <p>You’ve been invited to the <strong>LuxeSupply wholesale portal</strong> staff console.</p>
@@ -170,7 +248,7 @@ export async function sendStaffPasswordResetEmail(opts: {
   email: string;
   temporaryPassword: string;
 }): Promise<boolean> {
-  const loginUrl = `${STOREFRONT_ORIGIN}/wholesaleportal/sign-in`;
+  const loginUrl = `${STAFF_ORIGIN}/wholesaleportal/sign-in`;
   const html = `<!DOCTYPE html>
 <html><body style="font-family:Segoe UI,Roboto,Helvetica,sans-serif;line-height:1.55;color:#333;max-width:640px;">
   <p>Your wholesale portal staff password was reset.</p>
@@ -185,6 +263,36 @@ export async function sendStaffPasswordResetEmail(opts: {
   return sendEmail({
     to: [opts.email],
     subject: "Your wholesale portal staff password was reset",
+    html,
+  });
+}
+
+/**
+ * Self-service "forgot password" link email — shared by the buyer storefront and staff
+ * console. Sends a one-time reset link, not a temporary password (see sendStaffPasswordResetEmail
+ * for the admin-triggered temp-password flow).
+ */
+export async function sendPasswordResetLinkEmail(opts: {
+  email: string;
+  resetUrl: string;
+  isStaff: boolean;
+}): Promise<boolean> {
+  if (!isEmailConfigured()) {
+    // No SendGrid key locally — log the link so the flow is still testable in dev.
+    console.log(`[password-reset] SENDGRID_API_KEY not set. Reset link for ${opts.email}: ${opts.resetUrl}`);
+  }
+  const portalLabel = opts.isStaff ? "wholesale portal staff console" : "wholesale storefront";
+  const html = `<!DOCTYPE html>
+<html><body style="font-family:Segoe UI,Roboto,Helvetica,sans-serif;line-height:1.55;color:#333;max-width:640px;">
+  <p>We received a request to reset the password for your LuxeSupply ${portalLabel} account.</p>
+  <p><a href="${opts.resetUrl}" style="display:inline-block;padding:10px 20px;background:#16161a;color:#fff;text-decoration:none;border-radius:4px;">Reset your password</a></p>
+  <p style="color:#666;font-size:13px;">This link expires in 1 hour and can only be used once. If you didn't request this, you can safely ignore this email — your password will not change.</p>
+  <p style="color:#666;font-size:12px;">If the button doesn't work, copy and paste this link: ${escapeHtml(opts.resetUrl)}</p>
+</body></html>`;
+
+  return sendEmail({
+    to: [opts.email],
+    subject: "Reset your LuxeSupply password",
     html,
   });
 }

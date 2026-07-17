@@ -1,0 +1,180 @@
+{
+  "hosting": [
+    {
+      "site": "luxe-wholesale",
+      "public": "hosting-public",
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+      "redirects": [
+        {
+          "source": "/",
+          "destination": "/wholesale",
+          "type": 302
+        }
+      ],
+      "rewrites": [
+        {
+          "source": "/wholesaleportal",
+          "run": {
+            "serviceId": "luxe-wholesale-portal",
+            "region": "us-central1"
+          }
+        },
+        {
+          "source": "/wholesaleportal/**",
+          "run": {
+            "serviceId": "luxe-wholesale-portal",
+            "region": "us-central1"
+          }
+        },
+        {
+          "source": "/wholesale",
+          "run": {
+            "serviceId": "luxe-wholesale-portal",
+            "region": "us-central1"
+          }
+        },
+        {
+          "source": "/wholesale/**",
+          "run": {
+            "serviceId": "luxe-wholesale-portal",
+            "region": "us-central1"
+          }
+        },
+        {
+          "source": "/curation",
+          "run": {
+            "serviceId": "luxe-wholesale-portal",
+            "region": "us-central1"
+          }
+        },
+        {
+          "source": "/curation/**",
+          "run": {
+            "serviceId": "luxe-wholesale-portal",
+            "region": "us-central1"
+          }
+        },
+        {
+          "source": "/_next/**",
+          "run": {
+            "serviceId": "luxe-wholesale-portal",
+            "region": "us-central1"
+          }
+        },
+        {
+          "source": "/api",
+          "run": {
+            "serviceId": "luxe-wholesale-portal",
+            "region": "us-central1"
+          }
+        },
+        {
+          "source": "/api/**",
+          "run": {
+            "serviceId": "luxe-wholesale-portal",
+            "region": "us-central1"
+          }
+        }
+      ],
+      "headers": [
+        {
+          "source": "**",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "private, no-cache, no-store, max-age=0, must-revalidate"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "site": "luxe-wholesale-portal",
+      "public": "hosting-public-portal",
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+      "redirects": [
+        {
+          "source": "/",
+          "destination": "/wholesaleportal",
+          "type": 302
+        }
+      ],
+      "rewrites": [
+        {
+          "source": "/wholesaleportal",
+          "run": {
+            "serviceId": "luxe-wholesale-portal",
+            "region": "us-central1"
+          }
+        },
+        {
+          "source": "/wholesaleportal/**",
+          "run": {
+            "serviceId": "luxe-wholesale-portal",
+            "region": "us-central1"
+          }
+        },
+        {
+          "source": "/wholesale",
+          "run": {
+            "serviceId": "luxe-wholesale-portal",
+            "region": "us-central1"
+          }
+        },
+        {
+          "source": "/wholesale/**",
+          "run": {
+            "serviceId": "luxe-wholesale-portal",
+            "region": "us-central1"
+          }
+        },
+        {
+          "source": "/curation",
+          "run": {
+            "serviceId": "luxe-wholesale-portal",
+            "region": "us-central1"
+          }
+        },
+        {
+          "source": "/curation/**",
+          "run": {
+            "serviceId": "luxe-wholesale-portal",
+            "region": "us-central1"
+          }
+        },
+        {
+          "source": "/_next/**",
+          "run": {
+            "serviceId": "luxe-wholesale-portal",
+            "region": "us-central1"
+          }
+        },
+        {
+          "source": "/api",
+          "run": {
+            "serviceId": "luxe-wholesale-portal",
+            "region": "us-central1"
+          }
+        },
+        {
+          "source": "/api/**",
+          "run": {
+            "serviceId": "luxe-wholesale-portal",
+            "region": "us-central1"
+          }
+        }
+      ],
+      "headers": [
+        {
+          "source": "**",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "private, no-cache, no-store, max-age=0, must-revalidate"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,8 +1,6 @@
-import Link from "next/link";
 import { listBuyers } from "@/lib/firestore/buyers";
 import { EmptyState } from "@/components/EmptyState";
 import { InviteBuyerForm } from "@/components/InviteBuyerForm";
-import { inviteBuyer } from "@/lib/actions/invite-buyer";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +16,7 @@ export default async function ClientsPage() {
         </span>
       </div>
 
-      <InviteBuyerForm action={inviteBuyer} />
+      <InviteBuyerForm />
 
       {buyers.length === 0 ? (
         <EmptyState
@@ -35,7 +33,7 @@ export default async function ClientsPage() {
             <span className="text-center">Status</span>
           </div>
           {buyers.map((b) => (
-            <Link
+            <a
               key={b.id}
               href={`/wholesaleportal/rep/clients/${b.id}`}
               className="grid grid-cols-[1.2fr_1fr_1.2fr_1fr_100px] items-center border-b border-border/60 px-5 py-3.5 text-[12.5px] text-[#3A3934] transition last:border-b-0 hover:bg-ground"
@@ -49,7 +47,7 @@ export default async function ClientsPage() {
               <span className="text-center font-mono text-[11px] uppercase tracking-[0.08em] text-muted">
                 {b.status}
               </span>
-            </Link>
+            </a>
           ))}
         </div>
       )}

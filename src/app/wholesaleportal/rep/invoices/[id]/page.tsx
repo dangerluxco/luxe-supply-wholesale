@@ -6,8 +6,6 @@ import { InvoiceBadge, FulfillmentBadge } from "@/components/badges";
 import { InvoiceMarkPaidButton } from "@/components/InvoiceMarkPaidButton";
 import { InvoiceFulfillmentForm } from "@/components/InvoiceFulfillmentForm";
 import { PortalItemLine } from "@/components/PortalItemLine";
-import { markInvoicePaid } from "@/lib/actions/mark-invoice-paid";
-import { markInvoiceShippedAction } from "@/lib/actions/mark-invoice-shipped";
 
 export const dynamic = "force-dynamic";
 
@@ -98,10 +96,7 @@ export default async function StaffInvoiceDetailPage({
                 <Row label="Shipped" value={fullDate(invoice.shippedAt)} />
               </div>
             ) : (
-              <InvoiceFulfillmentForm
-                invoiceId={invoice.id}
-                action={markInvoiceShippedAction}
-              />
+              <InvoiceFulfillmentForm invoiceId={invoice.id} />
             )}
           </div>
         </div>
@@ -118,10 +113,7 @@ export default async function StaffInvoiceDetailPage({
               {invoice.paidAt ? <Row label="Paid" value={fullDate(invoice.paidAt)} /> : null}
               {status !== "PAID" ? (
                 <div className="pt-1">
-                  <InvoiceMarkPaidButton
-                    invoiceId={invoice.id}
-                    action={markInvoicePaid}
-                  />
+                  <InvoiceMarkPaidButton invoiceId={invoice.id} />
                 </div>
               ) : null}
             </div>

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 
 /**
  * Notes save via API — no `"use server"` imports (soft-nav safe).
@@ -13,7 +12,6 @@ export function QuoteNotesForm({
   quoteId: string;
   adminNotes: string;
 }) {
-  const router = useRouter();
   const [pending, start] = useTransition();
   const [value, setValue] = useState(adminNotes);
   const [message, setMessage] = useState<string | null>(null);
@@ -51,7 +49,6 @@ export function QuoteNotesForm({
                 return;
               }
               setMessage(data.message || "Notes saved.");
-              router.refresh();
             });
           }}
           className="h-9 rounded-chip bg-ink px-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-ground disabled:opacity-60"

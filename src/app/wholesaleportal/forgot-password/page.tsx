@@ -1,0 +1,24 @@
+import { Suspense } from "react";
+import { ClientOnly } from "@/components/ClientOnly";
+import ForgotPasswordForm from "./ForgotPasswordForm";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+function AuthLoading() {
+  return (
+    <div className="flex min-h-screen items-center justify-center text-[13px] text-muted">
+      Loading…
+    </div>
+  );
+}
+
+export default function StaffForgotPasswordPage() {
+  return (
+    <ClientOnly fallback={<AuthLoading />}>
+      <Suspense fallback={<AuthLoading />}>
+        <ForgotPasswordForm />
+      </Suspense>
+    </ClientOnly>
+  );
+}

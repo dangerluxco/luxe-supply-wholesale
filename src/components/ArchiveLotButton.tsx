@@ -1,11 +1,9 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useTransition } from "react";
-import { archiveSuggestedLotAction } from "@/lib/actions/archive-lot";
 
+/** Archive lot via fetch API — no `"use server"` (soft-nav safe). */
 export function ArchiveLotButton({ lotId }: { lotId: string }) {
-  const router = useRouter();
   const [pending, start] = useTransition();
   return (
     <button
@@ -13,8 +11,16 @@ export function ArchiveLotButton({ lotId }: { lotId: string }) {
       disabled={pending}
       onClick={() =>
         start(async () => {
-          await archiveSuggestedLotAction(lotId);
-          router.refresh();
+          const res = await fetch(
+            `/api/staff/bundles/${encodeURIComponent(lotId)}/archive`,
+            { method: "POST", credentials: "same-origin" },
+          );
+          if (!res.ok) {
+            const data = (await res.json().catch(() => ({}))) as { error?: string };
+            alert(data.error || "Could not archive lot.");
+            return;
+          }
+          window.location.reload();
         })
       }
       className="text-[11px] uppercase tracking-[0.1em] text-muted hover:text-danger disabled:opacity-50"

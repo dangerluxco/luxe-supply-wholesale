@@ -6,12 +6,6 @@ import { fullDate } from "@/lib/format";
 import { EmptyState } from "@/components/EmptyState";
 import { InviteStaffForm } from "@/components/InviteStaffForm";
 import { StaffMemberActions } from "@/components/StaffMemberActions";
-import { inviteStaff } from "@/lib/actions/invite-staff";
-import {
-  resetStaffPasswordAction,
-  setStaffAdmin,
-  setStaffStatus,
-} from "@/lib/actions/staff-admin";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +29,7 @@ export default async function StaffPage() {
         </span>
       </div>
 
-      <InviteStaffForm action={inviteStaff} />
+      <InviteStaffForm />
 
       {staff.length === 0 ? (
         <EmptyState
@@ -80,9 +74,6 @@ export default async function StaffPage() {
                   isAdmin={s.isAdmin}
                   status={s.status}
                   isSelf={isSelf}
-                  setAdminAction={setStaffAdmin}
-                  setStatusAction={setStaffStatus}
-                  resetPasswordAction={resetStaffPasswordAction}
                 />
               </div>
             );

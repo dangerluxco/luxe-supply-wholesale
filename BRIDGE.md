@@ -4,9 +4,21 @@ This app (`luxe-supply-wholesale/`) is the Luxe Supply wholesale **buyer + staff
 
 | Surface | Prod URL | Data |
 | --- | --- | --- |
-| Buyer storefront | https://photography-964f5.web.app/wholesale | Next → Firestore buyers/catalog/cart/quotes |
-| Staff portal | https://photography-964f5.web.app/wholesaleportal | Next → Firestore staff/quotes/clients/catalog |
-| Invoices / fulfillment / leads (reference extras) | Prisma when used | Not required for catalog SoT |
+| Buyer storefront | https://wholesale.luxesupply.co/ → `/wholesale` | Next → Firestore buyers/catalog/cart/quotes |
+| Staff portal | https://wholesaleportal.luxesupply.co/ → `/wholesaleportal` | Next → Firestore staff/quotes/clients/catalog |
+| Legacy Hosting paths (still work) | https://photography-964f5.web.app/wholesale[portal] | Same Cloud Run service |
+
+Custom domains live on **separate** Firebase Hosting sites (same Cloud Run backend):
+
+| Domain | Hosting site |
+| --- | --- |
+| `wholesale.luxesupply.co` | `luxe-wholesale` |
+| `wholesaleportal.luxesupply.co` | `luxe-wholesale-portal` |
+
+```bash
+cd luxe-supply-wholesale
+firebase deploy --only hosting
+```
 
 Firebase Hosting rewrites **both** `/wholesale/**` and `/wholesaleportal/**` to Cloud Run service `luxe-wholesale-portal`. Do **not** set `NEXT_BASE_PATH` — the app serves both route trees from one image.
 

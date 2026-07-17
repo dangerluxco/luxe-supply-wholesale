@@ -5,6 +5,7 @@ import { ROLE } from "@/lib/constants";
 import { listQuotes } from "@/lib/firestore/quotes";
 import { EmptyState } from "@/components/EmptyState";
 import { QuoteStatusSelect } from "@/components/QuoteStatusSelect";
+import { QuoteClaimControls } from "@/components/QuoteClaimControls";
 import { InfoTip } from "@/components/InfoTip";
 import { money } from "@/lib/format";
 
@@ -32,7 +33,6 @@ export default async function RepDashboard({
   const params = await searchParams;
   const status = String(params.status || "open").toLowerCase();
   const { quotes, openCount } = await listQuotes({ status, limit: 50 });
-  const me = (session.email || "").trim().toLowerCase();
 
   const pipeline = [
     { label: "Open", status: "open", href: "/wholesaleportal/rep?status=open" },
@@ -90,29 +90,23 @@ export default async function RepDashboard({
         />
       ) : (
         <div className="overflow-hidden rounded-card border border-border bg-surface">
-          <div className="grid grid-cols-[1.1fr_0.9fr_60px_80px_70px_120px_110px_90px] border-b border-border px-5 py-3 font-mono text-[10px] uppercase tracking-[0.12em] text-muted">
+          <div className="grid grid-cols-[1fr_0.85fr_52px_72px_60px_110px_minmax(180px,1.15fr)_72px] border-b border-border px-5 py-3 font-mono text-[10px] uppercase tracking-[0.12em] text-muted">
             <span>Customer</span>
             <span>Company / buyer</span>
             <span className="text-center">Items</span>
             <span className="text-right">Total</span>
             <span className="text-center">Waiting</span>
             <span>Status</span>
-            <span>Working</span>
+            <span>Assigned</span>
             <span className="text-right"> </span>
           </div>
           {quotes.map((q) => {
             const name = q.customerName || q.buyerDisplayName || q.customerEmail || "—";
             const href = `/wholesaleportal/rep/quotes/${q.id}`;
-            const claimedEmail = (q.claimedByEmail || "").trim().toLowerCase();
-            const workingLabel = !claimedEmail
-              ? "—"
-              : claimedEmail === me
-                ? "You"
-                : q.claimedByName || q.claimedByEmail || "Staff";
             return (
               <div
                 key={q.id}
-                className="grid grid-cols-[1.1fr_0.9fr_60px_80px_70px_120px_110px_90px] items-center border-b border-border/60 px-5 py-3.5 text-[12.5px] text-[#3A3934] transition last:border-b-0 hover:bg-ground/70"
+                className="grid grid-cols-[1fr_0.85fr_52px_72px_60px_110px_minmax(180px,1.15fr)_72px] items-center border-b border-border/60 px-5 py-3.5 text-[12.5px] text-[#3A3934] transition last:border-b-0 hover:bg-ground/70"
               >
                 <div className="min-w-0">
                   <div className="truncate font-semibold text-ink">{name}</div>
@@ -137,14 +131,13 @@ export default async function RepDashboard({
                   quoteId={q.id}
                   status={q.status}
                 />
-                <div
-                  className={`truncate text-[11.5px] ${
-                    claimedEmail === me ? "font-medium text-ink" : "text-secondary"
-                  }`}
-                  title={q.claimedByEmail || undefined}
-                >
-                  {workingLabel}
-                </div>
+                <QuoteClaimControls
+                  quoteId={q.id}
+                  claimedByEmail={q.claimedByEmail}
+                  claimedByName={q.claimedByName}
+                  currentStaffEmail={session.email}
+                  compact
+                />
                 <div className="text-right">
                   <a
                     href={href}

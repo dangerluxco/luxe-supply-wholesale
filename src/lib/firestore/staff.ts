@@ -351,6 +351,32 @@ export async function resetStaffPassword(
   };
 }
 
+/** Self-service password reset (via emailed token) — sets a new password directly, no admin/current-password check. */
+export async function setStaffPasswordForce(
+  id: string,
+  newPassword: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const targetId = String(id || "").trim();
+  if (!targetId) return { ok: false, error: "Staff id is required." };
+
+  const ref = getDb().collection("salesPortalStaff").doc(targetId);
+  const snap = await ref.get();
+  if (!snap.exists) return { ok: false, error: "Account not found." };
+
+  if (String(newPassword || "").length < 8) {
+    return { ok: false, error: "Password must be at least 8 characters." };
+  }
+
+  const { salt, hash } = hashPortalPassword(newPassword);
+  await ref.update({
+    passwordSalt: salt,
+    passwordHash: hash,
+    mustChangePassword: false,
+    updatedAt: new Date(),
+  });
+  return { ok: true };
+}
+
 export async function markStaffEmailSent(staffId: string): Promise<void> {
   const id = String(staffId || "").trim();
   if (!id) return;

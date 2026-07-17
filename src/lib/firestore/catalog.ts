@@ -692,6 +692,78 @@ export async function resolveCuratedDraftItems(
   return { items, unresolvedSkus };
 }
 
+/** One resolved row for the Curation share builder — richer than {@link CuratedCatalogItem} (full image set + condition). */
+export type CurationDraftItem = {
+  sku: string;
+  title: string;
+  brand: string;
+  condition: string;
+  imageUrl: string | null;
+  imageUrls: string[];
+  inDb: boolean;
+  cost: number | null;
+  price: number | null;
+};
+
+/**
+ * Resolve pasted SKUs for the Curation share builder. Same source chain as
+ * {@link resolveCuratedDraftItems} but keeps the full image set + condition
+ * for the buyer-facing card grid / lightbox.
+ */
+export async function resolveCurationItems(
+  skusRaw: string[],
+): Promise<{ items: CurationDraftItem[]; missing: string[] }> {
+  const seen = new Set<string>();
+  const cleanSkus: string[] = [];
+  for (const raw of skusRaw) {
+    const sku = String(raw || "").trim();
+    if (!sku) continue;
+    const key = sku.toUpperCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    cleanSkus.push(sku);
+  }
+  if (!cleanSkus.length) return { items: [], missing: [] };
+
+  const [uploadMap, iiqMap] = await Promise.all([
+    loadUploadGroupsBySku(cleanSkus),
+    loadIiqBySku(cleanSkus),
+  ]);
+  const askMap = await loadAskBySku(cleanSkus, uploaderEmailsFromGroups(uploadMap.values()));
+
+  const items: CurationDraftItem[] = cleanSkus.map((sku) => {
+    const group = uploadMap.get(sku) || null;
+    const iiq = iiqMap.get(sku) || null;
+    const ask = askMap.get(sku) || null;
+    const inDb = !!group || !!iiq;
+    const resolvedSku = group?.sku || sku;
+    const title = resolveTitle(group, iiq, ask, resolvedSku);
+    const brand = resolveBrand(group, iiq, ask);
+    const condition = String((iiq && (iiq.Condition || iiq.condition)) || "").trim();
+    const imageUrls = group?.imageUrls || [];
+    const iiqCost =
+      iiq && typeof iiq.cost === "number" && Number.isFinite(iiq.cost as number)
+        ? (iiq.cost as number)
+        : null;
+    const cost = group?.inventoryCost ?? iiqCost ?? null;
+    const price = defaultPriceFromCost(cost);
+    return {
+      sku: resolvedSku,
+      title: title || resolvedSku,
+      brand,
+      condition,
+      imageUrl: imageUrls[0] || null,
+      imageUrls,
+      inDb,
+      cost,
+      price,
+    };
+  });
+
+  const missing = items.filter((i) => !i.inDb).map((i) => i.sku);
+  return { items, missing };
+}
+
 /** Persist the reviewed curated catalog — overwrites any previously saved catalog and switches the live mode to `sku_list`. */
 export async function saveCuratedCatalog(input: {
   items: CuratedCatalogItem[];

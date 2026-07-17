@@ -39,20 +39,31 @@ export default async function StaffQuoteDetailPage({
         ‹ Back to order requests
       </a>
 
-      <div className="mb-6 mt-3 flex flex-wrap items-baseline gap-4">
-        <h1 className="flex items-center gap-2 text-[24px] font-semibold text-ink">
-          {quote.customerName || quote.buyerDisplayName || "Order request"}
-          <InfoTip label="Holds and sold status on this request">
-            Line items stay soft-held for the buyer until you invoice (sold + off store),
-            decline/close (holds released), remove a line (that SKU’s hold releases), or the
-            request times out after 7 days (holds released; suggested lots in the request
-            deactivate).
-          </InfoTip>
-        </h1>
-        <span className="font-mono text-[11px] text-muted">#{quote.id}</span>
-        <div className="flex-1" />
+      <div className="mb-6 mt-3 flex flex-wrap items-end gap-4">
+        <div className="min-w-0 flex-1">
+          <h1 className="flex items-center gap-2 text-[24px] font-semibold text-ink">
+            {quote.customerName || quote.buyerDisplayName || "Order request"}
+            <InfoTip label="Holds and sold status on this request">
+              Line items stay soft-held for the buyer until you invoice (sold + off store),
+              decline/close (holds released), remove a line (that SKU’s hold releases), or the
+              request times out after 7 days (holds released; suggested lots in the request
+              deactivate).
+            </InfoTip>
+          </h1>
+          <span className="font-mono text-[11px] text-muted">#{quote.id}</span>
+        </div>
         <div className="w-[160px]">
+          <div className="micro-badge mb-1.5 text-[10px] tracking-[0.14em] text-muted">STATUS</div>
           <QuoteStatusSelect quoteId={quote.id} status={quote.status} />
+        </div>
+        <div className="min-w-[220px] max-w-sm rounded-card border border-border bg-surface px-4 py-3">
+          <div className="micro-badge mb-2 text-[10px] tracking-[0.14em] text-accent">ASSIGNED</div>
+          <QuoteClaimControls
+            quoteId={quote.id}
+            claimedByEmail={quote.claimedByEmail}
+            claimedByName={quote.claimedByName}
+            currentStaffEmail={session.email}
+          />
         </div>
       </div>
 
@@ -92,21 +103,6 @@ export default async function StaffQuoteDetailPage({
         </div>
 
         <div className="space-y-6">
-          <div className="rounded-card border border-border bg-surface p-5">
-            <div className="micro-badge mb-3 text-[10px] tracking-[0.14em] text-accent">
-              WORKING ON
-            </div>
-            <QuoteClaimControls
-              quoteId={quote.id}
-              claimedByEmail={quote.claimedByEmail}
-              claimedByName={quote.claimedByName}
-              currentStaffEmail={session.email}
-            />
-            {quote.claimedAt ? (
-              <p className="mt-3 text-[11px] text-muted">Claimed {fullDate(quote.claimedAt)}</p>
-            ) : null}
-          </div>
-
           <div className="rounded-card border border-border bg-surface p-5">
             <div className="micro-badge mb-3 text-[10px] tracking-[0.14em] text-accent">
               INVOICE

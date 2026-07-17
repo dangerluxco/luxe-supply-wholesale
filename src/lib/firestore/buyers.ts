@@ -57,7 +57,7 @@ export function normalizeBuyerUsername(raw: string): string | null {
   return s;
 }
 
-function normalizeBuyerEmail(raw: string): string | null {
+export function normalizeBuyerEmail(raw: string): string | null {
   const e = String(raw || "")
     .trim()
     .toLowerCase()
@@ -209,45 +209,103 @@ export async function changeBuyerPassword(
   return { ok: true };
 }
 
-export async function authenticateBuyer(
-  usernameRaw: string,
-  password: string,
-): Promise<{ ok: true; buyer: PortalBuyer } | { ok: false; reason?: string }> {
-  const username = normalizeBuyerUsername(usernameRaw);
-  if (!username || !password) return { ok: false };
+/** Forgot-password lookup: matches on username or email, scoped to this org. */
+export async function findBuyerByIdentifier(identifierRaw: string): Promise<PortalBuyer | null> {
+  const identifier = String(identifierRaw || "").trim();
+  if (!identifier) return null;
 
   const org = await getLuxesupplyOrg();
   const db = getDb();
-  let snap;
-  try {
-    snap = await db
-      .collection("salesPortalBuyers")
-      .where("organizationId", "==", org.id)
-      .where("username", "==", username)
-      .limit(1)
-      .get();
-  } catch {
-    snap = await db.collection("salesPortalBuyers").where("username", "==", username).limit(5).get();
-  }
+  const username = normalizeBuyerUsername(identifier);
+  const email = normalizeBuyerEmail(identifier);
 
-  let match: QueryDocumentSnapshot | null = null;
-  for (const doc of snap.docs) {
-    const d = doc.data() || {};
-    if (d.organizationId === org.id || d.orgSlug === WHOLESALE_ORG_SLUG || !d.orgSlug) {
-      match = doc;
-      break;
+  if (username) {
+    let snap;
+    try {
+      snap = await db
+        .collection("salesPortalBuyers")
+        .where("organizationId", "==", org.id)
+        .where("username", "==", username)
+        .limit(1)
+        .get();
+    } catch {
+      snap = await db.collection("salesPortalBuyers").where("username", "==", username).limit(5).get();
+    }
+    for (const doc of snap.docs) {
+      const d = doc.data() || {};
+      if (d.organizationId === org.id || d.orgSlug === WHOLESALE_ORG_SLUG || !d.orgSlug) {
+        return serializeBuyer(doc.id, d);
+      }
     }
   }
-  if (!match) return { ok: false };
 
-  const d = match.data() || {};
+  if (email) {
+    let snap;
+    try {
+      snap = await db
+        .collection("salesPortalBuyers")
+        .where("organizationId", "==", org.id)
+        .where("email", "==", email)
+        .limit(1)
+        .get();
+    } catch {
+      snap = await db.collection("salesPortalBuyers").where("email", "==", email).limit(5).get();
+    }
+    for (const doc of snap.docs) {
+      const d = doc.data() || {};
+      if (d.organizationId === org.id || d.orgSlug === WHOLESALE_ORG_SLUG || !d.orgSlug) {
+        return serializeBuyer(doc.id, d);
+      }
+    }
+  }
+
+  return null;
+}
+
+/** Password-reset flow: sets a new password without requiring the old one (token already verified caller-side). */
+export async function setBuyerPasswordForce(
+  id: string,
+  newPassword: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ref = getDb().collection("salesPortalBuyers").doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) return { ok: false, error: "Account not found." };
+
+  if (String(newPassword || "").length < 6) {
+    return { ok: false, error: "New password must be at least 6 characters." };
+  }
+
+  const { salt, hash } = hashPortalPassword(newPassword);
+  await ref.update({
+    passwordSalt: salt,
+    passwordHash: hash,
+    mustChangePassword: false,
+    updatedAt: new Date(),
+  });
+  return { ok: true };
+}
+
+export async function authenticateBuyer(
+  identifierRaw: string,
+  password: string,
+): Promise<{ ok: true; buyer: PortalBuyer } | { ok: false; reason?: string }> {
+  if (!password) return { ok: false };
+
+  // Accept username or email (same rules as forgot-password lookup).
+  const buyer = await findBuyerByIdentifier(identifierRaw);
+  if (!buyer) return { ok: false };
+
+  const snap = await getDb().collection("salesPortalBuyers").doc(buyer.id).get();
+  if (!snap.exists) return { ok: false };
+  const d = snap.data() || {};
+
   if (d.status === "disabled") return { ok: false, reason: "disabled" };
   if (!verifyPortalPassword(password, d.passwordSalt, d.passwordHash)) {
     return { ok: false };
   }
 
   try {
-    await match.ref.update({
+    await snap.ref.update({
       lastLoginAt: new Date(),
       status: d.status === "invited" ? "active" : d.status || "active",
     });
@@ -255,7 +313,7 @@ export async function authenticateBuyer(
     /* ignore */
   }
 
-  return { ok: true, buyer: serializeBuyer(match.id, d) };
+  return { ok: true, buyer: serializeBuyer(snap.id, d) };
 }
 
 export async function listBuyers(): Promise<PortalBuyer[]> {
@@ -356,6 +414,58 @@ export async function createBuyer(opts: {
     buyer: serializeBuyer(saved.id, saved.data() || {}),
     temporaryPassword: password,
   };
+}
+
+/** Staff: reset buyer password (scrypt salt/hash, mustChangePassword). Returns temp password. */
+export async function resetBuyerPassword(
+  buyerId: string,
+  opts: { password?: string; updatedBy: string },
+): Promise<{ buyer: PortalBuyer; temporaryPassword: string }> {
+  const id = String(buyerId || "").trim();
+  if (!id) throw new Error("Buyer id is required.");
+
+  const ref = getDb().collection("salesPortalBuyers").doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) throw new Error("Buyer not found.");
+
+  const prev = snap.data() || {};
+  if (prev.orgSlug && prev.orgSlug !== WHOLESALE_ORG_SLUG) {
+    throw new Error("Not allowed.");
+  }
+  if (prev.status === "disabled") {
+    throw new Error("Re-enable the account before resetting the password.");
+  }
+
+  const password = String(opts.password || "").trim() || generateTempPassword();
+  if (password.length < 6) throw new Error("Password must be at least 6 characters.");
+
+  const { salt, hash } = hashPortalPassword(password);
+  await ref.update({
+    passwordSalt: salt,
+    passwordHash: hash,
+    mustChangePassword: true,
+    updatedAt: new Date(),
+    updatedBy: opts.updatedBy,
+  });
+
+  const saved = await ref.get();
+  return {
+    buyer: serializeBuyer(saved.id, saved.data() || {}),
+    temporaryPassword: password,
+  };
+}
+
+export async function markBuyerEmailSent(buyerId: string): Promise<void> {
+  const id = String(buyerId || "").trim();
+  if (!id) return;
+  try {
+    await getDb().collection("salesPortalBuyers").doc(id).update({
+      emailSent: true,
+      emailSentAt: new Date(),
+    });
+  } catch {
+    /* ignore */
+  }
 }
 
 export type CartLotItem = {

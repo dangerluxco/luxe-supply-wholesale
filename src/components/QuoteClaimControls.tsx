@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 
 type StaffOption = { email: string; displayName: string };
 
@@ -23,7 +22,6 @@ export function QuoteClaimControls({
   currentStaffEmail: string;
   compact?: boolean;
 }) {
-  const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [staffOptions, setStaffOptions] = useState<StaffOption[]>([]);
@@ -56,7 +54,7 @@ export function QuoteClaimControls({
     start(async () => {
       try {
         await post(path, body);
-        router.refresh();
+        window.location.reload();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Request failed.");
       }
@@ -75,9 +73,9 @@ export function QuoteClaimControls({
   }
 
   useEffect(() => {
-    if (!compact) loadStaffOptions();
+    loadStaffOptions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [compact]);
+  }, []);
 
   return (
     <div className={compact ? "flex flex-col items-end gap-1" : "space-y-3"}>
@@ -150,28 +148,29 @@ export function QuoteClaimControls({
         ) : null}
       </div>
 
-      {!compact ? (
-        <div className="flex items-center gap-2 pt-1">
-          <select
-            disabled={pending}
-            value=""
-            onFocus={loadStaffOptions}
-            onChange={(e) => {
-              const email = e.target.value;
-              if (!email) return;
-              run(`/api/staff/quotes/${quoteId}/assign`, { staffEmail: email });
-            }}
-            className="h-8 flex-1 rounded-chip border border-border bg-ground px-2 text-[11px] text-secondary outline-none focus:border-accent disabled:opacity-60"
-          >
-            <option value="">Assign to…</option>
-            {staffOptions.map((s) => (
-              <option key={s.email} value={s.email}>
-                {s.displayName}
-              </option>
-            ))}
-          </select>
-        </div>
-      ) : null}
+      <div className={`flex items-center gap-2 ${compact ? "" : "pt-1"}`}>
+        <select
+          disabled={pending}
+          value=""
+          onFocus={loadStaffOptions}
+          onChange={(e) => {
+            const email = e.target.value;
+            if (!email) return;
+            run(`/api/staff/quotes/${quoteId}/assign`, { staffEmail: email });
+          }}
+          className={`h-8 rounded-chip border border-border bg-ground px-2 text-[11px] text-secondary outline-none focus:border-accent disabled:opacity-60 ${
+            compact ? "w-full min-w-[140px]" : "flex-1"
+          }`}
+          aria-label="Assign staff"
+        >
+          <option value="">Assign to…</option>
+          {staffOptions.map((s) => (
+            <option key={s.email} value={s.email}>
+              {s.displayName}
+            </option>
+          ))}
+        </select>
+      </div>
 
       {error ? <p className="text-[12px] text-danger">{error}</p> : null}
     </div>

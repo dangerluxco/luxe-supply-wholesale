@@ -1,36 +1,52 @@
 "use client";
 
-import { useActionState } from "react";
+import { useState, useTransition } from "react";
 import { CARRIERS } from "@/lib/constants";
 
 const fieldClass =
   "h-9 rounded-chip border border-border bg-ground px-3 text-[12.5px] text-ink outline-none focus:border-accent";
 const labelClass = "micro-badge text-[10px] tracking-[0.14em] text-muted";
 
-type ShippedAction = (
-  prev: { error?: string; message?: string } | undefined,
-  formData: FormData,
-) => Promise<{ error?: string; message?: string; ok?: boolean }>;
-
-/**
- * Server action is passed from the Server Component page so this client
- * module never imports a `"use server"` file (avoids soft-nav webpack stub collisions).
- */
-export function InvoiceFulfillmentForm({
-  invoiceId,
-  action: shippedAction,
-}: {
-  invoiceId: string;
-  action: ShippedAction;
-}) {
-  const [state, action, pending] = useActionState(shippedAction, {} as {
-    error?: string;
-    message?: string;
-  });
+/** Mark shipped via fetch API — no `"use server"` (soft-nav safe). */
+export function InvoiceFulfillmentForm({ invoiceId }: { invoiceId: string }) {
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
   return (
-    <form action={action} className="space-y-3">
-      <input type="hidden" name="invoiceId" value={invoiceId} />
+    <form
+      className="space-y-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const fd = new FormData(e.currentTarget);
+        setError(null);
+        setMessage(null);
+        start(async () => {
+          const res = await fetch(
+            `/api/staff/invoices/${encodeURIComponent(invoiceId)}/shipped`,
+            {
+              method: "POST",
+              credentials: "same-origin",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                carrier: String(fd.get("carrier") || ""),
+                trackingNumber: String(fd.get("trackingNumber") || ""),
+              }),
+            },
+          );
+          const data = (await res.json().catch(() => ({}))) as {
+            error?: string;
+            message?: string;
+          };
+          if (!res.ok || data.error) {
+            setError(data.error || "Could not mark shipped.");
+            return;
+          }
+          setMessage(data.message || "Marked shipped.");
+          window.location.reload();
+        });
+      }}
+    >
       <label className="flex flex-col gap-1.5">
         <span className={labelClass}>CARRIER</span>
         <select name="carrier" required defaultValue="" className={fieldClass}>
@@ -49,8 +65,8 @@ export function InvoiceFulfillmentForm({
         <input name="trackingNumber" className={`${fieldClass} font-mono`} />
       </label>
 
-      {state?.error ? <p className="text-[12px] text-danger">{state.error}</p> : null}
-      {state?.message ? <p className="text-[12px] text-[#4E9A6A]">{state.message}</p> : null}
+      {error ? <p className="text-[12px] text-danger">{error}</p> : null}
+      {message ? <p className="text-[12px] text-[#4E9A6A]">{message}</p> : null}
 
       <button
         type="submit"

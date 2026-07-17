@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { PortalItemLine } from "@/components/PortalItemLine";
 import { money } from "@/lib/format";
 
@@ -68,7 +67,6 @@ export function QuoteItemsEditor({
   quoteId: string;
   items: Array<Record<string, unknown>>;
 }) {
-  const router = useRouter();
   const initial = useMemo(() => toEditable(items), [items]);
   const [rows, setRows] = useState<EditableItem[]>(initial);
   const [savedRows, setSavedRows] = useState<EditableItem[]>(initial);
@@ -116,7 +114,7 @@ export function QuoteItemsEditor({
       }
       setSavedRows(rows);
       setMessage(data.message || "Order request updated.");
-      router.refresh();
+      window.location.reload();
     });
   }
 

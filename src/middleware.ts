@@ -12,6 +12,8 @@ function isPublicBuyerPath(pathname: string): boolean {
   if (pathname.startsWith("/wholesale/sign-in")) return true;
   if (pathname.startsWith("/wholesale/register")) return true;
   if (pathname.startsWith("/wholesale/product/")) return true;
+  if (pathname.startsWith("/wholesale/forgot-password")) return true;
+  if (pathname.startsWith("/wholesale/reset-password")) return true;
   return false;
 }
 
@@ -21,6 +23,8 @@ export function middleware(req: NextRequest) {
   if (
     pathname.startsWith("/wholesaleportal/sign-in") ||
     pathname.startsWith("/wholesaleportal/login") ||
+    pathname.startsWith("/wholesaleportal/forgot-password") ||
+    pathname.startsWith("/wholesaleportal/reset-password") ||
     pathname.startsWith("/api/")
   ) {
     return NextResponse.next();

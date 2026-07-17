@@ -1,12 +1,24 @@
 import { Suspense } from "react";
+import { ClientOnly } from "@/components/ClientOnly";
 import BuyerLoginForm from "./BuyerLoginForm";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+function AuthLoading() {
+  return (
+    <div className="flex min-h-screen items-center justify-center text-[13px] text-muted">
+      Loading…
+    </div>
+  );
+}
 
 export default function BuyerSignInPage() {
   return (
-    <Suspense fallback={<div className="flex min-h-screen items-center justify-center text-[13px] text-muted">Loading…</div>}>
-      <BuyerLoginForm />
-    </Suspense>
+    <ClientOnly fallback={<AuthLoading />}>
+      <Suspense fallback={<AuthLoading />}>
+        <BuyerLoginForm />
+      </Suspense>
+    </ClientOnly>
   );
 }

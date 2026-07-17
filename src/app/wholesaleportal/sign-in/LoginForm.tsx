@@ -11,6 +11,7 @@ const EMAIL_KEY = "luxe-wholesale-staff-email";
 export default function LoginForm() {
   const params = useSearchParams();
   const error = params.get("error") || "";
+  const ok = params.get("ok") || "";
   const [pending, setPending] = useState(false);
   const [email, setEmail] = useState(isDev ? "dan@luxesupply.co" : "");
   const [password, setPassword] = useState(isDev ? "Gmoney2026" : "");
@@ -92,6 +93,11 @@ export default function LoginForm() {
               className="h-10 rounded-chip border border-border bg-ground px-3 font-mono text-[12.5px] text-ink outline-none focus:border-accent"
             />
           </label>
+          <p className="text-right text-[12.5px]">
+            <a href="/wholesaleportal/forgot-password" className="text-accent underline">
+              Forgot password?
+            </a>
+          </p>
           <label className="flex cursor-pointer items-center gap-2 text-[12.5px] text-secondary">
             <input
               type="checkbox"
@@ -103,6 +109,11 @@ export default function LoginForm() {
             />
             Remember me for 30 days
           </label>
+          {ok ? (
+            <div className="rounded-chip border border-border bg-ground px-3 py-2.5 text-[12px] text-secondary">
+              {ok}
+            </div>
+          ) : null}
           {error ? (
             <div className="flex items-center gap-2 text-[12px] text-danger">
               <span className="flex h-4 w-4 items-center justify-center rounded-full border border-danger text-[9px]">!</span>

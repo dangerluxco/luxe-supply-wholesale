@@ -1,10 +1,14 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { clsx } from "@/lib/clsx";
 import type { RepNavItem } from "@/lib/rep-nav";
 
+/**
+ * Staff top nav uses plain <a> hard navigations (not next/link soft-nav).
+ * Soft-nav between pages that still embed server-action stubs can throw
+ * webpack "reading 'call'" in Next 15 — hard nav avoids that entirely.
+ */
 export function RepTopbar({
   user,
   nav,
@@ -23,18 +27,18 @@ export function RepTopbar({
   }
 
   return (
-    <header className="flex h-16 items-center gap-9 border-b border-white/10 bg-ink px-10">
-      <Link href="/wholesaleportal/rep" className="flex items-center gap-2.5">
+    <header className="sticky top-0 z-50 flex h-16 items-center gap-9 border-b border-white/10 bg-ink/95 px-10 shadow-[0_12px_32px_-16px_rgba(0,0,0,0.55)] backdrop-blur-md">
+      <a href="/wholesaleportal/rep" className="flex items-center gap-2.5">
         <span className="font-sans text-[16px] font-semibold tracking-[0.08em] text-ground">
           LUXE SUPPLY<span className="text-accent">*</span>
         </span>
         <span className="micro-badge rounded-full border border-accent/40 px-2 py-1 text-[9px] tracking-[0.14em] text-accent">
           {isManager ? "MANAGER" : "REP CONSOLE"}
         </span>
-      </Link>
+      </a>
       <nav className="flex gap-6 text-[12px] text-white/55">
         {nav.map((n) => (
-          <Link
+          <a
             key={n.href}
             href={n.href}
             className={clsx(
@@ -45,7 +49,7 @@ export function RepTopbar({
             )}
           >
             {n.label}
-          </Link>
+          </a>
         ))}
       </nav>
       <div className="flex-1" />

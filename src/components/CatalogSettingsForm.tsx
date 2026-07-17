@@ -1,13 +1,13 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import {
-  buildCuratedCatalogDraft,
-  saveCuratedCatalogAction,
-} from "@/lib/actions/catalog-settings";
 import { money } from "@/lib/format";
 import { portalDisplayTitle, portalShowSkuLine } from "@/components/PortalItemLine";
 import { Placeholder } from "@/components/Placeholder";
+
+/**
+ * Catalog edits via fetch APIs — no `"use server"` imports (soft-nav safe).
+ */
 
 type CuratedCatalogItem = {
   sku: string;
@@ -125,12 +125,21 @@ export function CatalogSettingsForm({
     setError(null);
     setMessage(null);
     start(async () => {
-      const res = await buildCuratedCatalogDraft(batchText);
-      if (!res || "error" in res) {
-        setError(res?.error || "Could not resolve SKUs.");
+      const res = await fetch("/api/staff/catalog/resolve", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ skusText: batchText }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        items?: CuratedCatalogItem[];
+      };
+      if (!res.ok || data.error || !data.items) {
+        setError(data.error || "Could not resolve SKUs.");
         return;
       }
-      const merged = mergeCatalogItems(draft.items, res.items);
+      const merged = mergeCatalogItems(draft.items, data.items);
       setDraft({ items: merged.items });
       setBatchText("");
       setMessage(
@@ -171,14 +180,23 @@ export function CatalogSettingsForm({
     setMessage(null);
     const unresolvedSkus = draft.items.filter((i) => !i.inDb).map((i) => i.sku);
     start(async () => {
-      const res = await saveCuratedCatalogAction(draft.items, unresolvedSkus);
-      if (res?.error) {
-        setError(res.error);
+      const res = await fetch("/api/staff/catalog/save", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: draft.items, unresolvedSkus }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        message?: string;
+      };
+      if (!res.ok || data.error) {
+        setError(data.error || "Could not save curated catalog.");
         return;
       }
       const now = new Date().toISOString();
       setCurated({ items: draft.items, unresolvedSkus, updatedAt: now, updatedBy: "you" });
-      setMessage(res?.message || "Curated catalog saved.");
+      setMessage(data.message || "Curated catalog saved.");
     });
   }
 

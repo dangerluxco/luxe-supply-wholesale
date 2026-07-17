@@ -1,6 +1,6 @@
 // Minimal SendGrid REST client (no SDK dependency) — same provider as the legacy
 // Cloud Functions (functions/salesPortal.js uses @sendgrid/mail with SENDGRID_API_KEY).
-// Requires env var SENDGRID_API_KEY; optional SENDGRID_FROM_EMAIL (default info@itemiq.ai).
+// Requires env var SENDGRID_API_KEY; optional SENDGRID_FROM_EMAIL (default info@luxesupply.co).
 // If unset, sendEmail() is a no-op that returns false — callers must not block on it.
 
 export function escapeHtml(s: unknown): string {
@@ -26,7 +26,7 @@ export async function sendEmail(opts: {
   const to = [...new Set(opts.to.map((e) => e.trim().toLowerCase()).filter(Boolean))];
   if (!apiKey || !to.length) return false;
 
-  const from = opts.from || process.env.SENDGRID_FROM_EMAIL || "info@itemiq.ai";
+  const from = opts.from || process.env.SENDGRID_FROM_EMAIL || "info@luxesupply.co";
 
   try {
     const res = await fetch("https://api.sendgrid.com/v3/mail/send", {

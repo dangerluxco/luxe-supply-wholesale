@@ -17,6 +17,13 @@ function loginRedirect(path: string, request: Request) {
   return NextResponse.redirect(new URL(path, publicOrigin(request)), 303);
 }
 
+function isAuthInfraError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err || "");
+  return /invalid_grant|invalid_rapt|Getting metadata|UNAUTHENTICATED|permission-denied|ECONNREFUSED|ENOTFOUND|unavailable/i.test(
+    msg,
+  );
+}
+
 /** GET should never stay on /api/login — send staff to the sign-in page. */
 export async function GET(request: Request) {
   return loginRedirect("/wholesaleportal/sign-in", request);
@@ -29,10 +36,15 @@ export async function POST(request: Request) {
   const cookieOpts = sessionCookieOptions(sessionMaxAgeFromForm(form));
 
   let staffOk: Awaited<ReturnType<typeof authenticateStaff>> | null = null;
+  let firestoreDown = false;
   try {
     staffOk = await authenticateStaff(email, password);
   } catch (err) {
-    console.warn("[api/login] Firestore staff auth unavailable:", err instanceof Error ? err.message : err);
+    firestoreDown = isAuthInfraError(err);
+    console.warn(
+      "[api/login] Firestore staff auth unavailable:",
+      err instanceof Error ? err.message : err,
+    );
   }
 
   if (staffOk?.ok) {
@@ -63,9 +75,13 @@ export async function POST(request: Request) {
     console.warn("[api/login] Prisma fallback unavailable:", err instanceof Error ? err.message : err);
   }
 
+  const message = firestoreDown
+    ? "Sign-in temporarily unavailable (server credentials). Try again in a moment, or ask an admin to refresh local Google auth."
+    : "Invalid email or password.";
+
   const res = NextResponse.redirect(
     new URL(
-      `/wholesaleportal/sign-in?error=${encodeURIComponent("Invalid email or password.")}`,
+      `/wholesaleportal/sign-in?error=${encodeURIComponent(message)}`,
       publicOrigin(request),
     ),
     303,

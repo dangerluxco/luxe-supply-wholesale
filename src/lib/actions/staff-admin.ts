@@ -3,12 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/auth";
 import { ROLE } from "@/lib/constants";
-import {
-  markStaffEmailSent,
-  resetStaffPassword,
-  updateStaff,
-} from "@/lib/firestore/staff";
-import { sendStaffPasswordResetEmail } from "@/lib/notify";
+import { updateStaff } from "@/lib/firestore/staff";
 
 function requireAdmin() {
   return getSession().then((session) => {
@@ -79,62 +74,5 @@ export async function setStaffStatus(
     };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Could not update status." };
-  }
-}
-
-export async function resetStaffPasswordAction(
-  _prev:
-    | {
-        error?: string;
-        message?: string;
-        ok?: boolean;
-        temporaryPassword?: string;
-        emailSent?: boolean;
-      }
-    | undefined,
-  formData: FormData,
-) {
-  const session = await requireAdmin();
-  if (!session) return { error: "Admin session required." };
-
-  const staffId = String(formData.get("staffId") || "").trim();
-  if (!staffId) return { error: "Missing staff id." };
-
-  const sendEmailWanted =
-    formData.get("sendEmail") !== "false" && formData.get("sendEmail") !== "off";
-
-  try {
-    const { staff, temporaryPassword } = await resetStaffPassword(staffId, {
-      updatedBy: session.email,
-    });
-
-    let emailSent = false;
-    if (sendEmailWanted && staff.email) {
-      try {
-        emailSent = await sendStaffPasswordResetEmail({
-          email: staff.email,
-          temporaryPassword,
-        });
-        if (emailSent) await markStaffEmailSent(staff.id);
-      } catch (err) {
-        console.warn(
-          "[resetStaffPassword] email failed:",
-          err instanceof Error ? err.message : err,
-        );
-      }
-    }
-
-    revalidatePath("/wholesaleportal/rep/staff");
-    let message = emailSent
-      ? "Password reset email sent."
-      : "Password reset (email not sent).";
-    return {
-      ok: true,
-      message,
-      temporaryPassword,
-      emailSent,
-    };
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : "Could not reset password." };
   }
 }

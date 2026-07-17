@@ -11,6 +11,7 @@ const USERNAME_KEY = "luxe-wholesale-buyer-username";
 export default function BuyerLoginForm() {
   const params = useSearchParams();
   const error = params.get("error") || "";
+  const ok = params.get("ok") || "";
   const next = params.get("next") || "";
   const [pending, setPending] = useState(false);
   const [username, setUsername] = useState(isDev ? "howcouldyouforget" : "");
@@ -42,7 +43,7 @@ export default function BuyerLoginForm() {
           Buyer storefront
         </h1>
         <p className="mt-1 text-[13px] text-secondary">
-          Sign in with your LuxeSupply wholesale client username and password.
+          Sign in with your LuxeSupply wholesale client username or email and password.
         </p>
 
         <form
@@ -67,7 +68,9 @@ export default function BuyerLoginForm() {
         >
           {next ? <input type="hidden" name="next" value={next} /> : null}
           <label className="flex flex-col gap-1.5">
-            <span className="micro-badge text-[10px] tracking-[0.14em] text-accent">USERNAME</span>
+            <span className="micro-badge text-[10px] tracking-[0.14em] text-accent">
+              USERNAME OR EMAIL
+            </span>
             <input
               name="username"
               type="text"
@@ -94,6 +97,11 @@ export default function BuyerLoginForm() {
               className="h-10 rounded-chip border border-border bg-ground px-3 font-mono text-[12.5px] text-ink outline-none focus:border-accent"
             />
           </label>
+          <p className="text-right text-[12.5px]">
+            <a href="/wholesale/forgot-password" className="text-accent underline">
+              Forgot password?
+            </a>
+          </p>
           <label className="flex cursor-pointer items-center gap-2 text-[12.5px] text-secondary">
             <input
               type="checkbox"
@@ -105,6 +113,11 @@ export default function BuyerLoginForm() {
             />
             Remember me for 30 days
           </label>
+          {ok ? (
+            <div className="rounded-chip border border-border bg-ground px-3 py-2.5 text-[12px] text-secondary">
+              {ok}
+            </div>
+          ) : null}
           {error ? (
             <div className="flex items-center gap-2 text-[12px] text-danger">
               <span className="flex h-4 w-4 items-center justify-center rounded-full border border-danger text-[9px]">!</span>
