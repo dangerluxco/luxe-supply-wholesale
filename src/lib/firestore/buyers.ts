@@ -340,6 +340,20 @@ export async function listBuyers(): Promise<PortalBuyer[]> {
     .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
 }
 
+/** Staff-side: find buyers matching a free-text query (name/username/email/company). */
+export async function searchBuyers(queryRaw: string, limit = 20): Promise<PortalBuyer[]> {
+  const q = String(queryRaw || "").trim().toLowerCase();
+  if (!q) return [];
+  const all = await listBuyers();
+  return all
+    .filter((b) =>
+      [b.displayName, b.username, b.email, b.company].some((field) =>
+        field.toLowerCase().includes(q),
+      ),
+    )
+    .slice(0, limit);
+}
+
 /** Staff-side invite: creates a storefront login in the same buyers collection auth reads from. */
 export async function createBuyer(opts: {
   email: string;

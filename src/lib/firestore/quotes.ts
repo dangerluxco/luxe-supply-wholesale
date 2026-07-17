@@ -1,5 +1,5 @@
 import type { Query } from "firebase-admin/firestore";
-import { getDb, toIso } from "./admin";
+import { getDb, toIso, WHOLESALE_ORG_SLUG } from "./admin";
 import { getLuxesupplyOrg } from "./staff";
 import { INVOICE_REQUEST_TIMEOUT_DAYS } from "@/lib/constants";
 import { releaseAllHoldsForQuote } from "./holds";
@@ -439,6 +439,72 @@ export async function linkQuoteToCurationShare(quoteId: string, token: string): 
     curationCreatedAt: new Date(),
     updatedAt: new Date(),
   });
+}
+
+/**
+ * Staff-initiated order request — for when a sales rep curates a list and runs a
+ * call with a buyer before any order exists yet (as opposed to the normal flow,
+ * where the buyer submits their own cart). Auto-claims it for the rep who ran the
+ * call and links it to the curation session that produced it.
+ */
+export async function createStaffQuote(opts: {
+  buyer: { id: string; username: string; displayName: string; email: string; company: string; phone: string };
+  items: QuoteItemInput[];
+  status?: string;
+  message?: string;
+  createdByEmail: string;
+  createdByDisplayName: string;
+  curationToken?: string;
+}): Promise<{ id: string }> {
+  const org = await getLuxesupplyOrg();
+  const cleanItems = opts.items
+    .map((i) => ({
+      sku: String(i.sku || "").trim(),
+      title: String(i.title || ""),
+      brand: String(i.brand || ""),
+      quantity: Math.max(1, Math.round(Number(i.quantity) || 1)),
+      price: Math.max(0, Number(i.price) || 0),
+      imageUrl: i.imageUrl ? String(i.imageUrl) : null,
+      isSuggestedLot: !!i.isSuggestedLot,
+      lotId: i.isSuggestedLot ? String(i.lotId || "") : "",
+      lotItems: i.isSuggestedLot && Array.isArray(i.lotItems) ? i.lotItems : [],
+    }))
+    .filter((i) => i.sku);
+  if (!cleanItems.length) throw new Error("Add at least one approved item before creating an order.");
+
+  const cartTotal = cleanItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
+  const now = new Date();
+  const ref = getDb().collection("salesPortalQuotes").doc();
+  await ref.set({
+    orgSlug: WHOLESALE_ORG_SLUG,
+    orgName: String(org.data.displayName || org.data.name || WHOLESALE_ORG_SLUG),
+    organizationId: org.id,
+    status: opts.status || "contacted",
+    portalUsername: opts.buyer.username,
+    buyerDisplayName: opts.buyer.displayName,
+    customerName: opts.buyer.displayName || opts.buyer.username,
+    customerEmail: opts.buyer.email || "",
+    customerCompany: opts.buyer.company || "",
+    customerPhone: opts.buyer.phone || "",
+    message: String(opts.message || "Created by staff from a curation call.").slice(0, 2000),
+    items: cleanItems,
+    itemCount: cleanItems.length,
+    cartTotal,
+    shippingMethodId: "",
+    shippingLabel: "",
+    shipping: 0,
+    adminNotes: "",
+    claimedByEmail: opts.createdByEmail,
+    claimedByName: opts.createdByDisplayName,
+    claimedAt: now,
+    createdAt: now,
+    updatedAt: now,
+    invoiceId: null,
+    invoiceNumber: null,
+    curationToken: opts.curationToken || null,
+    curationCreatedAt: opts.curationToken ? now : null,
+  });
+  return { id: ref.id };
 }
 
 /** On invoice generation / approval: mark SKUs sold and clear soft-holds for this request. */

@@ -6,6 +6,7 @@ import { portalDisplayTitle, portalShowSkuLine } from "@/components/PortalItemLi
 import { Placeholder } from "@/components/Placeholder";
 import { TrashIcon } from "@/components/icons";
 import { clsx } from "@/lib/clsx";
+import { CurationBookCall } from "@/components/CurationBookCall";
 
 type Decision = "" | "approve" | "maybe" | "decline";
 
@@ -36,6 +37,8 @@ type CurationShare = {
   revision: number;
   expiresAt: string | null;
   createdAt: string | null;
+  quoteId: string | null;
+  linkedBuyerId: string | null;
 };
 
 type ResolvedPreview = {
@@ -47,6 +50,8 @@ type ResolvedPreview = {
   imageUrl: string | null;
   imageUrls: string[];
 };
+
+type BulkDraftItem = ResolvedPreview & { price: number | null };
 
 const DECISION_META: Record<
   Exclude<Decision, "">,
@@ -367,6 +372,142 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
     setAddStatus(null);
   }
 
+  // -- Bulk add (paste a list of SKUs → review/price → add to the catalog) --
+  const [bulkFolded, setBulkFolded] = useState(true);
+  const [bulkSkusText, setBulkSkusText] = useState("");
+  const [bulkDraft, setBulkDraft] = useState<BulkDraftItem[]>([]);
+  const [bulkMissing, setBulkMissing] = useState<string[]>([]);
+  const [bulkStatus, setBulkStatus] = useState<string | null>(null);
+
+  function resolveBulkSkus() {
+    const raw = bulkSkusText.trim();
+    if (!raw) return;
+    setBulkStatus(null);
+    setError(null);
+    start(async () => {
+      const res = await fetch("/api/staff/curation/resolve", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ skusText: raw }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        items?: ResolvedPreview[];
+        missing?: string[];
+      };
+      if (!res.ok || data.error || !data.items) {
+        setBulkStatus(data.error || "Could not resolve SKUs.");
+        return;
+      }
+      const already = new Set(share.items.map((it) => it.sku.toLowerCase()));
+      const seen = new Set(bulkDraft.map((d) => d.sku.toLowerCase()));
+      const skippedAsExisting: string[] = [];
+      const additions = data.items.filter((it) => {
+        const key = it.sku.toLowerCase();
+        if (already.has(key)) {
+          skippedAsExisting.push(it.sku);
+          return false;
+        }
+        return !seen.has(key);
+      });
+      setBulkDraft((prev) => [
+        ...prev,
+        ...additions.map((it) => ({
+          ...it,
+          price:
+            it.cost != null && it.cost > 0 ? Math.round(it.cost / 0.8) : (it.price ?? null),
+        })),
+      ]);
+      setBulkMissing([...(data.missing || []), ...skippedAsExisting]);
+      setBulkSkusText("");
+    });
+  }
+
+  function updateBulkPrice(index: number, value: string) {
+    const price = Number(value);
+    setBulkDraft((prev) =>
+      prev.map((it, i) =>
+        i === index ? { ...it, price: Number.isFinite(price) ? Math.max(0, price) : null } : it,
+      ),
+    );
+  }
+
+  function removeBulkRow(index: number) {
+    setBulkDraft((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function clearBulk() {
+    setBulkDraft([]);
+    setBulkSkusText("");
+    setBulkMissing([]);
+    setBulkStatus(null);
+  }
+
+  function addBulkItems() {
+    if (!bulkDraft.length) return;
+    const unpriced = bulkDraft.filter((it) => it.price == null || !(it.price > 0));
+    if (unpriced.length) {
+      setBulkStatus(
+        `${unpriced.length} item${unpriced.length === 1 ? "" : "s"} need a price above $0.`,
+      );
+      return;
+    }
+    setError(null);
+    start(async () => {
+      const res = await fetch(`/api/staff/curation/${share.token}/add-items`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items: bulkDraft.map((it) => ({
+            sku: it.sku,
+            title: it.title,
+            brand: it.brand,
+            condition: it.condition,
+            cost: it.cost,
+            price: it.price,
+            imageUrl: it.imageUrl,
+            imageUrls: it.imageUrls,
+          })),
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        added?: string[];
+        alreadyPresent?: string[];
+      };
+      if (!res.ok || data.error) {
+        setError(data.error || "Could not add items.");
+        return;
+      }
+      const addedSet = new Set((data.added || []).map((s) => s.toLowerCase()));
+      setShare((prev) => {
+        const newItems = bulkDraft
+          .filter((it) => addedSet.has(it.sku.toLowerCase()))
+          .map((it) => ({
+            sku: it.sku,
+            title: it.title || it.sku,
+            brand: it.brand || "",
+            condition: it.condition || "",
+            cost: it.cost,
+            price: it.price ?? 0,
+            imageUrl: it.imageUrl,
+            imageUrls: it.imageUrls || [],
+            decision: "" as Decision,
+            note: "",
+            liveAdded: true,
+          }));
+        return { ...prev, items: [...prev.items, ...newItems], itemCount: prev.itemCount + newItems.length };
+      });
+      setMessage(
+        `${data.added?.length || 0} item${data.added?.length === 1 ? "" : "s"} added to the catalog.`,
+      );
+      clearBulk();
+      setBulkFolded(true);
+    });
+  }
+
   function endSession() {
     setError(null);
     if (stats.maybe > 0) {
@@ -393,6 +534,9 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
           "• Selections will be finalized (buyer catalog becomes read-only)\n" +
           "• Live add stops; the featured item is cleared\n" +
           "• Link stays available until expiry (or revoke)\n" +
+          (share.quoteId
+            ? "• The linked order request's line items will be updated to match what was approved\n"
+            : "") +
           "• You can export the final CSV afterward",
       )
     ) {
@@ -404,7 +548,13 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
         method: "POST",
         credentials: "same-origin",
       });
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        orderSynced?: boolean;
+        orderSyncError?: string | null;
+        canCreateOrder?: boolean;
+        approvedCount?: number;
+      };
       if (!res.ok || data.error) {
         setError(data.error || "Could not end session.");
         return;
@@ -415,11 +565,49 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
       } catch {
         /* ignore */
       }
-      setMessage("Session ended — the link is now read-only for the client.");
-      if (window.confirm("Session ended. Download the final decisions CSV now?")) {
+      if (share.quoteId && data.orderSynced) {
+        setMessage(
+          `Session ended — order request updated with ${data.approvedCount ?? 0} approved item${data.approvedCount === 1 ? "" : "s"}.`,
+        );
+      } else if (share.quoteId && data.orderSyncError) {
+        setMessage("Session ended, but the linked order request couldn't be updated automatically.");
+        setError(data.orderSyncError);
+      } else if (
+        data.canCreateOrder &&
+        window.confirm(
+          `Create an order request from the ${data.approvedCount ?? 0} approved item${data.approvedCount === 1 ? "" : "s"}?`,
+        )
+      ) {
+        await createOrderFromApprovals();
+      } else {
+        setMessage("Session ended — the link is now read-only for the client.");
+      }
+      if (window.confirm("Download the final decisions CSV now?")) {
         window.location.href = `/api/staff/curation/${share.token}/export`;
       }
     });
+  }
+
+  async function createOrderFromApprovals() {
+    const res = await fetch(`/api/staff/curation/${share.token}/create-order`, {
+      method: "POST",
+      credentials: "same-origin",
+    });
+    const data = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      quoteId?: string;
+      quoteUrl?: string;
+      itemCount?: number;
+    };
+    if (!res.ok || data.error || !data.quoteId) {
+      setError(data.error || "Could not create the order request.");
+      setMessage("Session ended — the link is now read-only for the client.");
+      return;
+    }
+    setShare((prev) => ({ ...prev, quoteId: data.quoteId! }));
+    setMessage(
+      `Session ended — new order request created with ${data.itemCount ?? 0} item${data.itemCount === 1 ? "" : "s"}.`,
+    );
   }
 
   function saveMeta(patch: { clientName?: string; invoiceDate?: string }) {
@@ -541,6 +729,14 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
           >
             {share.revoked ? "Revoked" : share.sessionEnded ? "Session ended" : "Live"}
           </span>
+          {share.quoteId ? (
+            <a
+              href={`/wholesaleportal/rep/quotes/${share.quoteId}`}
+              className="text-[11px] font-semibold uppercase tracking-[0.08em] text-accent hover:underline"
+            >
+              Linked order #{share.quoteId.slice(0, 10)}… — approvals sync back on end →
+            </a>
+          ) : null}
           {!share.revoked ? (
             <>
               <span className="text-muted">{expiresLabel(share.expiresAt)}</span>
@@ -573,6 +769,10 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
 
       {error ? <p className="text-[12.5px] text-danger">{error}</p> : null}
       {message ? <p className="text-[12.5px] text-[#4E9A6A]">{message}</p> : null}
+
+      {!share.quoteId && !share.revoked ? (
+        <CurationBookCall token={share.token} hasLinkedBuyer={!!share.linkedBuyerId} />
+      ) : null}
 
       {/* 4. Live add (on the call) */}
       {!share.revoked ? (
@@ -766,6 +966,116 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
                   ) : null}
                 </div>
               )}
+
+              <div className="mt-3">
+                {bulkFolded && !bulkDraft.length ? (
+                  <button
+                    type="button"
+                    onClick={() => setBulkFolded(false)}
+                    className="h-9 rounded-chip border border-border px-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-secondary hover:border-accent hover:text-ink"
+                  >
+                    Paste a list of SKUs
+                  </button>
+                ) : (
+                  <div className="rounded-chip border border-border bg-ground p-4">
+                    <p className="text-[11.5px] text-muted">
+                      Paste multiple SKUs (one per line, comma, or space-separated) to build out
+                      the catalog the client can browse — these don&apos;t feature as the hero item
+                      the way a single scan does.
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <textarea
+                        value={bulkSkusText}
+                        onChange={(e) => setBulkSkusText(e.target.value)}
+                        rows={3}
+                        placeholder={"SKU-001\nSKU-002\nSKU-003"}
+                        className="h-20 flex-1 rounded-chip border border-border bg-surface px-3 py-2 font-mono text-[12.5px] text-ink outline-none focus:border-accent"
+                      />
+                      <button
+                        type="button"
+                        disabled={pending || !bulkSkusText.trim()}
+                        onClick={resolveBulkSkus}
+                        className="h-9 rounded-chip bg-ink px-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-ground disabled:opacity-60"
+                      >
+                        Look up
+                      </button>
+                    </div>
+                    {bulkMissing.length > 0 ? (
+                      <p className="mt-2 text-[11.5px] text-danger">
+                        {bulkMissing.length} skipped (not found or already on this link):{" "}
+                        {bulkMissing.slice(0, 6).join(", ")}
+                        {bulkMissing.length > 6 ? "…" : ""}
+                      </p>
+                    ) : null}
+                    {bulkStatus ? <p className="mt-2 text-[11.5px] text-danger">{bulkStatus}</p> : null}
+
+                    {bulkDraft.length > 0 ? (
+                      <>
+                        <div className="mt-3 max-h-[320px] space-y-2 overflow-y-auto">
+                          {bulkDraft.map((it, index) => (
+                            <div
+                              key={`${it.sku}-${index}`}
+                              className="flex items-center gap-3 rounded-chip border border-border bg-surface p-2.5"
+                            >
+                              <Placeholder
+                                imageSrc={it.imageUrl}
+                                alt={portalDisplayTitle(it.title, it.sku)}
+                                className="h-12 w-12 shrink-0 rounded-chip"
+                              />
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate text-[12px] text-ink">
+                                  {portalDisplayTitle(it.title, it.sku)}
+                                </div>
+                                <div className="truncate font-mono text-[10.5px] text-muted">
+                                  {it.sku} · cost{" "}
+                                  {it.cost != null ? money(Math.round(it.cost)) : "—"}
+                                </div>
+                              </div>
+                              <label className="flex items-center gap-1 font-mono text-[12px]">
+                                <span className="text-muted">$</span>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={it.price ?? ""}
+                                  onChange={(e) => updateBulkPrice(index, e.target.value)}
+                                  className="w-[70px] rounded-chip border border-border bg-ground px-2 py-1 text-ink outline-none focus:border-accent"
+                                />
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => removeBulkRow(index)}
+                                aria-label="Remove from list"
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-chip text-muted transition hover:bg-danger/10 hover:text-danger"
+                              >
+                                <TrashIcon className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="mt-3 flex items-center gap-3">
+                          <button
+                            type="button"
+                            disabled={pending}
+                            onClick={addBulkItems}
+                            className="h-9 rounded-chip bg-ink px-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-ground disabled:opacity-60"
+                          >
+                            {pending
+                              ? "Adding…"
+                              : `Add ${bulkDraft.length} item${bulkDraft.length === 1 ? "" : "s"} to catalog`}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={clearBulk}
+                            className="text-[11px] text-muted hover:text-ink"
+                          >
+                            Clear list
+                          </button>
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+                )}
+              </div>
             </>
           )}
         </div>

@@ -44,6 +44,10 @@ export type CurationShare = {
   expiresAt: string | null;
   createdAt: string | null;
   updatedAt: string | null;
+  /** Order request this link was generated from (e.g. via "Book call"), if any. */
+  quoteId: string | null;
+  /** Buyer picked via "Book call" on an ad-hoc session (no order yet) — used to create one when the session ends. */
+  linkedBuyerId: string | null;
 };
 
 export type CurationSummary = {
@@ -115,6 +119,8 @@ function serializeShare(id: string, d: Record<string, unknown>, opts?: { include
     expiresAt: toIso(d.expiresAt),
     createdAt: toIso(d.createdAt),
     updatedAt: toIso(d.updatedAt),
+    quoteId: d.quoteId ? takeText(d.quoteId) : null,
+    linkedBuyerId: d.linkedBuyerId ? takeText(d.linkedBuyerId) : null,
   };
 }
 
@@ -161,6 +167,8 @@ export async function createCurationShare(opts: {
   expiresHours?: number;
   createdByEmail: string;
   createdByDisplayName: string;
+  /** Order request this link is generated from (e.g. "Book call") — approved items sync back to it when the session ends. */
+  quoteId?: string;
 }): Promise<CurationShare> {
   const seen = new Set<string>();
   const items = opts.items
@@ -211,6 +219,7 @@ export async function createCurationShare(opts: {
     expiresAt,
     createdAt: now,
     updatedAt: now,
+    quoteId: opts.quoteId ? takeText(opts.quoteId) : null,
   };
 
   await getDb().collection(COLLECTION).doc(token).set(doc);
@@ -400,6 +409,91 @@ export async function addCurationItem(
   return { revision, itemCount: nextItems.length };
 }
 
+/**
+ * Staff-only: bulk-add a reviewed/priced list of SKUs to the catalog mid-call —
+ * for building out what the buyer can browse, as opposed to `addCurationItem`'s
+ * single-SKU "feature this one right now" hero reveal. Doesn't touch heroSku.
+ * Silently skips SKUs already on the link (reported back so the UI can flag them).
+ */
+export async function addCurationItems(
+  token: string,
+  items: Array<{
+    sku: string;
+    title?: string;
+    brand?: string;
+    condition?: string;
+    cost?: number | null;
+    price: number;
+    imageUrl?: string | null;
+    imageUrls?: string[];
+  }>,
+): Promise<{ revision: number; itemCount: number; added: string[]; alreadyPresent: string[] }> {
+  const found = await loadDoc(token);
+  if (!found) throw new Error("This curation link is unavailable.");
+  const { ref, data } = found;
+  assertShareWritable(data);
+
+  const existing = Array.isArray(data.items) ? (data.items as Record<string, unknown>[]) : [];
+  const existingKeys = new Set(existing.map((it) => takeText(it.sku).toLowerCase()));
+
+  const added: string[] = [];
+  const alreadyPresent: string[] = [];
+  const seenInBatch = new Set<string>();
+  const newItems: Record<string, unknown>[] = [];
+
+  for (const item of items) {
+    const sku = takeText(item.sku);
+    if (!sku) continue;
+    const key = sku.toLowerCase();
+    if (existingKeys.has(key) || seenInBatch.has(key)) {
+      alreadyPresent.push(sku);
+      continue;
+    }
+    seenInBatch.add(key);
+    added.push(sku);
+    newItems.push({
+      sku,
+      title: takeText(item.title) || sku,
+      brand: takeText(item.brand),
+      condition: takeText(item.condition),
+      cost:
+        item.cost != null && Number.isFinite(Number(item.cost))
+          ? Math.round(Number(item.cost))
+          : null,
+      price: Number.isFinite(Number(item.price)) ? Math.max(0, Math.round(Number(item.price))) : 0,
+      imageUrl: item.imageUrl ? takeText(item.imageUrl) : null,
+      imageUrls: Array.isArray(item.imageUrls) ? item.imageUrls.map(takeText).filter(Boolean) : [],
+      decision: "",
+      note: "",
+      liveAdded: true,
+    });
+  }
+
+  if (!newItems.length) {
+    return {
+      revision: typeof data.revision === "number" ? data.revision : 0,
+      itemCount: existing.length,
+      added,
+      alreadyPresent,
+    };
+  }
+  if (existing.length + newItems.length > MAX_ITEMS) {
+    throw new Error(
+      `Adding ${newItems.length} more would go over the ${MAX_ITEMS}-item limit (currently ${existing.length}).`,
+    );
+  }
+
+  const nextItems = [...existing, ...newItems];
+  const revision = (typeof data.revision === "number" ? data.revision : 0) + 1;
+  await ref.update({
+    items: nextItems,
+    itemCount: nextItems.length,
+    revision,
+    updatedAt: new Date(),
+  });
+  return { revision, itemCount: nextItems.length, added, alreadyPresent };
+}
+
 /** Staff-only: remove an item from the link (e.g. wrong SKU, mis-priced). */
 export async function removeCurationItem(
   token: string,
@@ -468,10 +562,19 @@ function summarize(items: CurationItem[]): CurationSummary {
   return { itemCount: items.length, approve, maybe, decline, pending, cartTotal };
 }
 
-/** Staff-only: end the live session — buyer becomes read-only; hero clears. */
-export async function endCurationSession(
-  token: string,
-): Promise<{ revision: number; summary: CurationSummary }> {
+/**
+ * Staff-only: end the live session — buyer becomes read-only; hero clears.
+ * Also hands back the approved items + linked order (if this link came from
+ * "Book call") so the caller can sync the order request's line items to match
+ * what the buyer actually decided on the call.
+ */
+export async function endCurationSession(token: string): Promise<{
+  revision: number;
+  summary: CurationSummary;
+  quoteId: string | null;
+  linkedBuyerId: string | null;
+  approvedItems: CurationItem[];
+}> {
   const found = await loadDoc(token);
   if (!found) throw new Error("This curation link is unavailable.");
   const { ref, data } = found;
@@ -490,7 +593,32 @@ export async function endCurationSession(
     revision,
     updatedAt: new Date(),
   });
-  return { revision, summary };
+  return {
+    revision,
+    summary,
+    quoteId: data.quoteId ? takeText(data.quoteId) : null,
+    linkedBuyerId: data.linkedBuyerId ? takeText(data.linkedBuyerId) : null,
+    approvedItems: items.filter((it) => it.decision === "approve"),
+  };
+}
+
+/** Staff-only: pick a buyer for an ad-hoc session (no order yet) — e.g. right before "Book call". */
+export async function linkCurationShareToBuyer(token: string, buyerId: string): Promise<void> {
+  const found = await loadDoc(token);
+  if (!found) throw new Error("This curation link is unavailable.");
+  if (found.data.revoked === true) throw new Error("This curation link has been revoked.");
+  const clean = takeText(buyerId);
+  if (!clean) throw new Error("Missing buyer.");
+  await found.ref.update({ linkedBuyerId: clean, updatedAt: new Date() });
+}
+
+/** Staff-only: attach a (newly-created, or existing) order request to this curation link. */
+export async function linkCurationShareToQuote(token: string, quoteId: string): Promise<void> {
+  const found = await loadDoc(token);
+  if (!found) throw new Error("This curation link is unavailable.");
+  const clean = takeText(quoteId);
+  if (!clean) throw new Error("Missing order request.");
+  await found.ref.update({ quoteId: clean, updatedAt: new Date() });
 }
 
 /** Staff-only: reset the expiry countdown — e.g. a call got rescheduled further out. */
