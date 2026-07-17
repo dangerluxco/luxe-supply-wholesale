@@ -415,8 +415,7 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
         ...prev,
         ...additions.map((it) => ({
           ...it,
-          price:
-            it.cost != null && it.cost > 0 ? Math.round(it.cost / 0.8) : (it.price ?? null),
+          price: it.cost != null && it.cost > 0 ? Math.round(it.cost / 0.8) : null,
         })),
       ]);
       setBulkMissing([...(data.missing || []), ...skippedAsExisting]);
