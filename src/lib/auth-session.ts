@@ -1,35 +1,30 @@
 import { ROLE, type Role } from "./constants";
 
 /**
- * Separate session cookies per app area (buyer storefront / staff portal /
- * fulfillment) so signing into one never clobbers another — previously all
- * three shared one `__session` cookie, so switching between the storefront
- * and the staff portal in the same browser would silently "log out" the
- * other area.
+ * Firebase Hosting's rewrite proxy to Cloud Run strips every `Set-Cookie` header
+ * from the response EXCEPT one named exactly `__session` (see
+ * https://firebase.google.com/docs/hosting/manage-cache#using_cookies). Any other
+ * cookie name gets silently dropped in production — the login POST succeeds and
+ * the browser gets redirected, but the session cookie never actually arrives, so
+ * the very next request looks signed-out and bounces back to sign-in. That bit
+ * us once already (per-area cookie names `__session_buyer`/`__session_staff`/
+ * `__session_fulfillment` worked great locally, since there's no Hosting proxy in
+ * dev, but broke every login in production).
+ *
+ * So there is exactly ONE cookie, always named `__session`. Area isolation (so
+ * signing into the staff portal doesn't log you out of the buyer storefront, and
+ * vice versa) is enforced by packing each area's encoded session into its own key
+ * inside the cookie's JSON payload, rather than by giving each area its own
+ * cookie name.
  */
-export const BUYER_SESSION_COOKIE = "__session_buyer";
-export const STAFF_SESSION_COOKIE = "__session_staff";
-export const FULFILLMENT_SESSION_COOKIE = "__session_fulfillment";
-
-/** @deprecated Legacy shared cookie name — only used to detect + clear stale sessions from before the split. */
 export const SESSION_COOKIE = "__session";
 
 export type AppArea = "buyer" | "staff" | "fulfillment";
-
-export function sessionCookieNameForArea(area: AppArea): string {
-  if (area === "buyer") return BUYER_SESSION_COOKIE;
-  if (area === "fulfillment") return FULFILLMENT_SESSION_COOKIE;
-  return STAFF_SESSION_COOKIE;
-}
 
 export function areaForRole(role: string): AppArea {
   if (role === ROLE.BUYER) return "buyer";
   if (role === ROLE.FULFILLMENT) return "fulfillment";
   return "staff";
-}
-
-export function sessionCookieNameForRole(role: string): string {
-  return sessionCookieNameForArea(areaForRole(role));
 }
 
 export type SessionUser = {
@@ -44,7 +39,7 @@ export type SessionUser = {
   username?: string | null;
 };
 
-// Cookie payload: base64("source|userId|role") — optional 4th: username
+// Per-area payload: base64("source|userId|role") — optional 4th: username
 export function encodeSession(
   userId: string,
   role: string,
@@ -74,6 +69,51 @@ export function decodeSession(
   } catch {
     return null;
   }
+}
+
+type CombinedPayload = Partial<Record<AppArea, string>>;
+
+function decodeCombined(raw: string | undefined): CombinedPayload {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(Buffer.from(raw, "base64").toString("utf8"));
+    if (!parsed || typeof parsed !== "object") return {};
+    const out: CombinedPayload = {};
+    (["buyer", "staff", "fulfillment"] as const).forEach((area) => {
+      const v = (parsed as Record<string, unknown>)[area];
+      if (typeof v === "string" && v) out[area] = v;
+    });
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function encodeCombined(payload: CombinedPayload): string {
+  return Buffer.from(JSON.stringify(payload)).toString("base64");
+}
+
+/** Pull one area's encoded per-area session string out of the shared cookie's value. */
+export function areaSessionFrom(raw: string | undefined, area: AppArea): string | undefined {
+  return decodeCombined(raw)[area];
+}
+
+/** Merge a freshly-encoded area session into whatever `__session` value the browser already sent — preserves the other areas' sessions. */
+export function withAreaSession(
+  existingRaw: string | undefined,
+  area: AppArea,
+  encodedAreaSession: string,
+): string {
+  const combined = decodeCombined(existingRaw);
+  combined[area] = encodedAreaSession;
+  return encodeCombined(combined);
+}
+
+/** Drop one area's session while leaving any other areas' sessions in the shared cookie intact. */
+export function withoutAreaSession(existingRaw: string | undefined, area: AppArea): string {
+  const combined = decodeCombined(existingRaw);
+  delete combined[area];
+  return encodeCombined(combined);
 }
 
 export function cookiePath(): string {

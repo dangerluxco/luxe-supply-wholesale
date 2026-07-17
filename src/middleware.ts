@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
+  areaSessionFrom,
   decodeSession,
   roleCanAccess,
-  sessionCookieNameForArea,
+  SESSION_COOKIE,
   type AppArea,
 } from "@/lib/auth-session";
 import { ROLE } from "@/lib/constants";
@@ -53,7 +54,7 @@ export function middleware(req: NextRequest) {
     return withArea(req, area);
   }
 
-  const session = decodeSession(req.cookies.get(sessionCookieNameForArea(area))?.value);
+  const session = decodeSession(areaSessionFrom(req.cookies.get(SESSION_COOKIE)?.value, area));
   if (!session) {
     const url = req.nextUrl.clone();
     url.pathname = signInForArea(isBuyer);

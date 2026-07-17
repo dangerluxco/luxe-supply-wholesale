@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import {
+  areaForRole,
   encodeSession,
   homeForRole,
   publicOrigin,
-  sessionCookieNameForRole,
+  SESSION_COOKIE,
   sessionCookieOptions,
   sessionMaxAgeFromForm,
+  withAreaSession,
 } from "@/lib/auth-session";
 import { authenticateStaff, staffToAppRole } from "@/lib/firestore/staff";
 import { prisma } from "@/lib/db";
@@ -47,12 +50,18 @@ export async function POST(request: Request) {
     );
   }
 
+  const existingRaw = (await cookies()).get(SESSION_COOKIE)?.value;
+
   if (staffOk?.ok) {
     const role = staffToAppRole(staffOk.staff);
     const res = loginRedirect(homeForRole(role), request);
     res.cookies.set(
-      sessionCookieNameForRole(role),
-      encodeSession(staffOk.staff.id, role, "firestore"),
+      SESSION_COOKIE,
+      withAreaSession(
+        existingRaw,
+        areaForRole(role),
+        encodeSession(staffOk.staff.id, role, "firestore"),
+      ),
       cookieOpts,
     );
     res.headers.set("Cache-Control", "no-store");
@@ -64,8 +73,12 @@ export async function POST(request: Request) {
     if (user && user.password === password) {
       const res = loginRedirect(homeForRole(user.role), request);
       res.cookies.set(
-        sessionCookieNameForRole(user.role),
-        encodeSession(user.id, user.role, "prisma"),
+        SESSION_COOKIE,
+        withAreaSession(
+          existingRaw,
+          areaForRole(user.role),
+          encodeSession(user.id, user.role, "prisma"),
+        ),
         cookieOpts,
       );
       res.headers.set("Cache-Control", "no-store");

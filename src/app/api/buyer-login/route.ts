@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import {
   encodeSession,
   homeForRole,
   publicOrigin,
-  BUYER_SESSION_COOKIE,
+  SESSION_COOKIE,
   sessionCookieOptions,
   sessionMaxAgeFromForm,
+  withAreaSession,
 } from "@/lib/auth-session";
 import { authenticateBuyer } from "@/lib/firestore/buyers";
 import { ROLE } from "@/lib/constants";
@@ -45,9 +47,14 @@ export async function POST(request: Request) {
         ? nextRaw
         : homeForRole(ROLE.BUYER);
     const res = NextResponse.redirect(new URL(next, publicOrigin(request)), 303);
+    const existingRaw = (await cookies()).get(SESSION_COOKIE)?.value;
     res.cookies.set(
-      BUYER_SESSION_COOKIE,
-      encodeSession(auth.buyer.id, ROLE.BUYER, "firestore", auth.buyer.username),
+      SESSION_COOKIE,
+      withAreaSession(
+        existingRaw,
+        "buyer",
+        encodeSession(auth.buyer.id, ROLE.BUYER, "firestore", auth.buyer.username),
+      ),
       cookieOpts,
     );
     res.headers.set("Cache-Control", "no-store");

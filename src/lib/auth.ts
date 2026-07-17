@@ -5,9 +5,8 @@ import { getStaffById, initialsFromName } from "./firestore/staff";
 import { getBuyerById } from "./firestore/buyers";
 import {
   SESSION_COOKIE,
-  BUYER_SESSION_COOKIE,
-  STAFF_SESSION_COOKIE,
-  FULFILLMENT_SESSION_COOKIE,
+  areaSessionFrom,
+  areaForRole,
   decodeSession,
   type SessionUser,
   type AppArea,
@@ -15,24 +14,23 @@ import {
   roleCanAccess,
   encodeSession,
   sessionCookieOptions,
-  sessionCookieNameForArea,
-  sessionCookieNameForRole,
   sessionMaxAgeFromForm,
   SESSION_REMEMBER_MAX_AGE,
+  withAreaSession,
+  withoutAreaSession,
 } from "./auth-session";
 
 export {
   SESSION_COOKIE,
-  BUYER_SESSION_COOKIE,
-  STAFF_SESSION_COOKIE,
-  FULFILLMENT_SESSION_COOKIE,
+  areaSessionFrom,
+  areaForRole,
   encodeSession,
   decodeSession,
   sessionCookieOptions,
-  sessionCookieNameForArea,
-  sessionCookieNameForRole,
   sessionMaxAgeFromForm,
   SESSION_REMEMBER_MAX_AGE,
+  withAreaSession,
+  withoutAreaSession,
   homeForRole,
   roleCanAccess,
   type SessionUser,
@@ -56,8 +54,7 @@ async function currentArea(): Promise<AppArea> {
 export async function getSession(): Promise<SessionUser | null> {
   const store = await cookies();
   const area = await currentArea();
-  const cookieName = sessionCookieNameForArea(area);
-  const decoded = decodeSession(store.get(cookieName)?.value);
+  const decoded = decodeSession(areaSessionFrom(store.get(SESSION_COOKIE)?.value, area));
   if (!decoded) return null;
 
   try {

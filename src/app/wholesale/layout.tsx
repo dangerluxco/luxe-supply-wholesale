@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
-import { getSession, decodeSession, BUYER_SESSION_COOKIE } from "@/lib/auth";
+import { getSession, decodeSession, areaSessionFrom, SESSION_COOKIE } from "@/lib/auth";
 import { BuyerTopbar } from "@/components/BuyerTopbar";
 import { StorefrontAvailabilityProvider } from "@/components/StorefrontAvailability";
 import { ROLE } from "@/lib/constants";
@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 
 export default async function WholesaleLayout({ children }: { children: React.ReactNode }) {
   const store = await cookies();
-  const decoded = decodeSession(store.get(BUYER_SESSION_COOKIE)?.value);
+  const decoded = decodeSession(areaSessionFrom(store.get(SESSION_COOKIE)?.value, "buyer"));
 
   // Always load a lightweight catalog index for search (guest + buyer).
   // Never let a transient Firestore hiccup take down sign-in/browsing entirely.
