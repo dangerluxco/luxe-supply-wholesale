@@ -90,7 +90,7 @@ export default async function RepDashboard({
         />
       ) : (
         <div className="overflow-hidden rounded-card border border-border bg-surface">
-          <div className="grid grid-cols-[1fr_0.85fr_52px_72px_60px_110px_minmax(180px,1.15fr)_72px] border-b border-border px-5 py-3 font-mono text-[10px] uppercase tracking-[0.12em] text-muted">
+          <div className="grid grid-cols-[1fr_0.85fr_52px_72px_60px_110px_minmax(230px,1.3fr)_72px] border-b border-border px-5 py-3 font-mono text-[10px] uppercase tracking-[0.12em] text-muted">
             <span>Customer</span>
             <span>Company / buyer</span>
             <span className="text-center">Items</span>
@@ -106,7 +106,7 @@ export default async function RepDashboard({
             return (
               <div
                 key={q.id}
-                className="grid grid-cols-[1fr_0.85fr_52px_72px_60px_110px_minmax(180px,1.15fr)_72px] items-center border-b border-border/60 px-5 py-3.5 text-[12.5px] text-[#3A3934] transition last:border-b-0 hover:bg-ground/70"
+                className="grid grid-cols-[1fr_0.85fr_52px_72px_60px_110px_minmax(230px,1.3fr)_72px] items-center border-b border-border/60 px-5 py-3.5 text-[12.5px] text-[#3A3934] transition last:border-b-0 hover:bg-ground/70"
               >
                 <div className="min-w-0">
                   <div className="truncate font-semibold text-ink">{name}</div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Placeholder } from "./Placeholder";
 import { MicroBadge } from "./badges";
 import { money } from "@/lib/format";
@@ -22,9 +23,12 @@ type LotForStrip = {
   individualSum: number;
 };
 
-export function BundleStrip({ lot }: { lot: LotForStrip }) {
+export function BundleStrip({ lot, inCart = false }: { lot: LotForStrip; inCart?: boolean }) {
+  const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState("");
+  const [justAdded, setJustAdded] = useState(false);
+  const showInCart = inCart || justAdded;
   const [gallerySku, setGallerySku] = useState<string | null>(null);
   const [galleryIndex, setGalleryIndex] = useState(0);
 
@@ -45,6 +49,11 @@ export function BundleStrip({ lot }: { lot: LotForStrip }) {
             <MicroBadge tone="solid-gold" className="tracking-[0.12em]">
               CURATED BUNDLE
             </MicroBadge>
+            {showInCart ? (
+              <MicroBadge tone="outline-gold" className="tracking-[0.1em]">
+                IN CART
+              </MicroBadge>
+            ) : null}
             <span className="font-mono text-[11px] text-[#8B897F]">from your rep</span>
           </div>
           <div className="text-[24px] font-semibold tracking-tight text-ground">
@@ -110,17 +119,26 @@ export function BundleStrip({ lot }: { lot: LotForStrip }) {
           ) : null}
           <button
             type="button"
-            disabled={pending}
+            disabled={pending || showInCart}
             onClick={() =>
               start(async () => {
                 const res = await addSuggestedLotToCart(lot.id);
-                if (res?.error) setError(res.error);
-                else setError("");
+                if (res?.error) {
+                  setError(res.error);
+                  return;
+                }
+                setError("");
+                setJustAdded(true);
+                router.refresh();
               })
             }
-            className="mt-2.5 h-10 w-full rounded-[7px] bg-accent text-[12.5px] font-semibold text-ink transition hover:opacity-90 disabled:opacity-60"
+            className={
+              showInCart
+                ? "mt-2.5 h-10 w-full rounded-[7px] border border-accent/50 bg-transparent text-[12.5px] font-semibold uppercase tracking-[0.08em] text-accent"
+                : "mt-2.5 h-10 w-full rounded-[7px] bg-accent text-[12.5px] font-semibold text-ink transition hover:opacity-90 disabled:opacity-60"
+            }
           >
-            {pending ? "Adding…" : `Add all ${lot.items.length} to order`}
+            {showInCart ? "In cart" : pending ? "Adding…" : "Add bundle to order"}
           </button>
           {error ? <div className="text-[11px] text-[#E8A090]">{error}</div> : null}
         </div>

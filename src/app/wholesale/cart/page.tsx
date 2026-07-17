@@ -10,6 +10,8 @@ import { CartCheckoutPanel } from "@/components/CartCheckoutPanel";
 import { RemoveCartItemButton } from "@/components/RemoveCartItemButton";
 import { HoldCountdown } from "@/components/HoldCountdown";
 import { InfoTip } from "@/components/InfoTip";
+import { MicroBadge } from "@/components/badges";
+import { BundleImageStrip } from "@/components/BundleImageStrip";
 
 export const dynamic = "force-dynamic";
 
@@ -87,22 +89,37 @@ export default async function CartPage() {
               const lineHold = lineSkus
                 .map((s) => holds.get(s))
                 .find((h) => h && h.portalUsername === me);
+              const lotImages = item.isSuggestedLot
+                ? (item.lotItems || []).map((li) => li.imageUrl).filter(Boolean)
+                : [];
               return (
                 <div
                   key={`${item.sku}-${index}`}
                   className="flex items-center gap-4 border-b border-border/60 px-5 py-4 last:border-b-0"
                 >
-                  <div className="h-24 w-24 overflow-hidden rounded-chip bg-ground">
-                    {item.imageUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={item.imageUrl} alt="" className="h-full w-full object-cover" />
-                    ) : null}
-                  </div>
+                  {item.isSuggestedLot ? (
+                    <BundleImageStrip
+                      images={lotImages.length ? lotImages : [item.imageUrl]}
+                      size="md"
+                    />
+                  ) : (
+                    <div className="h-24 w-24 shrink-0 overflow-hidden rounded-chip bg-ground">
+                      {item.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={item.imageUrl} alt="" className="h-full w-full object-cover" />
+                      ) : null}
+                    </div>
+                  )}
                   <div className="flex-1">
-                    <div className="font-semibold text-ink">{item.title}</div>
+                    <div className="flex items-center gap-2">
+                      {item.isSuggestedLot ? (
+                        <MicroBadge tone="solid-gold">BUNDLE</MicroBadge>
+                      ) : null}
+                      <div className="font-semibold text-ink">{item.title}</div>
+                    </div>
                     <div className="font-mono text-[11px] text-muted">
                       {item.isSuggestedLot
-                        ? `Suggested lot · ${(item.lotItems || []).length} SKUs`
+                        ? `${(item.lotItems || []).length} pieces in this bundle`
                         : item.sku}
                     </div>
                     {lineHold?.heldUntil ? (

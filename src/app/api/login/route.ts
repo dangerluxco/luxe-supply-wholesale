@@ -3,7 +3,7 @@ import {
   encodeSession,
   homeForRole,
   publicOrigin,
-  SESSION_COOKIE,
+  sessionCookieNameForRole,
   sessionCookieOptions,
   sessionMaxAgeFromForm,
 } from "@/lib/auth-session";
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
     const role = staffToAppRole(staffOk.staff);
     const res = loginRedirect(homeForRole(role), request);
     res.cookies.set(
-      SESSION_COOKIE,
+      sessionCookieNameForRole(role),
       encodeSession(staffOk.staff.id, role, "firestore"),
       cookieOpts,
     );
@@ -64,7 +64,7 @@ export async function POST(request: Request) {
     if (user && user.password === password) {
       const res = loginRedirect(homeForRole(user.role), request);
       res.cookies.set(
-        SESSION_COOKIE,
+        sessionCookieNameForRole(user.role),
         encodeSession(user.id, user.role, "prisma"),
         cookieOpts,
       );

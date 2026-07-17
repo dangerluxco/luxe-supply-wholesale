@@ -81,6 +81,54 @@ export function lotIdsFromQuoteItems(items: Array<Record<string, unknown>>): str
   return [...ids];
 }
 
+export type QuoteCurationItem = {
+  sku: string;
+  title: string;
+  brand: string;
+  price: number;
+  imageUrl: string | null;
+  imageUrls: string[];
+};
+
+/**
+ * Map an order request's line items into curation-share rows so staff can spin up a
+ * pre-populated curation view for a sales call. Suggested-lot lines collapse into a
+ * single bundle row carrying every piece's photo (browsable via the viewer's lightbox).
+ */
+export function curationItemsFromQuoteItems(
+  items: Array<Record<string, unknown>>,
+): QuoteCurationItem[] {
+  return items
+    .map((it): QuoteCurationItem | null => {
+      if (it.isSuggestedLot && Array.isArray(it.lotItems) && it.lotItems.length) {
+        const lotItems = it.lotItems as Array<Record<string, unknown>>;
+        const imageUrls = lotItems.map((li) => String(li.imageUrl || "").trim()).filter(Boolean);
+        const lotId = String(it.lotId || it.sku || "").trim();
+        if (!lotId) return null;
+        return {
+          sku: lotId,
+          title: String(it.title || "").trim() || `${lotItems.length}-piece bundle`,
+          brand: "",
+          price: Number(it.price) || 0,
+          imageUrl: imageUrls[0] || (it.imageUrl ? String(it.imageUrl) : null),
+          imageUrls,
+        };
+      }
+      const sku = String(it.sku || "").trim();
+      if (!sku) return null;
+      const imageUrl = it.imageUrl ? String(it.imageUrl).trim() : "";
+      return {
+        sku,
+        title: String(it.title || sku).trim() || sku,
+        brand: String(it.brand || "").trim(),
+        price: Number(it.price) || 0,
+        imageUrl: imageUrl || null,
+        imageUrls: imageUrl ? [imageUrl] : [],
+      };
+    })
+    .filter((it): it is QuoteCurationItem => it !== null);
+}
+
 function dedupeLotItemsRaw(
   lotItems: Array<Record<string, unknown>> | undefined,
 ): Array<Record<string, unknown>> {

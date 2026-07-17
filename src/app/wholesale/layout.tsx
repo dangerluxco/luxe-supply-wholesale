@@ -1,14 +1,20 @@
+import type { Metadata } from "next";
 import { cookies } from "next/headers";
-import { getSession, decodeSession, SESSION_COOKIE } from "@/lib/auth";
+import { getSession, decodeSession, BUYER_SESSION_COOKIE } from "@/lib/auth";
 import { BuyerTopbar } from "@/components/BuyerTopbar";
 import { StorefrontAvailabilityProvider } from "@/components/StorefrontAvailability";
 import { ROLE } from "@/lib/constants";
 import { getBuyerCart } from "@/lib/firestore/buyers";
 import { listCatalogProducts } from "@/lib/firestore/catalog";
 
+/** Buyer-facing tab title — overrides the root "Wholesale Portal" default for /wholesale/**. */
+export const metadata: Metadata = {
+  title: "Luxe Supply Co. — Wholesale Storefront",
+};
+
 export default async function WholesaleLayout({ children }: { children: React.ReactNode }) {
   const store = await cookies();
-  const decoded = decodeSession(store.get(SESSION_COOKIE)?.value);
+  const decoded = decodeSession(store.get(BUYER_SESSION_COOKIE)?.value);
 
   // Always load a lightweight catalog index for search (guest + buyer).
   // Never let a transient Firestore hiccup take down sign-in/browsing entirely.

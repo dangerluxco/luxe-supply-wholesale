@@ -5,7 +5,9 @@ import { resolveCurationItems, type CurationDraftItem } from "./catalog";
 
 const COLLECTION = "curationShareSessions";
 const MIN_EXPIRES_HOURS = 1;
-const MAX_EXPIRES_HOURS = 12;
+// The manual builder UI only offers up to 12h, but flows that create a link ahead of
+// a scheduled event (e.g. "Book call") need enough runway to survive until the call.
+const MAX_EXPIRES_HOURS = 168;
 const DEFAULT_EXPIRES_HOURS = 4;
 const MAX_ITEMS = 200;
 
@@ -489,6 +491,23 @@ export async function endCurationSession(
     updatedAt: new Date(),
   });
   return { revision, summary };
+}
+
+/** Staff-only: reset the expiry countdown — e.g. a call got rescheduled further out. */
+export async function extendCurationShareExpiry(
+  token: string,
+  hoursRaw: number,
+): Promise<{ revision: number; expiresAt: string | null }> {
+  const found = await loadDoc(token);
+  if (!found) throw new Error("This curation link is unavailable.");
+  const { ref, data } = found;
+  if (data.revoked === true) throw new Error("This curation link has been revoked.");
+
+  const hours = clampExpiresHours(hoursRaw);
+  const expiresAt = new Date(Date.now() + hours * 60 * 60 * 1000);
+  const revision = (typeof data.revision === "number" ? data.revision : 0) + 1;
+  await ref.update({ expiresAt, revision, updatedAt: new Date() });
+  return { revision, expiresAt: expiresAt.toISOString() };
 }
 
 /** Staff-only: immediately revoke — public reads/writes stop resolving this token. */

@@ -7,6 +7,7 @@ import { QuoteNotesForm } from "@/components/QuoteNotesForm";
 import { QuoteItemsEditor } from "@/components/QuoteItemsEditor";
 import { QuoteClaimControls } from "@/components/QuoteClaimControls";
 import { GenerateInvoiceButton } from "@/components/GenerateInvoiceButton";
+import { BookCallButton } from "@/components/BookCallButton";
 import { InfoTip } from "@/components/InfoTip";
 import { fullDate, money } from "@/lib/format";
 
@@ -52,8 +53,8 @@ export default async function StaffQuoteDetailPage({
           </h1>
           <span className="font-mono text-[11px] text-muted">#{quote.id}</span>
         </div>
-        <div className="w-[160px]">
-          <div className="micro-badge mb-1.5 text-[10px] tracking-[0.14em] text-muted">STATUS</div>
+        <div className="min-w-[160px] rounded-card border border-border bg-surface px-4 py-3">
+          <div className="micro-badge mb-2 text-[10px] tracking-[0.14em] text-accent">STATUS</div>
           <QuoteStatusSelect quoteId={quote.id} status={quote.status} />
         </div>
         <div className="min-w-[220px] max-w-sm rounded-card border border-border bg-surface px-4 py-3">
@@ -64,6 +65,18 @@ export default async function StaffQuoteDetailPage({
             claimedByName={quote.claimedByName}
             currentStaffEmail={session.email}
           />
+        </div>
+        <div className="min-w-[220px] max-w-sm rounded-card border border-border bg-surface px-4 py-3">
+          <div className="mb-2 flex items-center gap-1.5">
+            <div className="micro-badge text-[10px] tracking-[0.14em] text-accent">CLIENT CALL</div>
+            <InfoTip label="What happens when you book a call">
+              Creates a fresh curation link from this request&apos;s items (valid 7 days), opens a
+              pre-filled Google Calendar event with the buyer added as a guest and the buyer link
+              + order summary in the description, and opens your own curation manager for that
+              same link in a second tab so you can go straight into running the call.
+            </InfoTip>
+          </div>
+          <BookCallButton quoteId={quote.id} />
         </div>
       </div>
 

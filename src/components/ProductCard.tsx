@@ -35,6 +35,8 @@ export function ProductCard({
   selectable = true,
   inCart = false,
   onToggleSelect,
+  onQuickAdd,
+  quickAddPending = false,
 }: {
   p: CatalogProduct;
   layout?: "grid" | "list";
@@ -43,6 +45,9 @@ export function ProductCard({
   selectable?: boolean;
   inCart?: boolean;
   onToggleSelect?: (sku: string) => void;
+  /** Adds just this piece to the cart — no selection step required. */
+  onQuickAdd?: (sku: string) => void;
+  quickAddPending?: boolean;
 }) {
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryIndex, setGalleryIndex] = useState(0);
@@ -200,15 +205,41 @@ export function ProductCard({
           </Placeholder>
         </button>
 
-        <Link
-          href={`/wholesale/product/${encodeURIComponent(p.sku)}`}
+        <div
           className={clsx("flex flex-1 flex-col", layout === "grid" ? "p-4" : "justify-center p-4 sm:p-5")}
         >
-          {details}
-          {layout === "list" ? (
-            <div className="mt-2 font-mono text-[10.5px] text-muted">SKU {p.sku}</div>
+          <Link href={`/wholesale/product/${encodeURIComponent(p.sku)}`} className="flex flex-1 flex-col">
+            {details}
+            {layout === "list" ? (
+              <div className="mt-2 font-mono text-[10.5px] text-muted">SKU {p.sku}</div>
+            ) : null}
+          </Link>
+          {onQuickAdd ? (
+            <button
+              type="button"
+              disabled={!canSelect || quickAddPending}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onQuickAdd(p.sku);
+              }}
+              className={clsx(
+                "mt-2.5 h-8 w-full shrink-0 rounded-chip border text-[11px] font-semibold uppercase tracking-[0.1em] transition disabled:cursor-default disabled:opacity-50",
+                inCart
+                  ? "border-accent/40 text-accent"
+                  : "border-border text-secondary hover:border-accent hover:text-ink",
+              )}
+            >
+              {inCart
+                ? "In cart"
+                : quickAddPending
+                  ? "Adding…"
+                  : pricesVisible
+                    ? "Add to cart"
+                    : "Sign in to add"}
+            </button>
           ) : null}
-        </Link>
+        </div>
       </div>
 
       {galleryOpen ? (

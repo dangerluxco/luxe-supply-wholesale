@@ -131,6 +131,7 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [extendHours, setExtendHours] = useState("168");
   const editingSku = useRef<Set<string>>(new Set());
   const metaEditing = useRef(false);
 
@@ -439,6 +440,25 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
     });
   }
 
+  function restartExpiry() {
+    setError(null);
+    start(async () => {
+      const res = await fetch(`/api/staff/curation/${share.token}/extend`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hours: Number(extendHours) }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string; expiresAt?: string };
+      if (!res.ok || data.error) {
+        setError(data.error || "Could not restart the link.");
+        return;
+      }
+      setShare((prev) => ({ ...prev, expiresAt: data.expiresAt || prev.expiresAt }));
+      setMessage("Link restarted — the countdown began again just now.");
+    });
+  }
+
   function revoke() {
     if (!window.confirm("Revoke this link? The client will immediately lose access.")) return;
     setError(null);
@@ -522,7 +542,31 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
             {share.revoked ? "Revoked" : share.sessionEnded ? "Session ended" : "Live"}
           </span>
           {!share.revoked ? (
-            <span className="text-muted">{expiresLabel(share.expiresAt)}</span>
+            <>
+              <span className="text-muted">{expiresLabel(share.expiresAt)}</span>
+              <div className="flex items-center gap-1.5">
+                <select
+                  value={extendHours}
+                  onChange={(e) => setExtendHours(e.target.value)}
+                  disabled={pending}
+                  aria-label="Restart link for"
+                  className="h-8 rounded-chip border border-border bg-ground px-2 text-[11px] text-secondary outline-none focus:border-accent disabled:opacity-60"
+                >
+                  <option value="24">24 hours</option>
+                  <option value="48">48 hours</option>
+                  <option value="72">3 days</option>
+                  <option value="168">7 days</option>
+                </select>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={restartExpiry}
+                  className="h-8 rounded-chip border border-border px-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-secondary transition hover:border-accent hover:text-ink disabled:opacity-60"
+                >
+                  Restart
+                </button>
+              </div>
+            </>
           ) : null}
         </div>
       </div>

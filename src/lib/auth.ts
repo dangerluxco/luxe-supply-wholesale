@@ -1,35 +1,63 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { prisma } from "./db";
 import { ROLE, type Role } from "./constants";
 import { getStaffById, initialsFromName } from "./firestore/staff";
 import { getBuyerById } from "./firestore/buyers";
 import {
   SESSION_COOKIE,
+  BUYER_SESSION_COOKIE,
+  STAFF_SESSION_COOKIE,
+  FULFILLMENT_SESSION_COOKIE,
   decodeSession,
   type SessionUser,
+  type AppArea,
   homeForRole,
   roleCanAccess,
   encodeSession,
   sessionCookieOptions,
+  sessionCookieNameForArea,
+  sessionCookieNameForRole,
   sessionMaxAgeFromForm,
   SESSION_REMEMBER_MAX_AGE,
 } from "./auth-session";
 
 export {
   SESSION_COOKIE,
+  BUYER_SESSION_COOKIE,
+  STAFF_SESSION_COOKIE,
+  FULFILLMENT_SESSION_COOKIE,
   encodeSession,
   decodeSession,
   sessionCookieOptions,
+  sessionCookieNameForArea,
+  sessionCookieNameForRole,
   sessionMaxAgeFromForm,
   SESSION_REMEMBER_MAX_AGE,
   homeForRole,
   roleCanAccess,
   type SessionUser,
+  type AppArea,
 };
+
+/**
+ * Which app area this request belongs to. Pages/Server Actions under
+ * /wholesale, /wholesaleportal, /fulfillment get this from the `x-app-area`
+ * header middleware injects. Route Handlers under /api/** never run through
+ * middleware, so they fall back to "staff" — every getSession()-calling
+ * route under /api/ today is staff-only (/api/staff/**).
+ */
+async function currentArea(): Promise<AppArea> {
+  const hdrs = await headers();
+  const area = hdrs.get("x-app-area");
+  if (area === "buyer" || area === "staff" || area === "fulfillment") return area;
+  return "staff";
+}
 
 export async function getSession(): Promise<SessionUser | null> {
   const store = await cookies();
-  const decoded = decodeSession(store.get(SESSION_COOKIE)?.value);
+  const area = await currentArea();
+  const cookieName = sessionCookieNameForArea(area);
+  const decoded = decodeSession(store.get(cookieName)?.value);
   if (!decoded) return null;
 
   try {

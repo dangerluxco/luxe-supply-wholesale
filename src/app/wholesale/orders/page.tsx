@@ -39,22 +39,24 @@ export default async function OrdersPage() {
         />
       ) : (
         <div className="mt-8 overflow-hidden rounded-card border border-border bg-surface">
-          <div className="grid grid-cols-[110px_1fr_80px_100px_140px_120px] gap-x-4 border-b border-border px-5 py-3 font-mono text-[10px] uppercase tracking-[0.12em] text-muted">
+          <div className="grid grid-cols-[110px_1fr_80px_100px_140px_120px_70px] gap-x-4 border-b border-border px-5 py-3 font-mono text-[10px] uppercase tracking-[0.12em] text-muted">
             <span>Date</span>
             <span>Request</span>
             <span className="text-center">Items</span>
             <span className="text-right">Total</span>
             <span className="text-center">Status</span>
             <span className="text-center">Invoice</span>
+            <span />
           </div>
           {quotes.map((q) => (
-            <div
+            <Link
               key={q.id}
-              className="grid grid-cols-[110px_1fr_80px_100px_140px_120px] gap-x-4 items-center border-b border-border/60 px-5 py-3.5 text-[12.5px] text-[#3A3934] last:border-b-0"
+              href={`/wholesale/orders/${q.id}`}
+              className="grid grid-cols-[110px_1fr_80px_100px_140px_120px_70px] gap-x-4 items-center border-b border-border/60 px-5 py-3.5 text-[12.5px] text-[#3A3934] transition last:border-b-0 hover:bg-ground/70"
             >
               <span className="font-mono text-[11px] text-muted">{fullDate(q.createdAt)}</span>
-              <div>
-                <div className="text-ink">
+              <div className="min-w-0">
+                <div className="truncate text-ink">
                   {q.message ? q.message.slice(0, 70) : "Order request"}
                 </div>
                 <div className="font-mono text-[11px] text-muted">#{q.id}</div>
@@ -70,17 +72,15 @@ export default async function OrdersPage() {
               </span>
               <span className="text-center">
                 {q.invoiceNumber ? (
-                  <Link
-                    href={`/wholesale/invoices/${q.invoiceNumber}`}
-                    className="font-mono text-[11px] text-accent hover:underline"
-                  >
-                    {q.invoiceNumber} →
-                  </Link>
+                  <span className="font-mono text-[11px] text-accent">{q.invoiceNumber} →</span>
                 ) : (
                   <span className="text-[11px] text-muted">—</span>
                 )}
               </span>
-            </div>
+              <span className="text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-accent">
+                View →
+              </span>
+            </Link>
           ))}
         </div>
       )}

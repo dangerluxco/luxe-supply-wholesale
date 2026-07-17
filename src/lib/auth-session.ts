@@ -1,7 +1,36 @@
 import { ROLE, type Role } from "./constants";
 
-/** Firebase Hosting only forwards this cookie name to Cloud Run. */
+/**
+ * Separate session cookies per app area (buyer storefront / staff portal /
+ * fulfillment) so signing into one never clobbers another — previously all
+ * three shared one `__session` cookie, so switching between the storefront
+ * and the staff portal in the same browser would silently "log out" the
+ * other area.
+ */
+export const BUYER_SESSION_COOKIE = "__session_buyer";
+export const STAFF_SESSION_COOKIE = "__session_staff";
+export const FULFILLMENT_SESSION_COOKIE = "__session_fulfillment";
+
+/** @deprecated Legacy shared cookie name — only used to detect + clear stale sessions from before the split. */
 export const SESSION_COOKIE = "__session";
+
+export type AppArea = "buyer" | "staff" | "fulfillment";
+
+export function sessionCookieNameForArea(area: AppArea): string {
+  if (area === "buyer") return BUYER_SESSION_COOKIE;
+  if (area === "fulfillment") return FULFILLMENT_SESSION_COOKIE;
+  return STAFF_SESSION_COOKIE;
+}
+
+export function areaForRole(role: string): AppArea {
+  if (role === ROLE.BUYER) return "buyer";
+  if (role === ROLE.FULFILLMENT) return "fulfillment";
+  return "staff";
+}
+
+export function sessionCookieNameForRole(role: string): string {
+  return sessionCookieNameForArea(areaForRole(role));
+}
 
 export type SessionUser = {
   id: string;

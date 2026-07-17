@@ -6,10 +6,16 @@ import { prisma } from "@/lib/db";
 import {
   encodeSession,
   homeForRole,
-  SESSION_COOKIE,
   sessionCookieOptions,
+  sessionCookieNameForRole,
   sessionMaxAgeFromForm,
 } from "@/lib/auth";
+import {
+  BUYER_SESSION_COOKIE,
+  STAFF_SESSION_COOKIE,
+  FULFILLMENT_SESSION_COOKIE,
+  SESSION_COOKIE,
+} from "@/lib/auth-session";
 import { authenticateStaff, staffToAppRole } from "@/lib/firestore/staff";
 
 export async function login(_prev: unknown, formData: FormData) {
@@ -28,7 +34,7 @@ export async function login(_prev: unknown, formData: FormData) {
   if (staffOk?.ok) {
     const role = staffToAppRole(staffOk.staff);
     const store = await cookies();
-    store.set(SESSION_COOKIE, encodeSession(staffOk.staff.id, role, "firestore"), cookieOpts);
+    store.set(sessionCookieNameForRole(role), encodeSession(staffOk.staff.id, role, "firestore"), cookieOpts);
     redirect(homeForRole(role));
   }
 
@@ -38,13 +44,18 @@ export async function login(_prev: unknown, formData: FormData) {
   }
 
   const store = await cookies();
-  store.set(SESSION_COOKIE, encodeSession(user.id, user.role, "prisma"), cookieOpts);
+  store.set(sessionCookieNameForRole(user.role), encodeSession(user.id, user.role, "prisma"), cookieOpts);
 
   redirect(homeForRole(user.role));
 }
 
+/** Clears every area's session cookie — safe to call regardless of which area signed you in. */
 export async function logout() {
   const store = await cookies();
-  store.set(SESSION_COOKIE, "", { ...sessionCookieOptions(0), maxAge: 0 });
+  const clearOpts = { ...sessionCookieOptions(0), maxAge: 0 };
+  store.set(BUYER_SESSION_COOKIE, "", clearOpts);
+  store.set(STAFF_SESSION_COOKIE, "", clearOpts);
+  store.set(FULFILLMENT_SESSION_COOKIE, "", clearOpts);
+  store.set(SESSION_COOKIE, "", clearOpts);
   redirect("/wholesaleportal/sign-in");
 }

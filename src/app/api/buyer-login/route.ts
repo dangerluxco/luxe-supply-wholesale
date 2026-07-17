@@ -3,7 +3,7 @@ import {
   encodeSession,
   homeForRole,
   publicOrigin,
-  SESSION_COOKIE,
+  BUYER_SESSION_COOKIE,
   sessionCookieOptions,
   sessionMaxAgeFromForm,
 } from "@/lib/auth-session";
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
         : homeForRole(ROLE.BUYER);
     const res = NextResponse.redirect(new URL(next, publicOrigin(request)), 303);
     res.cookies.set(
-      SESSION_COOKIE,
+      BUYER_SESSION_COOKIE,
       encodeSession(auth.buyer.id, ROLE.BUYER, "firestore", auth.buyer.username),
       cookieOpts,
     );

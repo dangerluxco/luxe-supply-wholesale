@@ -1,6 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { decodeSession, roleCanAccess, SESSION_COOKIE } from "@/lib/auth-session";
+import {
+  decodeSession,
+  roleCanAccess,
+  sessionCookieNameForArea,
+  type AppArea,
+} from "@/lib/auth-session";
 import { ROLE } from "@/lib/constants";
+
+function withArea(req: NextRequest, area: AppArea) {
+  const headers = new Headers(req.headers);
+  headers.set("x-app-area", area);
+  return NextResponse.next({ request: { headers } });
+}
 
 function signInForArea(isBuyer: boolean): string {
   return isBuyer ? "/wholesale/sign-in" : "/wholesaleportal/sign-in";
@@ -35,12 +46,14 @@ export function middleware(req: NextRequest) {
   const isFulfillment = pathname.startsWith("/fulfillment");
   if (!isBuyer && !isStaff && !isFulfillment) return NextResponse.next();
 
+  const area: AppArea = isBuyer ? "buyer" : isFulfillment ? "fulfillment" : "staff";
+
   // Public buyer browse — no login required
   if (isBuyer && isPublicBuyerPath(pathname)) {
-    return NextResponse.next();
+    return withArea(req, area);
   }
 
-  const session = decodeSession(req.cookies.get(SESSION_COOKIE)?.value);
+  const session = decodeSession(req.cookies.get(sessionCookieNameForArea(area))?.value);
   if (!session) {
     const url = req.nextUrl.clone();
     url.pathname = signInForArea(isBuyer);
@@ -70,7 +83,7 @@ export function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  return NextResponse.next();
+  return withArea(req, area);
 }
 
 export const config = {

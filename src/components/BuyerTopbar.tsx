@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Logo } from "./Logo";
 import { clsx } from "@/lib/clsx";
 import { useStorefrontAvailability } from "@/components/StorefrontAvailability";
+import { SearchIcon } from "@/components/icons";
 
 type IndexItem = { sku: string; name: string; era: string; material: string };
 
@@ -98,8 +99,8 @@ export function BuyerTopbar({
           onClick={() => setOpen(true)}
           className="flex h-9 w-[300px] items-center gap-2 rounded-chip border border-border bg-ground px-3 text-[12.5px] text-muted transition hover:border-accent"
         >
-          <span>⌕</span>
-          <span>Search maker, era, material…</span>
+          <SearchIcon className="h-4 w-4 shrink-0" />
+          <span>Search the collection…</span>
           <span className="ml-auto rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-[10.5px] text-muted">
             ⌘K
           </span>
@@ -143,7 +144,7 @@ export function BuyerTopbar({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center gap-3 border-b border-border px-4">
-              <span className="text-muted">⌕</span>
+              <SearchIcon className="h-4 w-4 shrink-0 text-muted" />
               <input
                 autoFocus
                 value={q}

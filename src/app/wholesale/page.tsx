@@ -37,6 +37,7 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
   let hasMore = false;
   let lots: Awaited<ReturnType<typeof getActiveLotsForBuyer>> = [];
   let cartSkus: string[] = [];
+  let cartLotIds = new Set<string>();
   try {
     const [catalogResult, lotsResult, cartResult] = await Promise.all([
       listCatalogProducts(pageLimit, {
@@ -53,6 +54,9 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
     hasMore = catalogResult.hasMore;
     lots = lotsResult;
     cartSkus = cartHoldSkus(cartResult);
+    cartLotIds = new Set(
+      cartResult.filter((i) => i.isSuggestedLot && i.lotId).map((i) => String(i.lotId)),
+    );
   } catch (err) {
     console.warn("[wholesale catalog] Firestore unavailable:", err instanceof Error ? err.message : err);
   }
@@ -209,6 +213,7 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
             return (
               <BundleStrip
                 key={lot.id}
+                inCart={cartLotIds.has(lot.id)}
                 lot={{
                   id: lot.id,
                   title: lot.title,

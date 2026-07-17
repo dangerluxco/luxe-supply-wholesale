@@ -27,6 +27,7 @@ export function CatalogProductGrid({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [pending, start] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
+  const [quickAddingSku, setQuickAddingSku] = useState<string | null>(null);
 
   const inCart = useMemo(() => {
     const set = new Set(cartSkus.map((s) => String(s || "").trim().toUpperCase()).filter(Boolean));
@@ -60,6 +61,15 @@ export function CatalogProductGrid({
       /* ignore */
     }
   }, []);
+
+  // Auto-dismiss the quick-add toast (only relevant when nothing is selected —
+  // otherwise the message lives inside the persistent selection bar).
+  useEffect(() => {
+    if (!message || selectedList.length > 0) return;
+    const id = setTimeout(() => setMessage(null), 3000);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [message]);
 
   // Drop selection for products no longer selectable (filtered out, sold, or already in cart)
   useEffect(() => {
@@ -103,6 +113,25 @@ export function CatalogProductGrid({
     .reduce((s, p) => s + (p.wholesalePrice || 0), 0);
   const allSelected =
     selectableSkus.length > 0 && selectableSkus.every((sku) => selected.has(sku));
+
+  function quickAdd(sku: string) {
+    if (!pricesVisible) {
+      router.push("/wholesale/sign-in?next=/wholesale");
+      return;
+    }
+    setMessage(null);
+    setQuickAddingSku(sku);
+    start(async () => {
+      const res = await addSkusToCart([sku]);
+      setQuickAddingSku(null);
+      if (res?.error) {
+        setMessage(res.error);
+        return;
+      }
+      setMessage(res.skipped ? "Already held — could not add." : "Added to your order.");
+      router.refresh();
+    });
+  }
 
   function addSelected() {
     if (!selectedList.length) return;
@@ -192,6 +221,8 @@ export function CatalogProductGrid({
               !inCart(p.sku)
             }
             onToggleSelect={toggle}
+            onQuickAdd={quickAdd}
+            quickAddPending={quickAddingSku === p.sku}
           />
         ))}
       </div>
@@ -229,6 +260,10 @@ export function CatalogProductGrid({
           {message ? (
             <div className="mx-auto mt-2 max-w-6xl text-[12px] text-secondary">{message}</div>
           ) : null}
+        </div>
+      ) : message ? (
+        <div className="fixed bottom-6 right-6 z-40 rounded-chip border border-border bg-surface px-4 py-2.5 text-[12px] text-secondary shadow-[0_12px_32px_-16px_rgba(22,22,26,0.35)]">
+          {message}
         </div>
       ) : null}
     </div>
