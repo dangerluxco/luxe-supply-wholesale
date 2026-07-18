@@ -18,6 +18,31 @@ export type SimilarItem = {
 };
 
 const THUMB_SIZE = "h-9 w-9";
+const PREVIEW_SIZE = 170;
+const PREVIEW_GAP = 10;
+
+/** Floating, viewport-fixed image preview — escapes the row/scroll-container entirely, so it overlays whatever is below rather than needing the row to reserve space for it. */
+function HoverPreview({ item, anchor }: { item: SimilarItem; anchor: DOMRect }) {
+  const showBelow = anchor.top < PREVIEW_SIZE + PREVIEW_GAP + 16;
+  const top = showBelow ? anchor.bottom + PREVIEW_GAP : anchor.top - PREVIEW_SIZE - PREVIEW_GAP;
+  const left = Math.min(
+    Math.max(anchor.left + anchor.width / 2 - PREVIEW_SIZE / 2, 8),
+    window.innerWidth - PREVIEW_SIZE - 8,
+  );
+
+  return (
+    <div
+      className="pointer-events-none fixed z-40 overflow-hidden rounded-chip border border-accent/50 shadow-[0_20px_48px_-12px_rgba(22,22,26,0.5)]"
+      style={{ top, left, width: PREVIEW_SIZE, height: PREVIEW_SIZE }}
+    >
+      <Placeholder
+        imageSrc={item.imageUrl}
+        alt={portalDisplayTitle(item.title, item.sku)}
+        className="h-full w-full"
+      />
+    </div>
+  );
+}
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
@@ -128,6 +153,7 @@ export function SimilarItemsCarousel({
   const [modalSku, setModalSku] = useState<string | null>(null);
   const [addedSkus, setAddedSkus] = useState<Set<string>>(new Set());
   const [addingSku, setAddingSku] = useState<string | null>(null);
+  const [hover, setHover] = useState<{ item: SimilarItem; rect: DOMRect } | null>(null);
 
   const scrollerRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ startX: number; startScroll: number; moved: boolean; pointerId: number } | null>(
@@ -169,14 +195,30 @@ export function SimilarItemsCarousel({
     if (!drag.current.moved && Math.abs(dx) > 4) {
       drag.current.moved = true;
       el.setPointerCapture(drag.current.pointerId);
+      setHover(null);
     }
     if (drag.current.moved) {
       el.scrollLeft = drag.current.startScroll - dx;
     }
   }
-  function endDrag(e: React.PointerEvent<HTMLDivElement>) {
+  function onPointerUp(e: React.PointerEvent<HTMLDivElement>) {
     if (drag.current?.moved) {
       scrollerRef.current?.releasePointerCapture(e.pointerId);
+    }
+    // Always fully reset once the gesture ends — otherwise a stale `moved: true`
+    // from a past click (even from a tiny few-pixel jitter during the click)
+    // lingers forever, since it only ever refreshes on the *next* pointerdown.
+    // Hovering alone never triggers one, so every hover after that one jittery
+    // click would silently get blocked by the `drag.current?.moved` guard.
+    drag.current = null;
+  }
+  function onPointerLeave() {
+    // A genuine active drag keeps receiving events via pointer capture
+    // regardless of the cursor's visual position — don't reset mid-drag, let
+    // the eventual pointerup do the full reset. Only safe to clear here when
+    // nothing was actually being dragged.
+    if (!drag.current?.moved) {
+      drag.current = null;
     }
   }
 
@@ -185,7 +227,13 @@ export function SimilarItemsCarousel({
       drag.current.moved = false;
       return;
     }
+    setHover(null);
     setModalSku(it.sku);
+  }
+
+  function onHover(it: SimilarItem, e: React.MouseEvent<HTMLButtonElement>) {
+    if (drag.current?.moved) return;
+    setHover({ item: it, rect: e.currentTarget.getBoundingClientRect() });
   }
 
   async function handleAdd(it: SimilarItem) {
@@ -218,9 +266,9 @@ export function SimilarItemsCarousel({
         ref={scrollerRef}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
-        onPointerUp={endDrag}
-        onPointerLeave={endDrag}
-        className="flex w-full snap-x cursor-grab gap-3 overflow-x-auto scroll-smooth px-1 py-7 active:cursor-grabbing [&::-webkit-scrollbar]:hidden"
+        onPointerUp={onPointerUp}
+        onPointerLeave={onPointerLeave}
+        className="flex w-full snap-x cursor-grab gap-1.5 overflow-x-auto scroll-smooth px-1 py-1 active:cursor-grabbing [&::-webkit-scrollbar]:hidden"
         style={{ scrollbarWidth: "none" }}
       >
         {items.map((it) => (
@@ -228,8 +276,12 @@ export function SimilarItemsCarousel({
             key={it.sku}
             type="button"
             onClick={() => openModal(it)}
+            onMouseEnter={(e) => onHover(it, e)}
+            onMouseLeave={() => setHover(null)}
             title={portalDisplayTitle(it.title, it.sku)}
-            className={`${THUMB_SIZE} shrink-0 snap-start overflow-hidden rounded-chip border border-border transition-transform duration-150 ease-out hover:z-10 hover:scale-[2.4] hover:border-accent/60 hover:shadow-[0_12px_32px_-8px_rgba(22,22,26,0.4)]`}
+            className={`${THUMB_SIZE} shrink-0 snap-start overflow-hidden rounded-chip border transition-colors ${
+              hover?.item.sku === it.sku ? "border-accent" : "border-border hover:border-accent/60"
+            }`}
           >
             <Placeholder
               imageSrc={it.imageUrl}
@@ -239,6 +291,8 @@ export function SimilarItemsCarousel({
           </button>
         ))}
       </div>
+
+      {hover && !modalItem ? <HoverPreview item={hover.item} anchor={hover.rect} /> : null}
 
       {modalItem ? (
         <SimilarItemModal
