@@ -56,16 +56,18 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 /** Centered modal with full details on one similar item — opened by clicking its thumbnail. */
 function SimilarItemModal({
   item,
-  added,
   adding,
   onClose,
   onAdd,
+  onAddAsHero,
+  addingHero,
 }: {
   item: SimilarItem;
-  added: boolean;
   adding: boolean;
   onClose: () => void;
   onAdd: () => void;
+  onAddAsHero?: () => void;
+  addingHero?: boolean;
 }) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -120,14 +122,26 @@ function SimilarItemModal({
           <DetailRow label="Condition" value={item.condition || "—"} />
         </div>
 
-        <button
-          type="button"
-          disabled={added || adding}
-          onClick={onAdd}
-          className="mt-4 h-10 w-full rounded-chip bg-ink text-[11.5px] font-semibold uppercase tracking-[0.14em] text-ground transition disabled:opacity-60"
-        >
-          {added ? "Added" : adding ? "Adding…" : "Add"}
-        </button>
+        <div className={onAddAsHero ? "mt-4 grid grid-cols-2 gap-2" : "mt-4"}>
+          <button
+            type="button"
+            disabled={adding || addingHero}
+            onClick={onAdd}
+            className="h-10 w-full rounded-chip border border-border text-[11.5px] font-semibold uppercase tracking-[0.14em] text-secondary transition hover:border-accent hover:text-ink disabled:opacity-60"
+          >
+            {adding ? "Adding…" : "Add to catalog"}
+          </button>
+          {onAddAsHero ? (
+            <button
+              type="button"
+              disabled={adding || addingHero}
+              onClick={onAddAsHero}
+              className="h-10 w-full rounded-chip bg-ink text-[11.5px] font-semibold uppercase tracking-[0.14em] text-ground transition disabled:opacity-60"
+            >
+              {addingHero ? "Featuring…" : "Add & feature now"}
+            </button>
+          ) : null}
+        </div>
       </div>
     </div>
   );
@@ -142,17 +156,20 @@ export function SimilarItemsCarousel({
   sku,
   excludeSkus,
   onAdd,
+  onAddAsHero,
 }: {
   sku: string;
   excludeSkus: string[];
   onAdd: (item: SimilarItem) => Promise<void> | void;
+  /** Curation-only: feature the item live for the buyer immediately instead of just adding it to the catalog. */
+  onAddAsHero?: (item: SimilarItem) => Promise<void> | void;
 }) {
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<SimilarItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [modalSku, setModalSku] = useState<string | null>(null);
-  const [addedSkus, setAddedSkus] = useState<Set<string>>(new Set());
   const [addingSku, setAddingSku] = useState<string | null>(null);
+  const [addingHeroSku, setAddingHeroSku] = useState<string | null>(null);
   const [hover, setHover] = useState<{ item: SimilarItem; rect: DOMRect } | null>(null);
 
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -236,15 +253,37 @@ export function SimilarItemsCarousel({
     setHover({ item: it, rect: e.currentTarget.getBoundingClientRect() });
   }
 
+  // On success, drop the item from this row's own suggestion list — it's now
+  // on the order/catalog, so re-suggesting it right back is just noise (and
+  // re-adding it would fail as a duplicate anyway). Also closes the modal
+  // it was opened from, since there's nothing left there to look at.
+  function removeSuggested(sku: string) {
+    setItems((prev) => prev.filter((x) => x.sku !== sku));
+    setModalSku((prev) => (prev === sku ? null : prev));
+  }
+
   async function handleAdd(it: SimilarItem) {
     setAddingSku(it.sku);
     try {
       await onAdd(it);
-      setAddedSkus((prev) => new Set(prev).add(it.sku));
+      removeSuggested(it.sku);
     } catch {
       /* parent surfaces its own error state */
     } finally {
       setAddingSku(null);
+    }
+  }
+
+  async function handleAddAsHero(it: SimilarItem) {
+    if (!onAddAsHero) return;
+    setAddingHeroSku(it.sku);
+    try {
+      await onAddAsHero(it);
+      removeSuggested(it.sku);
+    } catch {
+      /* parent surfaces its own error state */
+    } finally {
+      setAddingHeroSku(null);
     }
   }
 
@@ -297,10 +336,11 @@ export function SimilarItemsCarousel({
       {modalItem ? (
         <SimilarItemModal
           item={modalItem}
-          added={addedSkus.has(modalItem.sku)}
           adding={addingSku === modalItem.sku}
+          addingHero={addingHeroSku === modalItem.sku}
           onClose={() => setModalSku(null)}
           onAdd={() => handleAdd(modalItem)}
+          onAddAsHero={onAddAsHero ? () => handleAddAsHero(modalItem) : undefined}
         />
       ) : null}
     </div>

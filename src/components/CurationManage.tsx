@@ -555,6 +555,50 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
     setMessage(`${item.sku} added to the catalog.`);
   }
 
+  /** Same idea, but features the item live for the buyer right away — for when the rep wants to pivot the call to it immediately rather than just adding it to browse. */
+  async function addSuggestedItemAsHero(item: SimilarItem) {
+    const res = await fetch(`/api/staff/curation/${share.token}/add-item`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sku: item.sku,
+        title: item.title,
+        brand: item.brand,
+        condition: item.condition,
+        price: item.price ?? 0,
+        imageUrl: item.imageUrl,
+      }),
+    });
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    if (!res.ok || data.error) {
+      setError(data.error || "Could not feature that item.");
+      throw new Error(data.error || "Could not feature item.");
+    }
+    setShare((prev) => ({
+      ...prev,
+      items: [
+        ...prev.items,
+        {
+          sku: item.sku,
+          title: item.title || item.sku,
+          brand: item.brand || "",
+          condition: item.condition || "",
+          cost: null,
+          price: item.price ?? 0,
+          imageUrl: item.imageUrl,
+          imageUrls: [],
+          decision: "" as Decision,
+          note: "",
+          liveAdded: true,
+        },
+      ],
+      itemCount: prev.itemCount + 1,
+      heroSku: item.sku,
+    }));
+    setMessage(`${item.sku} is now featured for the client.`);
+  }
+
   function endSession() {
     setError(null);
     if (stats.maybe > 0) {
@@ -1231,6 +1275,7 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
                       sku={it.sku}
                       excludeSkus={share.items.map((row) => row.sku)}
                       onAdd={addSuggestedItem}
+                      onAddAsHero={addSuggestedItemAsHero}
                     />
                   </div>
                 ) : null}
