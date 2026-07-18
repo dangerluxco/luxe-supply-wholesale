@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { PortalItemLine } from "@/components/PortalItemLine";
+import { SimilarItemsCarousel, type SimilarItem } from "@/components/SimilarItemsLink";
 import { money } from "@/lib/format";
 
 type EditableItem = {
@@ -88,6 +89,31 @@ export function QuoteItemsEditor({
     setRows((prev) => prev.filter((_, i) => i !== index));
   }
 
+  // Adds a suggested item locally only — it becomes part of the normal unsaved
+  // diff, same as a price edit, so staff review/adjust before "Save changes".
+  function addSuggestedRow(item: SimilarItem) {
+    setRows((prev) => [
+      ...prev,
+      {
+        sku: item.sku,
+        title: item.title || item.sku,
+        brand: item.brand || "",
+        quantity: 1,
+        price: item.price ?? 0,
+        imageUrl: item.imageUrl,
+        isSuggestedLot: false,
+        lotId: "",
+        lotItems: [],
+      },
+    ]);
+    setMessage(`${item.sku} added — remember to save changes.`);
+  }
+
+  const allKnownSkus = useMemo(
+    () => rows.flatMap((r) => [r.sku, ...r.lotItems.map((li) => String(li?.sku || ""))]),
+    [rows],
+  );
+
   function discardChanges() {
     setRows(savedRows);
     setError(null);
@@ -159,16 +185,18 @@ export function QuoteItemsEditor({
             key={`${item.sku}-${i}`}
             className="grid grid-cols-[1fr_100px_50px_110px_64px] items-center border-b border-border/60 px-4 py-3 text-[12.5px] last:border-b-0"
           >
-            <PortalItemLine
-              imageUrl={item.imageUrl}
-              title={item.title}
-              sku={item.isSuggestedLot ? undefined : item.sku}
-              subtitle={
-                item.isSuggestedLot
-                  ? `Suggested lot · ${item.lotItems.length} SKUs`
-                  : undefined
-              }
-            />
+            <div className="min-w-0">
+              <PortalItemLine
+                imageUrl={item.imageUrl}
+                title={item.title}
+                sku={item.isSuggestedLot ? undefined : item.sku}
+                subtitle={
+                  item.isSuggestedLot
+                    ? `Suggested lot · ${item.lotItems.length} SKUs`
+                    : undefined
+                }
+              />
+            </div>
             <span className="text-secondary">{item.brand || "—"}</span>
             <span className="text-center font-mono">{item.quantity}</span>
             <div className="flex items-center justify-end gap-1 font-mono">
@@ -193,6 +221,15 @@ export function QuoteItemsEditor({
                 Remove
               </button>
             </div>
+            {!item.isSuggestedLot ? (
+              <div className="col-span-full border-t border-border/60 pt-1">
+                <SimilarItemsCarousel
+                  sku={item.sku}
+                  excludeSkus={allKnownSkus}
+                  onAdd={addSuggestedRow}
+                />
+              </div>
+            ) : null}
           </div>
         ))}
       </div>

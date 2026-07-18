@@ -1034,6 +1034,77 @@ export async function getCatalogProductBySku(
   );
 }
 
+export type SimilarCatalogItem = {
+  sku: string;
+  title: string;
+  brand: string;
+  price: number | null;
+  imageUrl: string | null;
+  era: string;
+  material: string;
+  condition: string;
+  match: number;
+};
+
+/**
+ * Staff-only: "more like this" suggestions for one catalog item — used as a subtle
+ * per-item upsell prompt on the curation call screen and the order-request editor.
+ * Scores the live catalog by shared brand/material/era plus price proximity
+ * (see lib/recommend.ts); excludes sold/held pieces and anything already on the
+ * order/session it's being suggested for.
+ */
+export async function findSimilarCatalogItems(
+  baseSku: string,
+  excludeSkus: string[] = [],
+  limit = 6,
+): Promise<SimilarCatalogItem[]> {
+  const sku = String(baseSku || "").trim();
+  if (!sku) return [];
+
+  const base = await getCatalogProductBySku(sku, { includeBundled: true });
+  if (!base) return [];
+
+  const exclude = new Set(
+    [...excludeSkus, sku].map((s) => String(s || "").trim().toUpperCase()).filter(Boolean),
+  );
+
+  const { products } = await listCatalogProducts(300);
+  const candidates = products
+    .filter((p) => !exclude.has(p.sku.toUpperCase()))
+    .filter((p) => !p.soldOut && !p.held)
+    .filter((p) => p.price != null);
+
+  const { rankSimilar } = await import("@/lib/recommend");
+  const ranked = rankSimilar(
+    { brand: base.brand, material: base.material, era: base.era, price: base.price || 0 },
+    candidates.map((p) => ({
+      sku: p.sku,
+      title: p.title,
+      brand: p.brand,
+      price: p.price || 0,
+      imageUrl: p.imageUrl,
+      era: p.era,
+      material: p.material,
+      condition: p.condition,
+    })),
+    limit,
+  );
+
+  return ranked
+    .filter((r) => r.match > 0)
+    .map((r) => ({
+      sku: r.sku,
+      title: r.title,
+      brand: r.brand,
+      price: r.price,
+      imageUrl: r.imageUrl,
+      era: r.era,
+      material: r.material,
+      condition: r.condition,
+      match: r.match,
+    }));
+}
+
 /** Mark inventory SKUs as sold so they drop from the wholesale storefront. */
 export async function markSkusSold(skus: string[]): Promise<{ updated: number }> {
   const unique = [...new Set(skus.map((s) => String(s || "").trim()).filter(Boolean))];

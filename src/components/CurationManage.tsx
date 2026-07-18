@@ -7,6 +7,7 @@ import { Placeholder } from "@/components/Placeholder";
 import { TrashIcon } from "@/components/icons";
 import { clsx } from "@/lib/clsx";
 import { CurationBookCall } from "@/components/CurationBookCall";
+import { SimilarItemsCarousel, type SimilarItem } from "@/components/SimilarItemsLink";
 
 type Decision = "" | "approve" | "maybe" | "decline";
 
@@ -505,6 +506,53 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
       clearBulk();
       setBulkFolded(true);
     });
+  }
+
+  // -- Per-item "suggest similar items" (subtle expander under each row) -----
+  async function addSuggestedItem(item: SimilarItem) {
+    const res = await fetch(`/api/staff/curation/${share.token}/add-items`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        items: [
+          {
+            sku: item.sku,
+            title: item.title,
+            brand: item.brand,
+            condition: item.condition,
+            price: item.price ?? 0,
+            imageUrl: item.imageUrl,
+          },
+        ],
+      }),
+    });
+    const data = (await res.json().catch(() => ({}))) as { error?: string; added?: string[] };
+    if (!res.ok || data.error || !data.added?.length) {
+      setError(data.error || "Could not add that item.");
+      throw new Error(data.error || "Could not add item.");
+    }
+    setShare((prev) => ({
+      ...prev,
+      items: [
+        ...prev.items,
+        {
+          sku: item.sku,
+          title: item.title || item.sku,
+          brand: item.brand || "",
+          condition: item.condition || "",
+          cost: null,
+          price: item.price ?? 0,
+          imageUrl: item.imageUrl,
+          imageUrls: [],
+          decision: "" as Decision,
+          note: "",
+          liveAdded: true,
+        },
+      ],
+      itemCount: prev.itemCount + 1,
+    }));
+    setMessage(`${item.sku} added to the catalog.`);
   }
 
   function endSession() {
@@ -1177,6 +1225,15 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
                     <TrashIcon className="h-4 w-4" />
                   </button>
                 </div>
+                {!share.sessionEnded && !share.revoked ? (
+                  <div className="col-span-full border-t border-border/60 pt-1">
+                    <SimilarItemsCarousel
+                      sku={it.sku}
+                      excludeSkus={share.items.map((row) => row.sku)}
+                      onAdd={addSuggestedItem}
+                    />
+                  </div>
+                ) : null}
               </div>
             );
           })}
