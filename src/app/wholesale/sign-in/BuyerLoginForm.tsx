@@ -14,8 +14,8 @@ export default function BuyerLoginForm() {
   const ok = params.get("ok") || "";
   const next = params.get("next") || "";
   const [pending, setPending] = useState(false);
-  const [username, setUsername] = useState(isDev ? "howcouldyouforget" : "");
-  const [password, setPassword] = useState(isDev ? "Gmoney2026" : "");
+  const [username, setUsername] = useState(isDev ? "buyer@luxesupply.co" : "");
+  const [password, setPassword] = useState(isDev ? "luxe2026" : "");
   const [remember, setRemember] = useState(true);
   const [usernameLocked, setUsernameLocked] = useState(isDev);
   const [passwordLocked, setPasswordLocked] = useState(isDev);
