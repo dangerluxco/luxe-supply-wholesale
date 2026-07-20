@@ -18,6 +18,8 @@ type CuratedCatalogItem = {
   cost: number | null;
   price: number | null;
   priceOverridden: boolean;
+  isNew?: boolean; // Track newly added items for visual distinction
+  addedAt?: number; // Timestamp when added to track "new" status
 };
 
 type CuratedCatalog = {
@@ -58,9 +60,11 @@ function mergeCatalogItems(
   incoming: CuratedCatalogItem[],
 ): { items: CuratedCatalogItem[]; added: number; skipped: number } {
   const seen = new Set(existing.map((i) => i.sku.trim().toLowerCase()).filter(Boolean));
-  const items = [...existing];
+  const newItems: CuratedCatalogItem[] = [];
   let added = 0;
   let skipped = 0;
+  const now = Date.now();
+  
   for (const item of incoming) {
     const key = item.sku.trim().toLowerCase();
     if (!key || seen.has(key)) {
@@ -68,9 +72,13 @@ function mergeCatalogItems(
       continue;
     }
     seen.add(key);
-    items.push(item);
+    // Mark as new and add timestamp for visual distinction
+    newItems.push({ ...item, isNew: true, addedAt: now });
     added += 1;
   }
+  
+  // Insert new items at the TOP of the list (not appended at bottom)
+  const items = [...newItems, ...existing];
   return { items, added, skipped };
 }
 
@@ -134,6 +142,7 @@ export function CatalogSettingsForm({
       const data = (await res.json().catch(() => ({}))) as {
         error?: string;
         items?: CuratedCatalogItem[];
+        batchCount?: number;
       };
       if (!res.ok || data.error || !data.items) {
         setError(data.error || "Could not resolve SKUs.");
@@ -143,9 +152,9 @@ export function CatalogSettingsForm({
       setDraft({ items: merged.items });
       setBatchText("");
       setMessage(
-        `Added ${merged.added} item${merged.added === 1 ? "" : "s"}${
-          merged.skipped ? ` · skipped ${merged.skipped} already in catalog` : ""
-        }.`,
+        `✓ Added ${merged.added} new item${merged.added === 1 ? "" : "s"} to top of list${
+          merged.skipped ? ` · ${merged.skipped} already in catalog` : ""
+        }${data.batchCount && data.batchCount !== merged.added + merged.skipped ? ` (${data.batchCount} total in batch)` : ""}.`,
       );
     });
   }
@@ -244,8 +253,8 @@ export function CatalogSettingsForm({
           <textarea
             value={batchText}
             onChange={(e) => setBatchText(e.target.value)}
-            rows={5}
-            placeholder="Paste new SKUs here — one per line, comma, or space separated."
+            rows={6}
+            placeholder="Paste SKUs here (one per line), or paste SKU + Price columns (tab or comma separated).&#10;&#10;Examples:&#10;  LX-1234&#10;  LX-5678	1200&#10;  LX-9012, $850"
             className="rounded-chip border border-border bg-surface px-3 py-2 font-mono text-[12px] text-ink outline-none focus:border-accent"
           />
         </label>
@@ -259,7 +268,7 @@ export function CatalogSettingsForm({
             {pending ? "Resolving…" : "Add batch to working list"}
           </button>
           <span className="text-[11px] text-muted">
-            Existing SKUs are skipped so batches can be pasted repeatedly.
+            Format: SKU only, or SKU + Price (tab/comma separated). New items appear at top with "NEW" badge. Duplicates are skipped.
           </span>
         </div>
       </div>
@@ -326,16 +335,24 @@ export function CatalogSettingsForm({
             <div className="max-h-[520px] overflow-y-auto">
               {filteredDraft.map(({ item, index }) => {
                 const margin = marginFor(item.cost, item.price);
+                const isRecentlyAdded = item.isNew && item.addedAt && (Date.now() - item.addedAt < 60000); // Show "NEW" for 1 minute
                 return (
                   <div
                     key={`${item.sku}-${index}`}
-                    className="grid grid-cols-[88px_minmax(180px,1fr)_90px_60px_110px_90px_70px_56px] items-center border-b border-border/60 px-3 py-2.5 text-[12.5px] last:border-b-0"
+                    className={`grid grid-cols-[88px_minmax(180px,1fr)_90px_60px_110px_90px_70px_56px] items-center border-b border-border/60 px-3 py-2.5 text-[12.5px] last:border-b-0 ${isRecentlyAdded ? 'bg-accent/5' : ''}`}
                   >
-                    <Placeholder
-                      imageSrc={item.imageUrl}
-                      alt={portalDisplayTitle(item.title, item.sku)}
-                      className="h-20 w-20 shrink-0 rounded-chip"
-                    />
+                    <div className="relative">
+                      <Placeholder
+                        imageSrc={item.imageUrl}
+                        alt={portalDisplayTitle(item.title, item.sku)}
+                        className="h-20 w-20 shrink-0 rounded-chip"
+                      />
+                      {isRecentlyAdded ? (
+                        <div className="absolute -right-1 -top-1 rounded-chip bg-accent px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-ground shadow-sm">
+                          NEW
+                        </div>
+                      ) : null}
+                    </div>
                     <div className="min-w-0 px-2">
                       <div className="truncate text-ink">
                         {portalDisplayTitle(item.title, item.sku)}
