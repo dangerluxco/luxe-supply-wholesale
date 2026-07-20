@@ -53,13 +53,15 @@ function marginFor(cost: number | null, price: number | null): {
   return { amount, percent };
 }
 
+// New items land at the TOP of the working list (not appended) so a fresh
+// import batch is immediately visible instead of getting lost below whatever
+// was already there.
 function mergeCatalogItems(
   existing: CuratedCatalogItem[],
   incoming: CuratedCatalogItem[],
-): { items: CuratedCatalogItem[]; added: number; skipped: number } {
+): { items: CuratedCatalogItem[]; added: number; skipped: number; addedSkuKeys: string[] } {
   const seen = new Set(existing.map((i) => i.sku.trim().toLowerCase()).filter(Boolean));
-  const items = [...existing];
-  let added = 0;
+  const toAdd: CuratedCatalogItem[] = [];
   let skipped = 0;
   for (const item of incoming) {
     const key = item.sku.trim().toLowerCase();
@@ -68,10 +70,103 @@ function mergeCatalogItems(
       continue;
     }
     seen.add(key);
-    items.push(item);
-    added += 1;
+    toAdd.push(item);
   }
-  return { items, added, skipped };
+  return {
+    items: [...toAdd, ...existing],
+    added: toAdd.length,
+    skipped,
+    addedSkuKeys: toAdd.map((i) => i.sku.trim().toLowerCase()),
+  };
+}
+
+type ParsedBatchRow = { sku: string; overridePrice: number | null };
+
+// Column-header labels spreadsheets commonly carry along with a two-column
+// SKU/price paste (e.g. a "CLIENT" title row, then "SKU" / "SALE PRICE").
+// These aren't real inventory rows and should be dropped silently.
+const HEADER_SKU_LABELS = new Set([
+  "sku",
+  "skus",
+  "client",
+  "item",
+  "item id",
+  "product",
+  "upc",
+  "code",
+  "part number",
+  "part #",
+]);
+
+function isHeaderRow(sku: string, priceRaw: string): boolean {
+  if (HEADER_SKU_LABELS.has(sku.toLowerCase())) return true;
+  if (priceRaw && !/\d/.test(priceRaw) && /price|cost|amount/i.test(priceRaw)) return true;
+  return false;
+}
+
+/**
+ * Parses a pasted spreadsheet block — one row per line, columns separated by
+ * tab (a plain paste from Excel/Sheets) or comma (CSV). First column is the
+ * SKU; a second column, if present, is a sale price that overrides the
+ * calculated cost/0.8 default entirely (flagged via `priceOverridden`).
+ *
+ * Only the outer line break is trusted — individual lines are NOT pre-trimmed
+ * before splitting, since a blank-SKU row like "\t$0.00" (an unused
+ * spreadsheet row) has its meaningful leading tab stripped by an eager trim.
+ */
+function parseBatchRows(text: string): {
+  rows: ParsedBatchRow[];
+  duplicatesInPaste: number;
+  blankRows: number;
+  headerRows: number;
+  invalidPriceSkus: string[];
+} {
+  const lines = text.split(/\r?\n/);
+  const seen = new Set<string>();
+  const rows: ParsedBatchRow[] = [];
+  const invalidPriceSkus: string[] = [];
+  let duplicatesInPaste = 0;
+  let blankRows = 0;
+  let headerRows = 0;
+
+  for (const line of lines) {
+    if (line.trim() === "") continue;
+    const cols = line.includes("\t")
+      ? line.split("\t")
+      : line.includes(",")
+        ? line.split(",")
+        : [line];
+    const sku = (cols[0] || "").trim();
+    const priceRaw = cols[1] != null ? cols[1].trim() : "";
+
+    if (!sku) {
+      blankRows += 1;
+      continue;
+    }
+    if (isHeaderRow(sku, priceRaw)) {
+      headerRows += 1;
+      continue;
+    }
+    const key = sku.toLowerCase();
+    if (seen.has(key)) {
+      duplicatesInPaste += 1;
+      continue;
+    }
+    seen.add(key);
+
+    let overridePrice: number | null = null;
+    if (priceRaw) {
+      const parsed = Number(priceRaw.replace(/[^0-9.]/g, ""));
+      if (Number.isFinite(parsed) && parsed > 0) {
+        overridePrice = Math.round(parsed);
+      } else {
+        invalidPriceSkus.push(sku);
+      }
+    }
+    rows.push({ sku, overridePrice });
+  }
+
+  return { rows, duplicatesInPaste, blankRows, headerRows, invalidPriceSkus };
 }
 
 export function CatalogSettingsForm({
@@ -90,11 +185,13 @@ export function CatalogSettingsForm({
   const [pending, start] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [justAddedSkuKeys, setJustAddedSkuKeys] = useState<Set<string>>(new Set());
 
-  const draftUnresolvedCount = useMemo(
-    () => draft.items.filter((i) => !i.inDb).length,
+  const draftUnresolvedSkus = useMemo(
+    () => draft.items.filter((i) => !i.inDb).map((i) => i.sku),
     [draft],
   );
+  const draftUnresolvedCount = draftUnresolvedSkus.length;
   const draftTotal = useMemo(
     () => draft.items.reduce((sum, i) => sum + (i.price || 0), 0),
     [draft],
@@ -124,12 +221,23 @@ export function CatalogSettingsForm({
   function addBatchToDraft() {
     setError(null);
     setMessage(null);
+    const { rows, duplicatesInPaste, blankRows, headerRows, invalidPriceSkus } =
+      parseBatchRows(batchText);
+    if (!rows.length) {
+      setError("Paste at least one SKU.");
+      return;
+    }
+    const overridePriceBySku = new Map(
+      rows
+        .filter((r) => r.overridePrice != null)
+        .map((r) => [r.sku.toLowerCase(), r.overridePrice as number]),
+    );
     start(async () => {
       const res = await fetch("/api/staff/catalog/resolve", {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ skusText: batchText }),
+        body: JSON.stringify({ skusText: rows.map((r) => r.sku).join("\n") }),
       });
       const data = (await res.json().catch(() => ({}))) as {
         error?: string;
@@ -139,14 +247,39 @@ export function CatalogSettingsForm({
         setError(data.error || "Could not resolve SKUs.");
         return;
       }
-      const merged = mergeCatalogItems(draft.items, data.items);
+      // A pasted sale price wins outright over the calculated cost/0.8 default.
+      const withOverrides = data.items.map((it) => {
+        const override = overridePriceBySku.get(it.sku.trim().toLowerCase());
+        return override != null ? { ...it, price: override, priceOverridden: true } : it;
+      });
+      const merged = mergeCatalogItems(draft.items, withOverrides);
       setDraft({ items: merged.items });
+      setJustAddedSkuKeys(new Set(merged.addedSkuKeys));
       setBatchText("");
-      setMessage(
-        `Added ${merged.added} item${merged.added === 1 ? "" : "s"}${
-          merged.skipped ? ` · skipped ${merged.skipped} already in catalog` : ""
-        }.`,
-      );
+
+      const notFoundCount = withOverrides.filter((it) => !it.inDb).length;
+      const parts = [`Added ${merged.added} new item${merged.added === 1 ? "" : "s"}`];
+      if (merged.skipped) {
+        parts.push(`${merged.skipped} already in the working list`);
+      }
+      if (duplicatesInPaste) {
+        parts.push(`${duplicatesInPaste} duplicate row${duplicatesInPaste === 1 ? "" : "s"} in the paste`);
+      }
+      if (blankRows) {
+        parts.push(`${blankRows} blank row${blankRows === 1 ? "" : "s"} skipped`);
+      }
+      if (headerRows) {
+        parts.push(`${headerRows} header row${headerRows === 1 ? "" : "s"} ignored`);
+      }
+      if (notFoundCount) {
+        parts.push(`${notFoundCount} not found in inventory`);
+      }
+      if (invalidPriceSkus.length) {
+        parts.push(
+          `${invalidPriceSkus.length} had an unreadable price and used the calculated price instead`,
+        );
+      }
+      setMessage(parts.join(" · ") + ".");
     });
   }
 
@@ -171,6 +304,7 @@ export function CatalogSettingsForm({
 
   function discardDraft() {
     setDraft({ items: curated?.items || [] });
+    setJustAddedSkuKeys(new Set());
     setError(null);
     setMessage("Working changes discarded.");
   }
@@ -196,6 +330,7 @@ export function CatalogSettingsForm({
       }
       const now = new Date().toISOString();
       setCurated({ items: draft.items, unresolvedSkus, updatedAt: now, updatedBy: "you" });
+      setJustAddedSkuKeys(new Set());
       setMessage(data.message || "Curated catalog saved.");
     });
   }
@@ -239,13 +374,13 @@ export function CatalogSettingsForm({
       <div className="space-y-2 rounded-card border border-border bg-ground p-4">
         <label className="flex flex-col gap-1.5">
           <span className="micro-badge text-[10px] tracking-[0.14em] text-muted">
-            ADD SKU BATCH
+            ADD SKU BATCH — WITH OPTIONAL SALE PRICE
           </span>
           <textarea
             value={batchText}
             onChange={(e) => setBatchText(e.target.value)}
             rows={5}
-            placeholder="Paste new SKUs here — one per line, comma, or space separated."
+            placeholder={"Paste rows of SKU + sale price, one per line — e.g. from a spreadsheet:\nABC-123\t249\nABC-124, 189\nABC-125"}
             className="rounded-chip border border-border bg-surface px-3 py-2 font-mono text-[12px] text-ink outline-none focus:border-accent"
           />
         </label>
@@ -259,7 +394,10 @@ export function CatalogSettingsForm({
             {pending ? "Resolving…" : "Add batch to working list"}
           </button>
           <span className="text-[11px] text-muted">
-            Existing SKUs are skipped so batches can be pasted repeatedly.
+            New items land at the top of the list, highlighted below. A second column (tab or
+            comma separated) sets the sale price directly, overriding the calculated cost/0.8
+            price. Rows already in the working list are skipped so batches can be pasted
+            repeatedly.
           </span>
         </div>
       </div>
@@ -297,9 +435,21 @@ export function CatalogSettingsForm({
         ) : null}
 
         {draftUnresolvedCount > 0 ? (
-          <div className="rounded-chip border border-danger/40 bg-danger/5 px-3 py-2 text-[12px] text-danger">
-            {draftUnresolvedCount} SKU{draftUnresolvedCount === 1 ? "" : "s"} not found in
-            inventory — remove or fix before saving.
+          <div className="space-y-1.5 rounded-chip border border-danger/40 bg-danger/5 px-3 py-2 text-[12px] text-danger">
+            <div>
+              {draftUnresolvedCount} SKU{draftUnresolvedCount === 1 ? "" : "s"} not found in
+              inventory — remove or fix before saving.
+            </div>
+            <div className="flex flex-wrap gap-1.5 font-mono text-[11px]">
+              {draftUnresolvedSkus.map((sku, i) => (
+                <span
+                  key={`${sku}-${i}`}
+                  className="rounded-chip border border-danger/40 bg-surface px-1.5 py-0.5"
+                >
+                  {sku}
+                </span>
+              ))}
+            </div>
           </div>
         ) : null}
 
@@ -326,10 +476,14 @@ export function CatalogSettingsForm({
             <div className="max-h-[520px] overflow-y-auto">
               {filteredDraft.map(({ item, index }) => {
                 const margin = marginFor(item.cost, item.price);
+                const isNew = justAddedSkuKeys.has(item.sku.trim().toLowerCase());
                 return (
                   <div
                     key={`${item.sku}-${index}`}
-                    className="grid grid-cols-[88px_minmax(180px,1fr)_90px_60px_110px_90px_70px_56px] items-center border-b border-border/60 px-3 py-2.5 text-[12.5px] last:border-b-0"
+                    className={
+                      "grid grid-cols-[88px_minmax(180px,1fr)_90px_60px_110px_90px_70px_56px] items-center border-b border-border/60 px-3 py-2.5 text-[12.5px] last:border-b-0" +
+                      (isNew ? " bg-accent/[0.06]" : "")
+                    }
                   >
                     <Placeholder
                       imageSrc={item.imageUrl}
@@ -337,8 +491,13 @@ export function CatalogSettingsForm({
                       className="h-20 w-20 shrink-0 rounded-chip"
                     />
                     <div className="min-w-0 px-2">
-                      <div className="truncate text-ink">
-                        {portalDisplayTitle(item.title, item.sku)}
+                      <div className="flex items-center gap-1.5 truncate text-ink">
+                        {isNew ? (
+                          <span className="micro-badge shrink-0 rounded-chip bg-accent px-1.5 py-0.5 text-[9px] tracking-[0.1em] text-ground">
+                            NEW
+                          </span>
+                        ) : null}
+                        <span className="truncate">{portalDisplayTitle(item.title, item.sku)}</span>
                       </div>
                       {portalShowSkuLine(item.title, item.sku) ? (
                         <div className="truncate font-mono text-[11px] text-muted">{item.sku}</div>
@@ -367,7 +526,11 @@ export function CatalogSettingsForm({
                         value={item.price ?? ""}
                         disabled={pending}
                         onChange={(e) => updateDraftPrice(index, e.target.value)}
-                        className="w-[70px] rounded-chip border border-border bg-surface px-2 py-1 text-right text-[12.5px] text-ink outline-none focus:border-accent disabled:opacity-60"
+                        title={item.priceOverridden ? "Manually set — not the calculated price" : undefined}
+                        className={
+                          "w-[70px] rounded-chip border bg-surface px-2 py-1 text-right text-[12.5px] text-ink outline-none focus:border-accent disabled:opacity-60 " +
+                          (item.priceOverridden ? "border-accent/50" : "border-border")
+                        }
                       />
                     </div>
                     <span

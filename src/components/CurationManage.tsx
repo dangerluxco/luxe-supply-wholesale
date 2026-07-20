@@ -914,61 +914,67 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
                 Export final CSV
               </a>
             </div>
-          ) : !callStartedAtMs ? (
-            <div>
-              <p className="text-[12.5px] text-secondary">
-                Your catalog link is ready — send it anytime. When you and the client are on the
-                call together, start the timer and switch to the live view.
-              </p>
-              <button
-                type="button"
-                onClick={startCall}
-                className="mt-3 h-10 rounded-chip bg-ink px-5 text-[11.5px] font-semibold uppercase tracking-[0.14em] text-ground"
-              >
-                Start call
-              </button>
-            </div>
           ) : (
             <>
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                <p className="text-[12px] text-secondary">
-                  When you&apos;re done deciding items, end the session to finalize selections.
-                </p>
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={endSession}
-                  className="h-9 rounded-chip border border-border px-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-secondary hover:border-accent hover:text-ink disabled:opacity-60"
-                >
-                  End sales session
-                </button>
-              </div>
-
-              <div className="mb-5 grid grid-cols-3 gap-3 sm:grid-cols-5">
-                {[
-                  { label: "Time elapsed", value: formatElapsed(stats.elapsedMs) },
-                  { label: "Piece count", value: String(stats.pieces) },
-                  { label: "Items/hour", value: stats.perHour ? stats.perHour.toFixed(1) : "0" },
-                  { label: "Total rev", value: money(Math.round(stats.rev)) },
-                  { label: "Net margin", value: marginLabel },
-                  { label: "Approve", value: String(stats.approve) },
-                  { label: "Maybe", value: String(stats.maybe) },
-                  { label: "Decline", value: String(stats.decline) },
-                  { label: "Pending", value: String(stats.pending) },
-                  { label: "Cart (approved)", value: money(Math.round(stats.cart)) },
-                ].map((s) => (
-                  <div
-                    key={s.label}
-                    className="rounded-chip border border-border bg-ground px-3 py-2.5 text-center"
+              {!callStartedAtMs ? (
+                <div className="mb-5">
+                  <p className="text-[12.5px] text-secondary">
+                    Your catalog link is ready — send it anytime. Add items below now or during
+                    the call; start the timer once you and the client are on together.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={startCall}
+                    className="mt-3 h-10 rounded-chip bg-ink px-5 text-[11.5px] font-semibold uppercase tracking-[0.14em] text-ground"
                   >
-                    <div className="font-mono text-[15px] text-ink">{s.value}</div>
-                    <div className="mt-0.5 text-[9.5px] uppercase tracking-[0.08em] text-muted">
-                      {s.label}
-                    </div>
+                    Start call
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-[12px] text-secondary">
+                      When you&apos;re done deciding items, end the session to finalize selections.
+                    </p>
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={endSession}
+                      className="h-9 rounded-chip border border-border px-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-secondary hover:border-accent hover:text-ink disabled:opacity-60"
+                    >
+                      End sales session
+                    </button>
                   </div>
-                ))}
-              </div>
 
+                  <div className="mb-5 grid grid-cols-3 gap-3 sm:grid-cols-5">
+                    {[
+                      { label: "Time elapsed", value: formatElapsed(stats.elapsedMs) },
+                      { label: "Piece count", value: String(stats.pieces) },
+                      { label: "Items/hour", value: stats.perHour ? stats.perHour.toFixed(1) : "0" },
+                      { label: "Total rev", value: money(Math.round(stats.rev)) },
+                      { label: "Net margin", value: marginLabel },
+                      { label: "Approve", value: String(stats.approve) },
+                      { label: "Maybe", value: String(stats.maybe) },
+                      { label: "Decline", value: String(stats.decline) },
+                      { label: "Pending", value: String(stats.pending) },
+                      { label: "Cart (approved)", value: money(Math.round(stats.cart)) },
+                    ].map((s) => (
+                      <div
+                        key={s.label}
+                        className="rounded-chip border border-border bg-ground px-3 py-2.5 text-center"
+                      >
+                        <div className="font-mono text-[15px] text-ink">{s.value}</div>
+                        <div className="mt-0.5 text-[9.5px] uppercase tracking-[0.08em] text-muted">
+                          {s.label}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {/* Adding items works whether or not the call has started yet — reps often
+                  build the list out ahead of time, then start the timer once live. */}
               {addFolded && !addPreview ? (
                 <button
                   type="button"
