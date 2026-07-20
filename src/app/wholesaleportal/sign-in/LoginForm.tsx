@@ -13,8 +13,8 @@ export default function LoginForm() {
   const error = params.get("error") || "";
   const ok = params.get("ok") || "";
   const [pending, setPending] = useState(false);
-  const [email, setEmail] = useState(isDev ? "dan@luxesupply.co" : "");
-  const [password, setPassword] = useState(isDev ? "Gmoney2026" : "");
+  const [email, setEmail] = useState(isDev ? "rep@luxesupply.co" : "");
+  const [password, setPassword] = useState(isDev ? "luxe2026" : "");
   const [remember, setRemember] = useState(true);
   const [emailLocked, setEmailLocked] = useState(isDev);
   const [passwordLocked, setPasswordLocked] = useState(isDev);
