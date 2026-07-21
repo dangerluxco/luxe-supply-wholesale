@@ -49,11 +49,16 @@ gcloud run deploy luxe-wholesale-portal \
   --port 8080 \
   --memory 1Gi \
   --cpu 1 \
+  --min-instances 1 \
   --set-env-vars "GCLOUD_PROJECT=photography-964f5,NODE_ENV=production,PUBLIC_HOST=photography-964f5.web.app"
 
 cd ../ItemIQ-Marketing-Website
 firebase deploy --only hosting
 ```
+
+`--min-instances 1` keeps one warm instance so the first click after idle has no
+cold-start lag (small always-on cost). Keep this flag on redeploys; to apply it
+without a full redeploy: `gcloud run services update luxe-wholesale-portal --min-instances 1 --region us-central1 --project photography-964f5`.
 
 Smoke: `/wholesale/sign-in` (buyer) and `/wholesaleportal/sign-in` (staff). Static SPA backup lives in `wholesaleportal-legacy/`.
 
