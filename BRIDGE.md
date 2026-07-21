@@ -50,11 +50,28 @@ gcloud run deploy luxe-wholesale-portal \
   --memory 1Gi \
   --cpu 1 \
   --min-instances 1 \
-  --set-env-vars "GCLOUD_PROJECT=photography-964f5,NODE_ENV=production,PUBLIC_HOST=photography-964f5.web.app"
+  --update-env-vars "GCLOUD_PROJECT=photography-964f5,NODE_ENV=production,PUBLIC_HOST=photography-964f5.web.app"
 
 cd ../ItemIQ-Marketing-Website
 firebase deploy --only hosting
 ```
+
+`--update-env-vars` (not `--set-env-vars`) is deliberate: it merges and preserves
+other runtime env vars — notably the Google OAuth creds below. `--set-env-vars`
+replaces the whole set and silently wipes them, which breaks "Sign in with Google".
+
+**Google OAuth env vars (required for "Sign in with Google" in prod).** These are
+NOT baked into the image; set them on the Cloud Run service once:
+```bash
+gcloud run services update luxe-wholesale-portal --region us-central1 --project photography-964f5 \
+  --update-env-vars "GOOGLE_OAUTH_CLIENT_ID=...,GOOGLE_OAUTH_CLIENT_SECRET=..."
+```
+Values live in `.env` (GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET). The
+redirect URI is derived from the request host (`x-forwarded-host`), so every
+user-facing domain's `…/api/auth/callback/google` must be an Authorized redirect
+URI on the OAuth web client in Google Console — including
+`https://luxe-wholesale-portal.web.app/api/auth/callback/google` (staff) and
+`https://wholesale.luxesupply.co/api/auth/callback/google` (buyer).
 
 `--min-instances 1` keeps one warm instance so the first click after idle has no
 cold-start lag (small always-on cost). Keep this flag on redeploys; to apply it
