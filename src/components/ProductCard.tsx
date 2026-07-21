@@ -1,13 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { Placeholder, OneOfOneBadge } from "./Placeholder";
 import { MicroBadge } from "./badges";
 import { money } from "@/lib/format";
 import { formatMargin, marginFor, marginTone, marginToneClass } from "@/lib/pricing";
 import { PRODUCT_STATUS } from "@/lib/constants";
 import { ProductGallery } from "./ProductGallery";
+import { BrandedLoader } from "./BrandedLoader";
+import { Logo } from "./Logo";
+import { useNavPress } from "@/hooks/useNavPress";
 import { clsx } from "@/lib/clsx";
 
 export type CatalogProduct = {
@@ -63,15 +67,18 @@ export function ProductCard({
   /** Staff-only: cost basis, shown with a color-coded profit margin line. Omit entirely for buyers. */
   staffCost?: number | null;
 }) {
+  const router = useRouter();
+  const cardRef = useRef<HTMLDivElement>(null);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryIndex, setGalleryIndex] = useState(0);
   const onHold = p.status === PRODUCT_STATUS.ON_HOLD;
   const soldOut = p.status === PRODUCT_STATUS.SOLD;
   const heldByYou = !!p.heldByYou;
   const canSelect = selectable && !onHold && !soldOut && !inCart;
-  const metaBits = [p.brand || p.origin, p.era.split(" · ")[1] ?? p.era, p.material].filter(
-    Boolean,
-  );
+  // Brand is already in the title — only show non-empty era/material with clean separators.
+  const metaBits = [p.era, p.material]
+    .map((x) => String(x || "").trim())
+    .filter((x) => x && x !== "—" && x !== "/");
   const urls =
     p.imageUrls?.length
       ? p.imageUrls
@@ -79,6 +86,37 @@ export function ProductCard({
         ? [p.primaryImageUrl]
         : [];
   const margin = staffCost !== undefined ? marginFor(staffCost, p.wholesalePrice) : null;
+  const href = linkHref || `/wholesale/product/${encodeURIComponent(p.sku)}`;
+  // Soft nav keeps the catalog painted until the RSC stream starts — loading.tsx
+  // often won't appear for ~1–2s. Client pending state gives feedback in <50ms.
+  const { busy, navigate } = useNavPress(href);
+
+  function prefetchPdp() {
+    router.prefetch(href);
+  }
+
+  // Prefetch when the card nears the viewport (not only on hover).
+  useEffect(() => {
+    const el = cardRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((e) => e.isIntersecting)) return;
+        router.prefetch(href);
+        io.disconnect();
+      },
+      { rootMargin: "240px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [href, router]);
+
+  function openPdp(e: React.MouseEvent) {
+    // Keep modified / non-primary clicks on the real <Link> (new tab, etc.).
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+    e.preventDefault();
+    navigate();
+  }
 
   function openGallery(e: React.MouseEvent) {
     e.preventDefault();
@@ -107,41 +145,35 @@ export function ProductCard({
           Comp avg ${Math.round(p.hostCompAvgUsd)}
         </div>
       ) : null}
-      <div className="mt-1 font-mono text-[11px] uppercase text-muted">
-        {metaBits.join(" · ")}
-      </div>
+      {metaBits.length ? (
+        <div className="mt-1 font-mono text-[11px] uppercase text-muted">
+          {metaBits.join(" · ")}
+        </div>
+      ) : null}
       {margin ? (
         <div className={"mt-1 font-mono text-[10.5px] " + marginToneClass(marginTone(margin.percent))}>
           cost {staffCost != null ? money(Math.round(staffCost)) : "—"} · margin {formatMargin(margin)}
         </div>
       ) : null}
-      <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-[11px] text-[#3A3934]">
-        {inCart ? (
-          <MicroBadge tone="outline-gold">In cart</MicroBadge>
-        ) : heldByYou ? (
-          <MicroBadge tone="outline-gold">Held for you</MicroBadge>
-        ) : (
-          <>
-            <span
-              className="h-[7px] w-[7px] rounded-full"
-              style={{
-                background: soldOut ? "#8B897F" : onHold ? "#B08D3E" : "#4E9A6A",
-              }}
-            />
-            {soldOut
-              ? "Sold out"
-              : onHold
-                ? "On hold for another buyer"
-                : `Available · ${p.location.split(" · ")[0]}`}
-          </>
-        )}
-      </div>
+      {inCart || heldByYou ? (
+        <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-[11px] text-[#3A3934]">
+          {inCart ? (
+            <MicroBadge tone="outline-gold">In cart</MicroBadge>
+          ) : (
+            <MicroBadge tone="outline-gold">Held for you</MicroBadge>
+          )}
+        </div>
+      ) : null}
     </>
   );
 
   return (
     <>
       <div
+        ref={cardRef}
+        onMouseEnter={prefetchPdp}
+        onFocus={prefetchPdp}
+        aria-busy={busy || undefined}
         className={clsx(
           "group relative overflow-hidden rounded-card border bg-surface transition",
           inCart
@@ -152,8 +184,17 @@ export function ProductCard({
           layout === "list" && "flex flex-row items-stretch",
           onHold && !inCart && "opacity-80",
           soldOut && "opacity-70",
+          busy && "pointer-events-none opacity-55",
         )}
       >
+        {busy ? (
+          <div
+            className="absolute inset-0 z-20 flex items-center justify-center bg-surface/75"
+            aria-hidden
+          >
+            <Logo height={16} className="animate-pulse" />
+          </div>
+        ) : null}
         {inCart ? (
           <div
             className="absolute left-2.5 top-2.5 z-10 flex h-7 w-7 items-center justify-center rounded-chip border border-accent/40 bg-surface/95 shadow-sm"
@@ -229,8 +270,11 @@ export function ProductCard({
           className={clsx("flex flex-1 flex-col", layout === "grid" ? "p-4" : "justify-center p-4 sm:p-5")}
         >
           <Link
-            href={linkHref || `/wholesale/product/${encodeURIComponent(p.sku)}`}
-            className="flex flex-1 flex-col"
+            href={href}
+            prefetch
+            onClick={openPdp}
+            className="pressable flex flex-1 flex-col"
+            aria-busy={busy || undefined}
           >
             {details}
             {layout === "list" ? (
@@ -298,6 +342,14 @@ export function ProductCard({
           onIndexChange={setGalleryIndex}
           onClose={() => setGalleryOpen(false)}
         />
+      ) : null}
+
+      {/* Full-route indicator: loading.tsx only paints after the server starts
+          streaming the PDP segment; this covers the click→stream gap. */}
+      {busy ? (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-ground/55 backdrop-blur-[1px]">
+          <BrandedLoader label="Loading piece" />
+        </div>
       ) : null}
     </>
   );

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { ROLE } from "@/lib/constants";
 import { Clock } from "@/components/Clock";
+import { Logo } from "@/components/Logo";
 import { logout } from "@/lib/actions/auth";
 
 export default async function FulfillmentLayout({ children }: { children: React.ReactNode }) {
@@ -11,9 +12,7 @@ export default async function FulfillmentLayout({ children }: { children: React.
   return (
     <div className="min-h-screen bg-ful-ground text-white">
       <header className="flex h-[68px] items-center gap-6 border-b border-white/15 px-7">
-        <span className="font-sans text-[16px] font-semibold tracking-[0.08em] text-ground">
-          LUXE SUPPLY<span className="text-accent">*</span>
-        </span>
+        <Logo tone="light" height={28} priority />
         <span className="micro-badge rounded-full border border-accent/40 px-2.5 py-1 text-[10px] tracking-[0.14em] text-accent">
           FULFILLMENT · GENEVA VAULT
         </span>

@@ -20,11 +20,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ number:
   const letter = await loadInvoicePdfOptions().catch(() => ({
     paymentInstructions: "",
     letterhead: null,
+    extras: null,
   }));
   const pdf = await renderInvoicePdf(inv, {
     statusLabel: displayInvoiceStatus(inv),
     paymentInstructions: letter.paymentInstructions,
     letterhead: letter.letterhead,
+    extras: letter.extras,
   });
 
   return new Response(Buffer.from(pdf), {

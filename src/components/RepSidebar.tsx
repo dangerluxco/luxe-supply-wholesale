@@ -5,6 +5,7 @@ import { clsx } from "@/lib/clsx";
 import { SearchIcon } from "@/components/icons";
 import { OPEN_STAFF_SEARCH_EVENT } from "@/components/StaffCommandPalette";
 import type { RepNavItem, RepNavIconKey } from "@/lib/rep-nav";
+import { Logo } from "@/components/Logo";
 import {
   DashboardIcon,
   OrderRequestsIcon,
@@ -62,9 +63,7 @@ export function RepSidebar({
   return (
     <aside className="sticky top-0 flex h-screen w-[220px] shrink-0 flex-col border-r border-white/10 bg-ink">
       <a href="/wholesaleportal/rep" className="flex items-center gap-2 px-5 pt-6 pb-5">
-        <span className="font-sans text-[15px] font-semibold tracking-[0.06em] text-ground">
-          LUXE SUPPLY<span className="text-accent">*</span>
-        </span>
+        <Logo tone="light" height={26} priority />
       </a>
       <div className="px-5 pb-4">
         <span className="micro-badge inline-block rounded-full border border-accent/40 px-2 py-1 text-[9px] tracking-[0.14em] text-accent">

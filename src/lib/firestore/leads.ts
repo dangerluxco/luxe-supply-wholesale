@@ -2,49 +2,84 @@
 // HubSpot for business-development leads (FR-016). Mirrors the conventions
 // already established by quotes.ts / invoices.ts / staff.ts in this same
 // directory rather than reviving the legacy (unused) Prisma Lead model.
+//
+// Types/constants live in leads-shared.ts so client components can import
+// them without pulling firebase-admin into the browser bundle.
 import { getDb, toIso, WHOLESALE_ORG_SLUG } from "./admin";
 import { getLuxesupplyOrg } from "./staff";
 import { routeLead, type RoutableRep } from "@/lib/routing";
 import { tierForSpend } from "@/lib/constants";
+import {
+  DEFAULT_LEAD_TESTS,
+  LEAD_PROJECT_STATUSES,
+  LEAD_STATUSES,
+  LEAD_TEST_STATUSES,
+  type Lead,
+  type LeadActivity,
+  type LeadActivityType,
+  type LeadProject,
+  type LeadProjectStatus,
+  type LeadStatus,
+  type LeadTest,
+  type LeadTestStatus,
+} from "@/lib/leads-shared";
 
-export const LEAD_STATUSES = ["new", "contacted", "qualifying", "won", "lost"] as const;
-export type LeadStatus = (typeof LEAD_STATUSES)[number];
-
-export type Lead = {
-  id: string;
-  company: string;
-  contactName: string;
-  email: string;
-  phone: string;
-  industry: string;
-  estAnnualSpend: number | null;
-  status: LeadStatus;
-  assignedRepEmail: string | null;
-  assignedRepName: string | null;
-  routingReason: string | null;
-  notes: string;
-  convertedBuyerId: string | null;
-  convertedBuyerUsername: string | null;
-  createdByEmail: string;
-  createdByName: string;
-  createdAt: string | null;
-  updatedAt: string | null;
-};
-
-export type LeadActivityType = "note" | "call" | "meeting" | "email" | "status_change" | "created" | "converted";
-
-export type LeadActivity = {
-  id: string;
-  leadId: string;
-  type: LeadActivityType;
-  text: string;
-  staffEmail: string;
-  staffName: string;
-  createdAt: string | null;
-};
+export {
+  DEFAULT_LEAD_TESTS,
+  LEAD_PROJECT_STATUSES,
+  LEAD_STATUS_LABEL,
+  LEAD_STATUSES,
+  LEAD_TEST_STATUSES,
+  type Lead,
+  type LeadActivity,
+  type LeadActivityType,
+  type LeadProject,
+  type LeadProjectStatus,
+  type LeadStatus,
+  type LeadTest,
+  type LeadTestStatus,
+} from "@/lib/leads-shared";
 
 function takeText(v: unknown): string {
   return v == null ? "" : String(v).trim();
+}
+
+function newId(prefix: string): string {
+  return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function defaultTestsAvailable(): LeadTest[] {
+  return DEFAULT_LEAD_TESTS.map((t) => ({ ...t, note: "" }));
+}
+
+function serializeTests(raw: unknown): LeadTest[] {
+  if (!Array.isArray(raw) || raw.length === 0) return defaultTestsAvailable();
+  return raw.map((item, i) => {
+    const d = (item && typeof item === "object" ? item : {}) as Record<string, unknown>;
+    const status = takeText(d.status) as LeadTestStatus;
+    return {
+      id: takeText(d.id) || `test_${i}`,
+      label: takeText(d.label) || `Test ${i + 1}`,
+      status: LEAD_TEST_STATUSES.includes(status) ? status : "available",
+      note: takeText(d.note),
+    };
+  });
+}
+
+function serializeProjects(raw: unknown): LeadProject[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item, i) => {
+    const d = (item && typeof item === "object" ? item : {}) as Record<string, unknown>;
+    const status = takeText(d.status) as LeadProjectStatus;
+    return {
+      id: takeText(d.id) || `project_${i}`,
+      name: takeText(d.name) || `Project ${i + 1}`,
+      status: LEAD_PROJECT_STATUSES.includes(status) ? status : "active",
+      notes: takeText(d.notes),
+      createdAt: toIso(d.createdAt),
+      updatedAt: toIso(d.updatedAt),
+    };
+  });
 }
 
 function serializeLead(id: string, d: Record<string, unknown>): Lead {
@@ -63,6 +98,8 @@ function serializeLead(id: string, d: Record<string, unknown>): Lead {
     assignedRepName: d.assignedRepName ? takeText(d.assignedRepName) : null,
     routingReason: d.routingReason ? takeText(d.routingReason) : null,
     notes: takeText(d.notes),
+    testsAvailable: serializeTests(d.testsAvailable),
+    activeProjects: serializeProjects(d.activeProjects),
     convertedBuyerId: d.convertedBuyerId ? takeText(d.convertedBuyerId) : null,
     convertedBuyerUsername: d.convertedBuyerUsername ? takeText(d.convertedBuyerUsername) : null,
     createdByEmail: takeText(d.createdByEmail),
@@ -167,6 +204,8 @@ export async function createLead(opts: {
     assignedRepName: opts.assignedRepName || null,
     routingReason: opts.routingReason || null,
     notes: takeText(opts.notes),
+    testsAvailable: defaultTestsAvailable(),
+    activeProjects: [] as LeadProject[],
     convertedBuyerId: null,
     convertedBuyerUsername: null,
     createdByEmail: opts.createdByEmail,
@@ -253,7 +292,18 @@ export async function listLeads(opts?: {
 export async function updateLead(
   id: string,
   updates: Partial<
-    Pick<Lead, "company" | "contactName" | "email" | "phone" | "industry" | "estAnnualSpend" | "notes">
+    Pick<
+      Lead,
+      | "company"
+      | "contactName"
+      | "email"
+      | "phone"
+      | "industry"
+      | "estAnnualSpend"
+      | "notes"
+      | "testsAvailable"
+      | "activeProjects"
+    >
   >,
 ): Promise<Lead> {
   const ref = getDb().collection("salesPortalLeads").doc(id);
@@ -268,6 +318,25 @@ export async function updateLead(
   if (updates.industry !== undefined) payload.industry = takeText(updates.industry);
   if (updates.estAnnualSpend !== undefined) payload.estAnnualSpend = updates.estAnnualSpend;
   if (updates.notes !== undefined) payload.notes = takeText(updates.notes);
+  if (updates.testsAvailable !== undefined) {
+    payload.testsAvailable = serializeTests(updates.testsAvailable).map((t) => ({
+      id: t.id || newId("test"),
+      label: t.label,
+      status: t.status,
+      note: t.note,
+    }));
+  }
+  if (updates.activeProjects !== undefined) {
+    const nowIso = new Date().toISOString();
+    payload.activeProjects = serializeProjects(updates.activeProjects).map((p) => ({
+      id: p.id || newId("project"),
+      name: p.name,
+      status: p.status,
+      notes: p.notes,
+      createdAt: p.createdAt || nowIso,
+      updatedAt: nowIso,
+    }));
+  }
 
   await ref.update(payload);
   const fresh = await ref.get();

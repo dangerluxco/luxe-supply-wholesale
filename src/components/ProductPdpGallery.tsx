@@ -22,18 +22,25 @@ export function ProductPdpGallery({
   const safeActive = urls.length ? Math.min(active, urls.length - 1) : 0;
 
   return (
-    <div className={className}>
+    <div className={clsx("w-full", className)}>
       <button
         type="button"
         onClick={() => urls.length && setOpen(true)}
         disabled={!urls.length}
         aria-label={urls.length ? `View photos of ${title}` : undefined}
         className={clsx(
-          "relative block aspect-square w-full overflow-hidden rounded-card border border-border focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
+          // Cap by width + viewport height so the hero stays square but never
+          // dominates a tall desktop column or short mobile viewport.
+          "relative mx-auto block aspect-square w-full max-w-[min(100%,440px,48vh)] overflow-hidden rounded-card border border-border focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
           urls.length ? "cursor-zoom-in" : "cursor-default",
         )}
       >
-        <Placeholder label={title} imageSrc={urls[safeActive] || null} className="h-full w-full">
+        <Placeholder
+          label={title}
+          imageSrc={urls[safeActive] || null}
+          priority
+          className="h-full w-full"
+        >
           <OneOfOneBadge />
         </Placeholder>
         {urls.length > 1 ? (
@@ -52,12 +59,12 @@ export function ProductPdpGallery({
               onClick={() => setActive(i)}
               aria-label={`Photo ${i + 1}`}
               className={clsx(
-                "h-16 w-16 shrink-0 overflow-hidden rounded-chip border transition",
+                "h-14 w-14 shrink-0 overflow-hidden rounded-chip border transition sm:h-16 sm:w-16",
                 i === safeActive ? "border-accent" : "border-border opacity-70 hover:opacity-100",
               )}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={u} alt="" className="h-full w-full object-cover" />
+              <img src={u} alt="" loading="lazy" className="h-full w-full object-cover" />
             </button>
           ))}
         </div>

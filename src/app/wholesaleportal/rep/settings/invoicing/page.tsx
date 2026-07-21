@@ -11,7 +11,7 @@ export default async function SettingsInvoicingPage() {
   return (
     <SettingsSectionShell
       title="Invoicing"
-      subtitle="Letterhead and wire details printed on branded invoice PDFs."
+      subtitle="Letterhead, wire details, and post-invoice notes/terms printed on branded PDFs."
       active="invoicing"
       isManager={isManager}
     >

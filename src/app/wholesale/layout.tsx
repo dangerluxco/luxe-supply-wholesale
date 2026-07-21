@@ -21,15 +21,17 @@ export default async function WholesaleLayout({ children }: { children: React.Re
   // Lightweight catalog index for search (guest + buyer) — served from a 60s
   // in-process cache so this layout doesn't hydrate 400 products from Firestore
   // on every page view. Never let a transient hiccup take down browsing.
-  let index: { sku: string; name: string; era: string; material: string }[] = [];
-  try {
-    index = await getCatalogSearchIndex();
-  } catch (err) {
-    console.warn("[wholesale layout] catalog index unavailable:", err instanceof Error ? err.message : err);
-  }
+  const indexPromise = getCatalogSearchIndex().catch((err) => {
+    console.warn(
+      "[wholesale layout] catalog index unavailable:",
+      err instanceof Error ? err.message : err,
+    );
+    return [] as { sku: string; name: string; era: string; material: string }[];
+  });
 
   // Staff or invalid cookie → guest chrome (no Firestore staff lookup hang)
   if (!decoded || decoded.role !== ROLE.BUYER) {
+    const index = await indexPromise;
     return (
       <StorefrontAvailabilityProvider>
         <CartBadgeProvider cartCount={0} cartTotal={0}>
@@ -42,7 +44,8 @@ export default async function WholesaleLayout({ children }: { children: React.Re
     );
   }
 
-  const session = await getSession();
+  // Session lookup overlaps the (usually cached) search index fetch.
+  const [index, session] = await Promise.all([indexPromise, getSession()]);
   if (!session || session.role !== ROLE.BUYER) {
     return (
       <StorefrontAvailabilityProvider>
@@ -56,26 +59,35 @@ export default async function WholesaleLayout({ children }: { children: React.Re
     );
   }
 
-  let cartCount = 0;
-  let cartTotal = 0;
-  try {
-    const cart = await getBuyerCart(session.id);
-    cartCount = cart.length;
-    cartTotal = cart.reduce((sum, item) => sum + (Number(item.price) || 0), 0);
-  } catch (err) {
-    console.warn("[wholesale layout] cart unavailable:", err instanceof Error ? err.message : err);
-  }
-
-  let wishlistCount = 0;
-  try {
-    wishlistCount = session.username ? (await listHoldAlertsForBuyer(session.username)).length : 0;
-  } catch (err) {
-    console.warn("[wholesale layout] wishlist unavailable:", err instanceof Error ? err.message : err);
-  }
+  const [cartResult, wishlistCount] = await Promise.all([
+    getBuyerCart(session.id)
+      .then((cart) => ({
+        cartCount: cart.length,
+        cartTotal: cart.reduce((sum, item) => sum + (Number(item.price) || 0), 0),
+      }))
+      .catch((err) => {
+        console.warn(
+          "[wholesale layout] cart unavailable:",
+          err instanceof Error ? err.message : err,
+        );
+        return { cartCount: 0, cartTotal: 0 };
+      }),
+    session.username
+      ? listHoldAlertsForBuyer(session.username)
+          .then((alerts) => alerts.length)
+          .catch((err) => {
+            console.warn(
+              "[wholesale layout] wishlist unavailable:",
+              err instanceof Error ? err.message : err,
+            );
+            return 0;
+          })
+      : Promise.resolve(0),
+  ]);
 
   return (
     <StorefrontAvailabilityProvider>
-      <CartBadgeProvider cartCount={cartCount} cartTotal={cartTotal}>
+      <CartBadgeProvider cartCount={cartResult.cartCount} cartTotal={cartResult.cartTotal}>
         <div className="min-h-screen bg-ground">
           <BuyerTopbar
             user={{ name: session.name, initials: session.initials }}

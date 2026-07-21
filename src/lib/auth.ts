@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { cookies, headers } from "next/headers";
 import { prisma } from "./db";
 import { ROLE, type Role } from "./constants";
@@ -99,7 +100,7 @@ async function resolveSessionUser(
 }
 
 /** Read the packed `__session` slot for an explicit area (buyer/staff/fulfillment). */
-export async function getSessionForArea(area: AppArea): Promise<SessionUser | null> {
+export const getSessionForArea = cache(async (area: AppArea): Promise<SessionUser | null> => {
   const store = await cookies();
   const decoded = decodeSession(areaSessionFrom(store.get(SESSION_COOKIE)?.value, area));
   if (!decoded) return null;
@@ -109,9 +110,10 @@ export async function getSessionForArea(area: AppArea): Promise<SessionUser | nu
     console.warn("[getSessionForArea] lookup failed:", err instanceof Error ? err.message : err);
     return null;
   }
-}
+});
 
-export async function getSession(): Promise<SessionUser | null> {
+/** Per-request memoized — layout + page share one buyer/staff Firestore lookup. */
+export const getSession = cache(async (): Promise<SessionUser | null> => {
   const area = await currentArea();
   return getSessionForArea(area);
-}
+});

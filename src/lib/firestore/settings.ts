@@ -34,7 +34,26 @@ export type InvoicingProfile = {
   remittanceEmail: string;
   /** Legacy freeform block — used as PDF fallback when structured bank fields empty. */
   paymentInstructions: string;
+  /**
+   * Optional notes printed after the payment/wire block (late fees, remittance tips, etc.).
+   * Empty = omit the section on the PDF.
+   */
+  invoiceNotes: string;
+  /**
+   * Terms of sale / return / authenticity language printed after notes (or after payment).
+   * Empty = omit the section on the PDF.
+   */
+  termsAndConditions: string;
+  /**
+   * Closing line at the bottom of every invoice PDF. Empty falls back to the default
+   * Luxe thank-you copy in the PDF renderer.
+   */
+  footerMessage: string;
 };
+
+/** Default PDF footer when `footerMessage` is blank. */
+export const DEFAULT_INVOICE_FOOTER =
+  "Every piece is one of one, authenticated, and insured in transit. Thank you for collecting with Luxe Supply Co.";
 
 export type PortalFeatures = {
   leads: boolean;
@@ -146,6 +165,9 @@ export function normalizeInvoicingProfile(raw: unknown, legacyPayment = ""): Inv
     swift: trimStr(src.swift, 40),
     remittanceEmail: trimStr(src.remittanceEmail, 160),
     paymentInstructions: trimStr(src.paymentInstructions ?? legacyPayment, 2000),
+    invoiceNotes: trimStr(src.invoiceNotes, 4000),
+    termsAndConditions: trimStr(src.termsAndConditions, 6000),
+    footerMessage: trimStr(src.footerMessage, 500),
   };
 }
 

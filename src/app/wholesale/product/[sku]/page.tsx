@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { getCatalogProductBySku } from "@/lib/firestore/catalog";
 import { getSession } from "@/lib/auth";
@@ -12,30 +13,40 @@ import { getHoldAlertForBuyerSku } from "@/lib/firestore/holdAlerts";
 
 export const dynamic = "force-dynamic";
 
+/** Streams after the main PDP shell so hold-alert lookup never blocks first paint. */
+async function HoldAlertSlot({
+  sku,
+  buyerUsername,
+}: {
+  sku: string;
+  buyerUsername: string;
+}) {
+  const active = await getHoldAlertForBuyerSku(buyerUsername, sku);
+  return <HoldAlertButton sku={sku} active={active} />;
+}
+
 export default async function ProductPage({
   params,
 }: {
   params: Promise<{ sku: string }>;
 }) {
+  const { sku } = await params;
+  const decodedSku = decodeURIComponent(sku);
+
+  // Session is React.cache'd with the buyer layout — no double Firestore hit.
   const session = await getSession();
   const pricesVisible = !!session && session.role === ROLE.BUYER;
   const buyerUsername = pricesVisible ? session?.username : null;
 
-  const { sku } = await params;
   let product: Awaited<ReturnType<typeof getCatalogProductBySku>> = null;
   try {
-    product = await getCatalogProductBySku(decodeURIComponent(sku), {
+    product = await getCatalogProductBySku(decodedSku, {
       buyerUsername,
     });
   } catch (err) {
     console.warn("[wholesale product] Firestore unavailable:", err instanceof Error ? err.message : err);
   }
   if (!product || product.soldOut) notFound();
-
-  const hasHoldAlert =
-    pricesVisible && product.held && buyerUsername
-      ? await getHoldAlertForBuyerSku(buyerUsername, product.sku)
-      : false;
 
   const price = Math.round(product.price ?? 0);
   const unavailable = product.held || product.price == null;
@@ -51,7 +62,7 @@ export default async function ProductPage({
         <span>{product.sku}</span>
       </div>
 
-      <div className="grid grid-cols-1 gap-10 lg:grid-cols-[1.1fr_0.9fr]">
+      <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[minmax(0,440px)_minmax(0,1fr)] lg:gap-12">
         <ProductPdpGallery
           title={product.title}
           sku={product.sku}
@@ -107,9 +118,18 @@ export default async function ProductPage({
               <p className="mt-3 text-[12px] text-muted">
                 Status: {PRODUCT_STATUS.ON_HOLD} — soft-held by another buyer.
               </p>
-              {pricesVisible ? (
+              {pricesVisible && buyerUsername ? (
                 <div className="mt-3">
-                  <HoldAlertButton sku={product.sku} active={hasHoldAlert} />
+                  <Suspense
+                    fallback={
+                      <div
+                        className="h-11 w-full animate-pulse rounded-chip border border-border bg-border/40"
+                        aria-hidden
+                      />
+                    }
+                  >
+                    <HoldAlertSlot sku={product.sku} buyerUsername={buyerUsername} />
+                  </Suspense>
                 </div>
               ) : null}
             </>

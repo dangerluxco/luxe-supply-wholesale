@@ -1,11 +1,9 @@
-"use client";
-
+import Link from "next/link";
 import { clsx } from "@/lib/clsx";
 import { money } from "@/lib/format";
 import { pressableClass } from "@/lib/pressable";
-import { useNavPress } from "@/hooks/useNavPress";
 
-/** Checkout control with immediate pressed/pending feedback while the cart page loads. */
+/** Checkout control — navigates to cart immediately (no pending “Opening…” gate). */
 export function CheckoutNavButton({
   cartCount,
   cartTotal,
@@ -19,24 +17,19 @@ export function CheckoutNavButton({
   className?: string;
   label?: string;
 }) {
-  const { busy, navigate } = useNavPress("/wholesale/cart");
-
   return (
-    <button
-      type="button"
-      disabled={busy}
-      aria-busy={busy}
-      onClick={navigate}
+    <Link
+      href="/wholesale/cart"
       className={clsx(
         pressableClass(
-          busy,
+          undefined,
           "flex h-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-chip bg-ink px-3.5 text-[11.5px] font-semibold uppercase tracking-[0.12em] text-ground",
         ),
         className,
       )}
     >
-      {busy ? "Opening…" : label}
-      {!busy && cartCount > 0 ? (
+      {label}
+      {cartCount > 0 ? (
         <span className="font-mono text-[10.5px] font-normal normal-case tracking-normal text-ground/75">
           {compact ? (
             <span>({cartCount})</span>
@@ -50,6 +43,6 @@ export function CheckoutNavButton({
           )}
         </span>
       ) : null}
-    </button>
+    </Link>
   );
 }

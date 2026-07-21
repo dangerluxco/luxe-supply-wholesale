@@ -1,14 +1,16 @@
 import {
+  DEFAULT_INVOICE_FOOTER,
   formatPaymentInstructions,
   getCompanyProfile,
   getInvoicingProfile,
 } from "@/lib/firestore/settings";
-import type { InvoicePdfLetterhead } from "@/lib/invoicePdf";
+import type { InvoicePdfExtras, InvoicePdfLetterhead } from "@/lib/invoicePdf";
 
-/** Load org letterhead + payment block for branded invoice PDFs. */
+/** Load org letterhead + payment block + post-invoice extras for branded PDFs. */
 export async function loadInvoicePdfOptions(): Promise<{
   paymentInstructions: string;
   letterhead: InvoicePdfLetterhead;
+  extras: InvoicePdfExtras;
 }> {
   const [company, invoicing] = await Promise.all([getCompanyProfile(), getInvoicingProfile()]);
   const addressBits = [
@@ -29,6 +31,11 @@ export async function loadInvoicePdfOptions(): Promise<{
       legalName: invoicing.legalName || "Luxe Supply Corporation",
       tagline,
       taxId: invoicing.taxId || undefined,
+    },
+    extras: {
+      invoiceNotes: invoicing.invoiceNotes,
+      termsAndConditions: invoicing.termsAndConditions,
+      footerMessage: invoicing.footerMessage || DEFAULT_INVOICE_FOOTER,
     },
   };
 }

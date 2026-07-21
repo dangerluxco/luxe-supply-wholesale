@@ -1,5 +1,8 @@
+import { readFileSync } from "fs";
+import path from "path";
 import { PDFDocument, PDFFont, StandardFonts, rgb, degrees } from "pdf-lib";
 import type { PortalInvoice } from "@/lib/firestore/invoices";
+import { DEFAULT_INVOICE_FOOTER } from "@/lib/firestore/settings";
 
 // Brand palette — mirrors the storefront Tailwind theme.
 const INK = rgb(0.086, 0.086, 0.102); // #16161A
@@ -58,10 +61,10 @@ export const DEFAULT_PAYMENT_INSTRUCTIONS = [
 ].join("\n");
 
 /**
- * Branded invoice PDF — ink header band with the LUXE SUPPLY* wordmark, bill-to
- * and terms meta, line items, totals, and the org's wire/payment instructions
- * (editable on staff Settings). Pure pdf-lib: no runtime font/file dependencies,
- * so it's safe in the Cloud Run standalone build.
+ * Branded invoice PDF — ink header band with the official logo, bill-to and
+ * terms meta, line items, totals, and the org's wire/payment instructions
+ * (editable on staff Settings). Logo is loaded from `public/` (copied into the
+ * Cloud Run standalone output); fonts stay StandardFonts.
  */
 export type InvoicePdfLetterhead = {
   brandName?: string;
@@ -70,12 +73,19 @@ export type InvoicePdfLetterhead = {
   taxId?: string;
 };
 
+export type InvoicePdfExtras = {
+  invoiceNotes?: string | null;
+  termsAndConditions?: string | null;
+  footerMessage?: string | null;
+};
+
 export async function renderInvoicePdf(
   inv: PortalInvoice,
   opts: {
     statusLabel: string;
     paymentInstructions?: string | null;
     letterhead?: InvoicePdfLetterhead | null;
+    extras?: InvoicePdfExtras | null;
   },
 ): Promise<Uint8Array> {
   const brandName = (opts.letterhead?.brandName || "Luxe Supply").trim() || "Luxe Supply";
@@ -84,8 +94,6 @@ export async function renderInvoicePdf(
   const tagline =
     (opts.letterhead?.tagline || "").trim() ||
     `${legalName.toUpperCase()}  ·  HELP@LUXESUPPLY.CO`;
-  const brandMark = brandName.replace(/\*/g, "").toUpperCase().slice(0, 28);
-
   const doc = await PDFDocument.create();
   doc.setTitle(`${inv.invoiceNumber} — ${brandName}`);
   doc.setAuthor(legalName);
@@ -94,21 +102,46 @@ export async function renderInvoicePdf(
   const helvBold = await doc.embedFont(StandardFonts.HelveticaBold);
   const mono = await doc.embedFont(StandardFonts.Courier);
 
+  let logoImage: Awaited<ReturnType<PDFDocument["embedPng"]>> | null = null;
+  try {
+    const logoBytes = readFileSync(path.join(process.cwd(), "public", "luxe-supply-logo.png"));
+    logoImage = await doc.embedPng(logoBytes);
+  } catch {
+    logoImage = null;
+  }
+
   let page = doc.addPage([PAGE_W, PAGE_H]);
 
   // ---- Header band -----------------------------------------------------------
   const HEADER_H = 92;
   page.drawRectangle({ x: 0, y: PAGE_H - HEADER_H, width: PAGE_W, height: HEADER_H, color: INK });
 
-  const brandY = PAGE_H - 40;
-  page.drawText(brandMark, { x: MARGIN, y: brandY, size: 19, font: helvBold, color: WHITE });
-  page.drawText("*", {
-    x: MARGIN + helvBold.widthOfTextAtSize(brandMark, 19) + 2,
-    y: brandY,
-    size: 19,
-    font: helvBold,
-    color: GOLD,
-  });
+  if (logoImage) {
+    const logoH = 28;
+    const logoW = (logoImage.width / logoImage.height) * logoH;
+    page.drawImage(logoImage, {
+      x: MARGIN,
+      y: PAGE_H - 48,
+      width: logoW,
+      height: logoH,
+    });
+  } else {
+    const brandMark = brandName.replace(/\*/g, "").toUpperCase().slice(0, 28);
+    page.drawText(brandMark, {
+      x: MARGIN,
+      y: PAGE_H - 40,
+      size: 19,
+      font: helvBold,
+      color: WHITE,
+    });
+    page.drawText("*", {
+      x: MARGIN + helvBold.widthOfTextAtSize(brandMark, 19) + 2,
+      y: PAGE_H - 40,
+      size: 19,
+      font: helvBold,
+      color: GOLD,
+    });
+  }
   page.drawText(tagline.slice(0, 90), {
     x: MARGIN,
     y: PAGE_H - 62,
@@ -330,17 +363,50 @@ export async function renderInvoicePdf(
   }
   y = y - boxH - 24;
 
+  // ---- Post-invoice extras (notes → terms → closing footer) ---------------------------
+  const notes = (opts.extras?.invoiceNotes || "").trim();
+  const terms = (opts.extras?.termsAndConditions || "").trim();
+  const footerMsg =
+    (opts.extras?.footerMessage || "").trim() || DEFAULT_INVOICE_FOOTER;
+  const contentWidth = PAGE_W - 2 * MARGIN;
+
+  function ensureSpace(needed: number) {
+    if (y - needed < 78) {
+      page = doc.addPage([PAGE_W, PAGE_H]);
+      y = PAGE_H - MARGIN - 10;
+    }
+  }
+
+  function drawTextBlock(title: string, body: string) {
+    const bodyLines = wrapText(body, helv, 8.5, contentWidth);
+    const blockH = 22 + bodyLines.length * 11;
+    ensureSpace(blockH + 12);
+    page.drawText(title, { x: MARGIN, y, size: 8, font: helvBold, color: GOLD });
+    y -= 14;
+    for (const line of bodyLines) {
+      page.drawText(line, { x: MARGIN, y, size: 8.5, font: helv, color: BODY });
+      y -= 11;
+    }
+    y -= 14;
+  }
+
+  if (notes) drawTextBlock("NOTES", notes);
+  if (terms) drawTextBlock("TERMS & CONDITIONS", terms);
+
   // ---- Footer ----------------------------------------------------------------------
+  const footerLines = wrapText(footerMsg, helv, 7.5, contentWidth);
+  ensureSpace(28 + footerLines.length * 10);
   page.drawLine({
-    start: { x: MARGIN, y: 58 },
-    end: { x: PAGE_W - MARGIN, y: 58 },
+    start: { x: MARGIN, y },
+    end: { x: PAGE_W - MARGIN, y },
     thickness: 0.4,
     color: HAIRLINE,
   });
-  page.drawText(
-    "Every piece is one of one, authenticated, and insured in transit. Thank you for collecting with Luxe Supply Co.",
-    { x: MARGIN, y: 44, size: 7.5, font: helv, color: MUTED },
-  );
+  y -= 14;
+  for (const line of footerLines) {
+    page.drawText(line, { x: MARGIN, y, size: 7.5, font: helv, color: MUTED });
+    y -= 10;
+  }
 
   // ---- PAID stamp --------------------------------------------------------------------
   if (opts.statusLabel.toUpperCase() === "PAID") {

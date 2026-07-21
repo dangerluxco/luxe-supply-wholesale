@@ -8,6 +8,8 @@ import {
   listLeadActivities,
   LEAD_STATUSES,
   type LeadStatus,
+  type LeadTest,
+  type LeadProject,
 } from "@/lib/firestore/leads";
 import { featureDisabledResponse } from "@/lib/feature-gates";
 
@@ -45,6 +47,8 @@ type PatchBody = {
   industry?: string;
   estAnnualSpend?: number | string | null;
   notes?: string;
+  testsAvailable?: LeadTest[];
+  activeProjects?: LeadProject[];
 };
 
 export async function PATCH(request: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -73,12 +77,14 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
     if (body.assignedRepEmail !== undefined) {
       lead = await assignLead(
         id,
-        body.assignedRepEmail ? { email: body.assignedRepEmail, name: body.assignedRepName || body.assignedRepEmail } : null,
+        body.assignedRepEmail
+          ? { email: body.assignedRepEmail, name: body.assignedRepName || body.assignedRepEmail }
+          : null,
         staff,
       );
     }
 
-    const fieldUpdates: Record<string, unknown> = {};
+    const fieldUpdates: Parameters<typeof updateLead>[1] = {};
     for (const key of ["company", "contactName", "email", "phone", "industry", "notes"] as const) {
       if (body[key] !== undefined) fieldUpdates[key] = body[key];
     }
@@ -86,6 +92,8 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
       fieldUpdates.estAnnualSpend =
         body.estAnnualSpend != null && body.estAnnualSpend !== "" ? Number(body.estAnnualSpend) : null;
     }
+    if (body.testsAvailable !== undefined) fieldUpdates.testsAvailable = body.testsAvailable;
+    if (body.activeProjects !== undefined) fieldUpdates.activeProjects = body.activeProjects;
     if (Object.keys(fieldUpdates).length > 0) {
       lead = await updateLead(id, fieldUpdates);
     }

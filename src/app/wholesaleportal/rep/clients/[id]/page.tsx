@@ -11,6 +11,7 @@ import { ClientCartLimitsForm } from "@/components/ClientCartLimitsForm";
 import { ClientPasswordResetButton } from "@/components/ClientPasswordResetButton";
 import { AssignCreditButton } from "@/components/AssignCreditButton";
 import { EditClientAccountButton } from "@/components/EditClientAccountButton";
+import { MessageBuyerButton } from "@/components/MessageBuyerButton";
 import { PortalItemLine, PortalThumbnailTile } from "@/components/PortalItemLine";
 import { MicroBadge, InvoiceBadge, TierBadge } from "@/components/badges";
 import { PAYMENT_TIERS, resolveShippingOption } from "@/lib/constants";
@@ -120,12 +121,7 @@ export default async function ClientDetailPage({
           >
             + New order request
           </a>
-          <a
-            href={buyer.email ? `mailto:${buyer.email}` : undefined}
-            className="inline-flex h-9 items-center rounded-chip border border-border px-3.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-ink transition hover:border-accent"
-          >
-            Message buyer
-          </a>
+          <MessageBuyerButton buyerId={buyer.id} disabled={!buyer.email} />
           <AssignCreditButton buyer={buyer} outstanding={metrics.outstanding} />
           <EditClientAccountButton buyer={buyer} />
         </div>

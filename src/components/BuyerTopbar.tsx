@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { Logo } from "./Logo";
 import { clsx } from "@/lib/clsx";
 import { useCartBadge } from "@/components/CartBadgeProvider";
 import { CheckoutNavButton } from "@/components/CheckoutNavButton";
+import { BrandedLoader } from "@/components/BrandedLoader";
 import { useStorefrontAvailability } from "@/components/StorefrontAvailability";
 import { SearchIcon } from "@/components/icons";
 
@@ -37,8 +38,23 @@ export function BuyerTopbar({
   const { cartCount, cartTotal } = useCartBadge();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
+  const [pdpPending, setPdpPending] = useState(false);
+  const [, startPdpNav] = useTransition();
   const signedIn = !!user;
   const nav = signedIn ? BUYER_NAV : GUEST_NAV;
+
+  function goToProduct(sku: string) {
+    const href = `/wholesale/product/${encodeURIComponent(sku)}`;
+    setPdpPending(true);
+    setOpen(false);
+    startPdpNav(() => {
+      router.push(href);
+    });
+  }
+
+  useEffect(() => {
+    if (pathname.startsWith("/wholesale/product/")) setPdpPending(false);
+  }, [pathname]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -80,8 +96,8 @@ export function BuyerTopbar({
   return (
     <>
       <header className="sticky top-0 z-40 flex h-[60px] items-center gap-8 border-b border-border bg-surface/95 px-8 backdrop-blur-sm print:hidden">
-        <Link href="/wholesale">
-          <Logo />
+        <Link href="/wholesale" className="flex shrink-0 items-center">
+          <Logo height={26} priority />
         </Link>
         <nav className="flex gap-1 text-[12.5px] font-medium text-secondary">
           {nav.map((n) => (
@@ -167,8 +183,7 @@ export function BuyerTopbar({
                 className="h-12 flex-1 bg-transparent text-[14px] text-ink outline-none placeholder:text-muted"
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && results[0]) {
-                    router.push(`/wholesale/product/${results[0].sku}`);
-                    setOpen(false);
+                    goToProduct(results[0].sku);
                   }
                 }}
               />
@@ -183,11 +198,14 @@ export function BuyerTopbar({
                 results.map((r, index) => (
                   <button
                     key={`${r.sku}-${index}`}
-                    onClick={() => {
-                      router.push(`/wholesale/product/${r.sku}`);
-                      setOpen(false);
-                    }}
-                    className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-ground"
+                    type="button"
+                    disabled={pdpPending}
+                    aria-busy={pdpPending || undefined}
+                    onClick={() => goToProduct(r.sku)}
+                    onMouseEnter={() =>
+                      router.prefetch(`/wholesale/product/${encodeURIComponent(r.sku)}`)
+                    }
+                    className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-ground disabled:opacity-60"
                   >
                     <span className="font-mono text-[11px] text-muted">{r.sku}</span>
                     <span className="text-[13px] text-ink">{r.name}</span>
@@ -199,6 +217,12 @@ export function BuyerTopbar({
               )}
             </div>
           </div>
+        </div>
+      ) : null}
+
+      {pdpPending ? (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-ground/55 backdrop-blur-[1px]">
+          <BrandedLoader label="Loading piece" />
         </div>
       ) : null}
     </>

@@ -1,7 +1,16 @@
+import { cache } from "react";
 import { getDb, toIso, WHOLESALE_ORG_SLUG, UPLOAD_DIRECTORY } from "./admin";
 import { getLuxesupplyOrg } from "./staff";
 import { normalizeBuyerUsername } from "./buyers";
 import { resolveTitlesForSkus } from "./catalog";
+
+/** Short TTL so PDP / catalog lookups don't re-scan 300 lots on every click. */
+const AVAILABILITY_TTL_MS = 15_000;
+let availabilityCached: {
+  at: number;
+  value: { skus: string[]; revision: string };
+} | null = null;
+let availabilityInflight: Promise<{ skus: string[]; revision: string }> | null = null;
 
 export type SuggestedLotItem = {
   sku: string;
@@ -310,8 +319,7 @@ function lotUpdatedMs(d: Record<string, unknown>): number {
   return 0;
 }
 
-/** Active-lot SKUs + revision token for live storefront polling. */
-export async function getStorefrontAvailabilitySnapshot(): Promise<{
+async function fetchStorefrontAvailabilitySnapshot(): Promise<{
   skus: string[];
   revision: string;
 }> {
@@ -345,6 +353,35 @@ export async function getStorefrontAvailabilitySnapshot(): Promise<{
   const revision = `${lotParts.sort().join("|")}#${skuList.join(",")}#t${touchMs}`;
   return { skus: skuList, revision };
 }
+
+/**
+ * Active-lot SKUs + revision token for live storefront polling.
+ * Per-request memoized + 15s process cache — PDP used to re-scan lots on every navigation.
+ */
+export const getStorefrontAvailabilitySnapshot = cache(
+  async (): Promise<{ skus: string[]; revision: string }> => {
+    const now = Date.now();
+    if (availabilityCached && now - availabilityCached.at < AVAILABILITY_TTL_MS) {
+      return availabilityCached.value;
+    }
+    if (!availabilityInflight) {
+      availabilityInflight = fetchStorefrontAvailabilitySnapshot()
+        .then((value) => {
+          availabilityCached = { at: Date.now(), value };
+          return value;
+        })
+        .finally(() => {
+          availabilityInflight = null;
+        });
+    }
+    try {
+      return await availabilityInflight;
+    } catch (err) {
+      if (availabilityCached) return availabilityCached.value;
+      throw err;
+    }
+  },
+);
 
 /** SKUs currently locked inside an active suggested lot (should not appear as individual storefront sales). */
 export async function listActiveBundledSkus(): Promise<Set<string>> {

@@ -10,6 +10,7 @@ export function Placeholder({
   children,
   imageSrc,
   alt,
+  priority = false,
 }: {
   label?: string;
   className?: string;
@@ -18,6 +19,8 @@ export function Placeholder({
   children?: React.ReactNode;
   imageSrc?: string | null;
   alt?: string;
+  /** Hero / LCP image — eager + high fetch priority. */
+  priority?: boolean;
 }) {
   const stripe =
     variant === "dark" ? "ph-stripe-dark" : variant === "vault" ? "ph-stripe-vault" : "ph-stripe";
@@ -37,6 +40,9 @@ export function Placeholder({
         <img
           src={imageSrc}
           alt={alt || label || ""}
+          loading={priority ? "eager" : "lazy"}
+          fetchPriority={priority ? "high" : "auto"}
+          decoding={priority ? "sync" : "async"}
           className="absolute inset-0 h-full w-full object-cover"
         />
       ) : label ? (

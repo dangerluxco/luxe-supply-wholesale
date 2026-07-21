@@ -208,6 +208,48 @@ export function InvoicingSettingsForm({ initial }: { initial: InvoicingProfile }
         />
       </label>
 
+      <div className="border-t border-border pt-5">
+        <div className="micro-badge mb-2 text-[10px] tracking-[0.14em] text-accent">
+          AFTER THE INVOICE
+        </div>
+        <p className="mb-3 text-[12.5px] text-secondary">
+          Printed below the payment block on every PDF — notes, terms of sale, and a closing line.
+          Leave notes or terms blank to omit that section.
+        </p>
+        <div className="space-y-4">
+          <label className="flex flex-col gap-1.5">
+            <span className={labelClass}>INVOICE NOTES</span>
+            <textarea
+              rows={3}
+              className={areaClass}
+              value={form.invoiceNotes}
+              onChange={set("invoiceNotes")}
+              placeholder="e.g. Please include the invoice number on your wire remittance…"
+            />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className={labelClass}>TERMS &amp; CONDITIONS</span>
+            <textarea
+              rows={6}
+              className={areaClass}
+              value={form.termsAndConditions}
+              onChange={set("termsAndConditions")}
+              placeholder="e.g. All sales final. Title passes on receipt of cleared funds. Returns only for authenticity issues…"
+            />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className={labelClass}>FOOTER / THANK-YOU</span>
+            <textarea
+              rows={2}
+              className={areaClass}
+              value={form.footerMessage}
+              onChange={set("footerMessage")}
+              placeholder="Every piece is one of one, authenticated, and insured in transit…"
+            />
+          </label>
+        </div>
+      </div>
+
       {error ? <p className="text-[12px] text-danger">{error}</p> : null}
       {message ? <p className="text-[12px] text-[#4E9A6A]">{message}</p> : null}
       <button

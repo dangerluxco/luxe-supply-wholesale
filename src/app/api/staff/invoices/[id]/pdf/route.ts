@@ -18,11 +18,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const letter = await loadInvoicePdfOptions().catch(() => ({
     paymentInstructions: "",
     letterhead: null,
+    extras: null,
   }));
   const pdf = await renderInvoicePdf(inv, {
     statusLabel: displayInvoiceStatus(inv),
     paymentInstructions: letter.paymentInstructions,
     letterhead: letter.letterhead,
+    extras: letter.extras,
   });
 
   const inline = new URL(req.url).searchParams.get("disposition") === "inline";

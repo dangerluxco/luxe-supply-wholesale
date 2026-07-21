@@ -8,6 +8,7 @@ import { TrashIcon } from "@/components/icons";
 import { clsx } from "@/lib/clsx";
 import { CurationBookCall } from "@/components/CurationBookCall";
 import { SimilarItemsCarousel, type SimilarItem } from "@/components/SimilarItemsLink";
+import { Logo } from "@/components/Logo";
 
 type Decision = "" | "approve" | "maybe" | "decline";
 
@@ -856,9 +857,7 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
         <div className="flex flex-wrap items-start justify-between gap-4 px-6 pb-5 pt-6">
           <div className="min-w-0">
             <div className="flex items-center gap-2.5">
-              <span className="font-sans text-[13px] font-semibold tracking-[0.08em] text-ground">
-                LUXE SUPPLY<span className="text-accent">*</span>
-              </span>
+              <Logo tone="light" height={22} />
               <span className="micro-badge rounded-full border border-accent/40 px-2 py-0.5 text-[9px] tracking-[0.14em] text-accent">
                 CURATION SESSION
               </span>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import type { Lead } from "@/lib/firestore/leads";
+import type { Lead } from "@/lib/leads-shared";
 
 const fieldClass =
   "h-10 w-full rounded-chip border border-border bg-ground px-3 text-[13px] text-ink outline-none focus:border-accent";

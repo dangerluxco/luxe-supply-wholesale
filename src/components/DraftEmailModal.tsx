@@ -11,6 +11,7 @@ const labelClass = "micro-badge mb-1.5 block text-[10px] tracking-[0.14em] text-
  * then Confirm send (or Cancel). Matches CreateLeadModal shell styling.
  */
 export function DraftEmailModal({
+  title = "Review call request email",
   to,
   subject,
   body,
@@ -21,6 +22,7 @@ export function DraftEmailModal({
   onCancel,
   onConfirm,
 }: {
+  title?: string;
   to: string;
   subject: string;
   body: string;
@@ -41,7 +43,7 @@ export function DraftEmailModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-border px-6 py-4">
-          <h2 className="text-[16px] font-semibold text-ink">Review call request email</h2>
+          <h2 className="text-[16px] font-semibold text-ink">{title}</h2>
           <button type="button" onClick={onCancel} className="text-[12px] text-muted hover:text-ink">
             Close
           </button>

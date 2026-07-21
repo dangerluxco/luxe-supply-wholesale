@@ -2,6 +2,11 @@ import type { QueryDocumentSnapshot } from "firebase-admin/firestore";
 import { getDb, toIso, UPLOAD_DIRECTORY, WHOLESALE_ORG_SLUG } from "./admin";
 import { getLuxesupplyOrg } from "./staff";
 import { loadActiveHoldsBySku, type PortalHold } from "./holds";
+import {
+  getProductOverrides,
+  loadProductOverridesBySku,
+  type ProductOverrides,
+} from "./productOverrides";
 import { listActiveBundledSkus } from "./suggestedLots";
 
 export type CatalogProduct = {
@@ -505,6 +510,58 @@ export async function resolveStorefrontPricesForSkus(
   return prices;
 }
 
+/**
+ * Layer staff ProductOverrides onto a catalog product (buyer + staff listing).
+ * Prefer non-empty override values; fall back to the already-resolved inventory/curated
+ * fields. Never applies costOverride (staff-only) onto the public product shape.
+ */
+function applyStaffOverrides(
+  product: CatalogProduct,
+  staff?: ProductOverrides | null,
+): CatalogProduct {
+  if (!staff) return product;
+
+  const title = takeText(staff.title) || product.title;
+  const brand = takeText(staff.brand) || product.brand;
+  const condition = takeText(staff.condition) || product.condition;
+  const material = takeText(staff.material) || product.material;
+  const era = takeText(staff.era) || product.era;
+  const location = takeText(staff.vaultLocation) || product.location;
+
+  let imageUrls = product.imageUrls;
+  let imageUrl = product.imageUrl;
+  if (staff.images && staff.images.length) {
+    imageUrls = staff.images;
+    imageUrl = staff.images[0] || null;
+  }
+
+  // Same effective price as staff product detail: sale → list → existing catalog price.
+  // costOverride is intentionally ignored here so cost never follows staff-only edits.
+  let price = product.price;
+  let priceLabel = product.priceLabel;
+  if (staff.salePriceOverride != null) {
+    price = staff.salePriceOverride;
+    priceLabel = String(Math.round(staff.salePriceOverride));
+  } else if (staff.listPriceOverride != null) {
+    price = staff.listPriceOverride;
+    priceLabel = String(Math.round(staff.listPriceOverride));
+  }
+
+  return {
+    ...product,
+    title,
+    brand,
+    price,
+    priceLabel,
+    imageUrl,
+    imageUrls,
+    condition,
+    material,
+    era,
+    location,
+  };
+}
+
 function toCatalogProduct(
   sku: string,
   group: UploadGroup | null,
@@ -518,6 +575,7 @@ function toCatalogProduct(
     brand?: string;
     imageUrl?: string | null;
   },
+  staffOverrides?: ProductOverrides | null,
 ): CatalogProduct {
   const priceLabel = getIiqListingPrice(iiq);
   const liveTitle = resolveTitle(group, iiq, ask, sku);
@@ -546,25 +604,28 @@ function toCatalogProduct(
       : null;
   const cost = group?.inventoryCost ?? iiqCost ?? null;
 
-  return {
-    sku,
-    title,
-    brand,
-    price,
-    priceLabel,
-    cost,
-    imageUrl: imageUrls[0] || null,
-    imageUrls,
-    hostCompAvgUsd: group?.hostCompAvgUsd ?? null,
-    soldOut,
-    held: heldByOther,
-    heldByYou,
-    heldUntil: hold?.heldUntil || null,
-    condition,
-    material,
-    era,
-    location: "VAULT",
-  };
+  return applyStaffOverrides(
+    {
+      sku,
+      title,
+      brand,
+      price,
+      priceLabel,
+      cost,
+      imageUrl: imageUrls[0] || null,
+      imageUrls,
+      hostCompAvgUsd: group?.hostCompAvgUsd ?? null,
+      soldOut,
+      held: heldByOther,
+      heldByYou,
+      heldUntil: hold?.heldUntil || null,
+      condition,
+      material,
+      era,
+      location: "VAULT",
+    },
+    staffOverrides,
+  );
 }
 
 /** Live-hydrate a saved curated catalog's rows (image/title/sold status) while keeping the staff-set price. */
@@ -575,10 +636,11 @@ async function hydrateCuratedItems(
   if (!items.length) return [];
   const buyerUsername = String(opts?.buyerUsername || "").trim().toLowerCase();
   const skus = items.map((i) => i.sku);
-  const [uploadMap, iiqMap, holds] = await Promise.all([
+  const [uploadMap, iiqMap, holds, staffBySku] = await Promise.all([
     loadUploadGroupsBySku(skus),
     loadIiqBySku(skus),
     loadActiveHoldsBySku(skus),
+    loadProductOverridesBySku(skus),
   ]);
   const askMap = await loadAskBySku(skus, uploaderEmailsFromGroups(uploadMap.values()));
 
@@ -596,6 +658,7 @@ async function hydrateCuratedItems(
         brand: item.brand,
         imageUrl: item.imageUrl,
       },
+      staffBySku.get(item.sku),
     ),
   );
 }
@@ -934,10 +997,11 @@ export async function listCatalogProducts(
   const page = unique.slice(0, safeLimit);
   const hasMore = unique.length > safeLimit || snap.size >= uploadCap;
   const skus = page.map((g) => g.sku);
-  const [iiqMap, askMap, holds] = await Promise.all([
+  const [iiqMap, askMap, holds, staffBySku] = await Promise.all([
     loadIiqBySku(skus),
     loadAskBySku(skus, uploaderEmailsFromGroups(page)),
     loadActiveHoldsBySku(skus),
+    loadProductOverridesBySku(skus),
   ]);
 
   const products: CatalogProduct[] = page.map((g) =>
@@ -948,6 +1012,8 @@ export async function listCatalogProducts(
       askMap.get(g.sku) || null,
       holds.get(g.sku),
       buyerUsername,
+      undefined,
+      staffBySku.get(g.sku),
     ),
   );
 
@@ -969,13 +1035,30 @@ export async function getCatalogProductBySku(
   const buyerUsername = String(opts?.buyerUsername || "")
     .trim()
     .toLowerCase();
+  const skuUpper = sku.toUpperCase();
+  const db = getDb();
 
-  if (!opts?.includeBundled) {
-    const bundled = await listActiveBundledSkus();
-    if (bundled.has(sku.toUpperCase())) return null;
-  }
+  // Kick off independent reads together — previously bundled → org → upload
+  // were strictly sequential and dominated PDP TTFB.
+  const bundledPromise = opts?.includeBundled
+    ? Promise.resolve(null as Set<string> | null)
+    : listActiveBundledSkus();
+  const orgPromise = getLuxesupplyOrg();
+  const uploadPromise = db
+    .collection("uploadHistory")
+    .where("uploadDirectory", "==", UPLOAD_DIRECTORY)
+    .where("sku", "==", sku)
+    .limit(25)
+    .get();
 
-  const org = await getLuxesupplyOrg();
+  const [bundled, org, uploadSnap] = await Promise.all([
+    bundledPromise,
+    orgPromise,
+    uploadPromise,
+  ]);
+
+  if (bundled && bundled.has(skuUpper)) return null;
+
   const salesPortal = (org.data.salesPortal || {}) as Record<string, unknown>;
   const catalogSelectionRaw = (salesPortal.catalogSelection || {}) as Record<string, unknown>;
   const catalogMode = String(catalogSelectionRaw.mode || "all");
@@ -983,7 +1066,7 @@ export async function getCatalogProductBySku(
   if (catalogMode === "sku_list") {
     const curatedCatalog = parseCuratedCatalog(salesPortal.curatedCatalog);
     if (curatedCatalog && curatedCatalog.items.length) {
-      const item = curatedCatalog.items.find((i) => i.sku.toUpperCase() === sku.toUpperCase());
+      const item = curatedCatalog.items.find((i) => i.sku.toUpperCase() === skuUpper);
       if (!item || item.price == null) return null;
       const hydrated = await hydrateCuratedItems([item], { buyerUsername });
       return hydrated[0] || null;
@@ -992,22 +1075,16 @@ export async function getCatalogProductBySku(
       const allow = new Set(
         catalogSelectionRaw.skus.map((s) => String(s).trim().toUpperCase()).filter(Boolean),
       );
-      if (allow.size && !allow.has(sku.toUpperCase())) return null;
+      if (allow.size && !allow.has(skuUpper)) return null;
     }
   }
 
-  const db = getDb();
-  let snap = await db
-    .collection("uploadHistory")
-    .where("uploadDirectory", "==", UPLOAD_DIRECTORY)
-    .where("sku", "==", sku)
-    .limit(25)
-    .get();
-  if (snap.empty && sku !== sku.toUpperCase()) {
+  let snap = uploadSnap;
+  if (snap.empty && sku !== skuUpper) {
     snap = await db
       .collection("uploadHistory")
       .where("uploadDirectory", "==", UPLOAD_DIRECTORY)
-      .where("sku", "==", sku.toUpperCase())
+      .where("sku", "==", skuUpper)
       .limit(25)
       .get();
   }
@@ -1015,13 +1092,14 @@ export async function getCatalogProductBySku(
 
   const groups = groupUploads(snap.docs);
   const group =
-    groups.find((g) => g.sku.toUpperCase() === sku.toUpperCase()) || groups[0] || null;
+    groups.find((g) => g.sku.toUpperCase() === skuUpper) || groups[0] || null;
   if (!group) return null;
 
-  const [iiqMap, askMap, holds] = await Promise.all([
+  const [iiqMap, askMap, holds, staffOverrides] = await Promise.all([
     loadIiqBySku([group.sku]),
     loadAskBySku([group.sku], uploaderEmailsFromGroups([group])),
     loadActiveHoldsBySku([group.sku]),
+    getProductOverrides(group.sku),
   ]);
 
   return toCatalogProduct(
@@ -1031,6 +1109,8 @@ export async function getCatalogProductBySku(
     askMap.get(group.sku) || null,
     holds.get(group.sku),
     buyerUsername,
+    undefined,
+    staffOverrides,
   );
 }
 
@@ -1097,10 +1177,11 @@ export async function getCatalogProductsBySkus(
   if (!groups.length) return out;
 
   const groupSkus = groups.map((g) => g.sku);
-  const [iiqMap, askMap, holds] = await Promise.all([
+  const [iiqMap, askMap, holds, staffBySku] = await Promise.all([
     loadIiqBySku(groupSkus),
     loadAskBySku(groupSkus, uploaderEmailsFromGroups(groups)),
     loadActiveHoldsBySku(groupSkus),
+    loadProductOverridesBySku(groupSkus),
   ]);
 
   for (const group of groups) {
@@ -1111,6 +1192,8 @@ export async function getCatalogProductsBySkus(
       askMap.get(group.sku) || null,
       holds.get(group.sku),
       buyerUsername,
+      undefined,
+      staffBySku.get(group.sku),
     );
     const key = byUpper.get(group.sku.toUpperCase()) || group.sku;
     out.set(key, product);

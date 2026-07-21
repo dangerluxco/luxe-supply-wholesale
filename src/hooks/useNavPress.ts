@@ -4,8 +4,9 @@ import { useEffect, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 /**
- * Immediate pressed state + useTransition while soft-navigating (CheckoutNavButton pattern).
+ * Immediate pressed state + useTransition while soft-navigating (e.g. ProductCard → PDP).
  * Resets when pathname matches `resetWhenPath` (prefix match).
+ * Prefer a plain <Link> for lightweight hops (e.g. checkout → cart).
  */
 export function useNavPress(href: string, resetWhenPath?: string) {
   const router = useRouter();

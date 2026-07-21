@@ -166,6 +166,28 @@ export async function notifyStaffOfRegistrationRequest(opts: {
 }
 
 /**
+ * Free-form staff → buyer email from the client detail page.
+ * Reply-to is the staff user so buyer replies go to them; From stays SendGrid default.
+ */
+export async function sendBuyerMessageEmail(opts: {
+  buyerEmail: string;
+  staffEmail: string;
+  subject: string;
+  bodyText: string;
+}): Promise<boolean> {
+  const subject = (opts.subject || "").trim();
+  const bodyText = (opts.bodyText || "").trim();
+  if (!opts.buyerEmail || !subject || !bodyText) return false;
+
+  return sendEmail({
+    to: [opts.buyerEmail],
+    subject,
+    html: plainTextToEmailHtml(bodyText),
+    replyTo: opts.staffEmail || undefined,
+  });
+}
+
+/**
  * Buyer-facing "we'd like to schedule a call" email — the precursor to Book
  * Call. Reply-to is the requesting rep, so the buyer's proposed times land
  * straight in their inbox and the rep books from there.
