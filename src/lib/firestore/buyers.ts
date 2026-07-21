@@ -1,10 +1,11 @@
 import { randomBytes, scryptSync, timingSafeEqual } from "crypto";
-import type { QueryDocumentSnapshot } from "firebase-admin/firestore";
 import { getDb, toIso, WHOLESALE_ORG_SLUG } from "./admin";
 import { getLuxesupplyOrg } from "./staff";
 import {
   DEFAULT_MAX_CART_ITEMS,
   DEFAULT_MAX_CART_VALUE,
+  DEFAULT_SHIPPING_METHOD_ID,
+  INVOICE_TERMS,
 } from "@/lib/constants";
 
 export type PortalBuyer = {
@@ -22,6 +23,29 @@ export type PortalBuyer = {
   maxCartValue: number;
   createdAt: string | null;
   lastLoginAt: string | null;
+
+  // Account/billing profile (staff-editable "Edit account" fields) — all new,
+  // no data migration assumed; every field defaults to empty/null.
+  city: string;
+  state: string;
+  /** e.g. "Net 30" — defaults to the org-wide INVOICE_TERMS when unset. */
+  paymentTerms: string;
+  preferredPayment: string;
+  /** null = no limit configured yet. */
+  creditLimit: number | null;
+  resaleCertVerified: boolean;
+
+  // Shipping profile
+  shippingAttn: string;
+  shippingLine1: string;
+  shippingLine2: string;
+  shippingCity: string;
+  shippingState: string;
+  shippingPostalCode: string;
+  shippingCountry: string;
+  /** One of SHIPPING_OPTIONS ids — this buyer's default method. */
+  shippingMethodId: string;
+  shippingSignatureRequired: boolean;
 };
 
 function serializeBuyer(id: string, d: Record<string, unknown>): PortalBuyer {
@@ -33,6 +57,10 @@ function serializeBuyer(id: string, d: Record<string, unknown>): PortalBuyer {
     typeof d.maxCartValue === "number" && Number.isFinite(d.maxCartValue) && d.maxCartValue > 0
       ? Math.floor(d.maxCartValue)
       : DEFAULT_MAX_CART_VALUE;
+  const creditLimit =
+    typeof d.creditLimit === "number" && Number.isFinite(d.creditLimit) && d.creditLimit > 0
+      ? d.creditLimit
+      : null;
   return {
     id,
     username: String(d.username || ""),
@@ -46,6 +74,23 @@ function serializeBuyer(id: string, d: Record<string, unknown>): PortalBuyer {
     maxCartValue: maxValue,
     createdAt: toIso(d.createdAt),
     lastLoginAt: toIso(d.lastLoginAt),
+
+    city: String(d.city || ""),
+    state: String(d.state || ""),
+    paymentTerms: String(d.paymentTerms || INVOICE_TERMS),
+    preferredPayment: String(d.preferredPayment || ""),
+    creditLimit,
+    resaleCertVerified: !!d.resaleCertVerified,
+
+    shippingAttn: String(d.shippingAttn || ""),
+    shippingLine1: String(d.shippingLine1 || ""),
+    shippingLine2: String(d.shippingLine2 || ""),
+    shippingCity: String(d.shippingCity || ""),
+    shippingState: String(d.shippingState || ""),
+    shippingPostalCode: String(d.shippingPostalCode || ""),
+    shippingCountry: String(d.shippingCountry || ""),
+    shippingMethodId: String(d.shippingMethodId || DEFAULT_SHIPPING_METHOD_ID),
+    shippingSignatureRequired: !!d.shippingSignatureRequired,
   };
 }
 
@@ -175,6 +220,70 @@ export async function updateBuyerProfile(
   }
   if (updates.phone != null) payload.phone = String(updates.phone).trim().slice(0, 40);
   if (updates.company != null) payload.company = String(updates.company).trim().slice(0, 160);
+
+  await ref.update(payload);
+  const saved = await ref.get();
+  return serializeBuyer(saved.id, saved.data() || {});
+}
+
+export type BuyerAccountDetailsInput = {
+  city?: string;
+  state?: string;
+  paymentTerms?: string;
+  preferredPayment?: string;
+  creditLimit?: number | null;
+  resaleCertVerified?: boolean;
+  shippingAttn?: string;
+  shippingLine1?: string;
+  shippingLine2?: string;
+  shippingCity?: string;
+  shippingState?: string;
+  shippingPostalCode?: string;
+  shippingCountry?: string;
+  shippingMethodId?: string;
+  shippingSignatureRequired?: boolean;
+};
+
+/** Staff-only "Edit account" panel — billing/shipping profile fields, separate
+ * from the buyer's own self-service profile (updateBuyerProfile). */
+export async function updateBuyerAccountDetails(
+  id: string,
+  updates: BuyerAccountDetailsInput,
+): Promise<PortalBuyer> {
+  const ref = getDb().collection("salesPortalBuyers").doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) throw new Error("Account not found.");
+
+  const payload: Record<string, unknown> = { updatedAt: new Date() };
+  const textFields = [
+    "city",
+    "state",
+    "paymentTerms",
+    "preferredPayment",
+    "shippingAttn",
+    "shippingLine1",
+    "shippingLine2",
+    "shippingCity",
+    "shippingState",
+    "shippingPostalCode",
+    "shippingCountry",
+    "shippingMethodId",
+  ] as const;
+  for (const key of textFields) {
+    const v = updates[key];
+    if (v != null) payload[key] = String(v).trim().slice(0, 160);
+  }
+  if (updates.creditLimit !== undefined) {
+    const n = updates.creditLimit == null ? null : Number(updates.creditLimit);
+    if (n != null && (!Number.isFinite(n) || n < 0)) {
+      throw new Error("Credit limit must be a positive number.");
+    }
+    payload.creditLimit = n;
+  }
+  if (updates.resaleCertVerified !== undefined) payload.resaleCertVerified = !!updates.resaleCertVerified;
+  if (updates.shippingSignatureRequired !== undefined) {
+    payload.shippingSignatureRequired = !!updates.shippingSignatureRequired;
+  }
 
   await ref.update(payload);
   const saved = await ref.get();

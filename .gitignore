@@ -12,3 +12,4 @@ prisma/dev.db-journal
 *-firebase-adminsdk*.json
 .DS_Store
 next-env.d.ts
+*.tsbuildinfo

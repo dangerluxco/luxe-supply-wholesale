@@ -15,13 +15,13 @@ export default function ForgotPasswordForm() {
         <Logo />
         <h1 className="mt-8 text-[24px] font-semibold tracking-tight text-ink">Reset your password</h1>
         <p className="mt-1 text-[13px] text-secondary">
-          Enter your staff email — we'll send a link to reset your password.
+          Enter your staff email — we&apos;ll send a link to reset your password.
         </p>
 
         {sent ? (
           <div className="mt-8 rounded-chip border border-border bg-ground px-4 py-4 text-[12.5px] text-secondary">
             If that account exists, a reset link is on its way to that email. It expires in 1 hour.
-            Check spam if you don't see it soon.
+            Check spam if you don&apos;t see it soon.
           </div>
         ) : (
           <form

@@ -22,14 +22,18 @@ const SORT_PRICE = [
   { value: "price_desc", label: "Price ↓" },
 ] as const;
 
+type FilterOption = { name: string; count: number };
+
 export function CatalogFilters({
   brands,
+  categories = [],
   resultCount,
   totalCount,
   pricesVisible = true,
   hasMore = false,
 }: {
-  brands: string[];
+  brands: FilterOption[];
+  categories?: FilterOption[];
   resultCount: number;
   totalCount: number;
   pricesVisible?: boolean;
@@ -42,6 +46,7 @@ export function CatalogFilters({
 
   const qParam = params.get("q") ?? "";
   const brand = params.get("brand") ?? "";
+  const category = params.get("category") ?? "";
   const availability = params.get("availability") || "available";
   const sort = params.get("sort") || "newest";
 
@@ -62,10 +67,16 @@ export function CatalogFilters({
     sp.delete("era");
     sp.delete("min");
     sp.delete("max");
-    sp.delete("category");
     sp.delete("available");
     start(() => {
       router.replace(`${pathname}?${sp.toString()}`, { scroll: false });
+    });
+  }
+
+  function clearAll() {
+    setQ("");
+    start(() => {
+      router.replace(pathname, { scroll: false });
     });
   }
 
@@ -79,12 +90,19 @@ export function CatalogFilters({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
 
-  const metaParts = [`Showing ${resultCount} of ${totalCount} loaded`];
-  if (qParam) metaParts.push(`search "${qParam}"`);
-  if (brand) metaParts.push(brand);
-  if (availability === "available") metaParts.push("available only");
-  if (availability === "sold") metaParts.push("sold out only");
-  if (availability === "held") metaParts.push("on hold only");
+  const hasActiveFilters = !!(qParam || brand || category || availability !== "available");
+
+  const chips: { key: string; label: string; onRemove: () => void }[] = [];
+  if (qParam) chips.push({ key: "q", label: `“${qParam}”`, onRemove: () => replace({ q: null }) });
+  if (brand) chips.push({ key: "brand", label: brand, onRemove: () => replace({ brand: null }) });
+  if (category) chips.push({ key: "category", label: category, onRemove: () => replace({ category: null }) });
+  if (availability !== "available") {
+    const label = AVAILABILITY.find((a) => a.value === availability)?.label || availability;
+    chips.push({ key: "availability", label, onRemove: () => replace({ availability: "available" }) });
+  }
+
+  const metaParts = [`Found ${resultCount} item${resultCount === 1 ? "" : "s"}`];
+  if (totalCount !== resultCount) metaParts.push(`of ${totalCount} loaded`);
   if (hasMore) metaParts.push("load more for additional items");
 
   const sortOptions = pricesVisible ? [...SORT_BASE, ...SORT_PRICE] : [...SORT_BASE];
@@ -96,14 +114,14 @@ export function CatalogFilters({
 
   return (
     <div className="sticky top-[60px] z-30 border-b border-border bg-surface/95 px-8 py-4 backdrop-blur-sm">
-      <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(160px,1.4fr)_repeat(3,minmax(120px,0.7fr))]">
+      <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(160px,1.3fr)_repeat(4,minmax(110px,0.7fr))]">
         <label className={field}>
           <span className="sr-only">Search catalog</span>
           <input
             type="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search title, SKU, or brand…"
+            placeholder="Search name, description, SKU, brand, category…"
             className={clsx(control, "font-normal")}
             autoComplete="off"
             enterKeyHint="search"
@@ -119,8 +137,25 @@ export function CatalogFilters({
           >
             <option value="">All brands</option>
             {brands.map((b) => (
-              <option key={b} value={b}>
-                {b}
+              <option key={b.name} value={b.name}>
+                {b.name} ({b.count})
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className={field}>
+          <span>Category</span>
+          <select
+            value={category}
+            onChange={(e) => replace({ category: e.target.value || null })}
+            className={control}
+            disabled={categories.length === 0}
+          >
+            <option value="">All categories</option>
+            {categories.map((c) => (
+              <option key={c.name} value={c.name}>
+                {c.name} ({c.count})
               </option>
             ))}
           </select>
@@ -157,7 +192,36 @@ export function CatalogFilters({
         </label>
       </div>
 
-      <p className="mt-3 text-[12px] font-medium text-muted">{metaParts.join(" · ")}</p>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <p className="text-[12px] font-medium text-muted">{metaParts.join(" · ")}</p>
+        {chips.length > 0 ? (
+          <>
+            <span className="text-[12px] text-muted">·</span>
+            {chips.map((c) => (
+              <button
+                key={c.key}
+                type="button"
+                onClick={c.onRemove}
+                className="flex items-center gap-1 rounded-chip border border-border bg-ground px-2 py-0.5 text-[11px] text-secondary transition hover:border-accent hover:text-ink"
+              >
+                {c.label}
+                <span aria-hidden className="text-muted">
+                  ×
+                </span>
+              </button>
+            ))}
+          </>
+        ) : null}
+        {hasActiveFilters ? (
+          <button
+            type="button"
+            onClick={clearAll}
+            className="text-[11.5px] font-semibold uppercase tracking-[0.08em] text-accent hover:underline"
+          >
+            Clear all filters
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }

@@ -55,7 +55,7 @@ export function ClientCartLimitsForm({
     >
       <p className="text-[12.5px] text-secondary">
         Caps how many pieces and how much dollar value this buyer can hold in cart / on soft
-        hold. Defaults are 5 items / $5,000.
+        hold. Defaults are 20 items / $10,000.
       </p>
       <div className="grid grid-cols-2 gap-3">
         <label className="flex flex-col gap-1.5">

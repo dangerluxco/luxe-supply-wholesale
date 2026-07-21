@@ -5,6 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Logo } from "./Logo";
 import { clsx } from "@/lib/clsx";
+import { money } from "@/lib/format";
 import { useStorefrontAvailability } from "@/components/StorefrontAvailability";
 import { SearchIcon } from "@/components/icons";
 
@@ -23,10 +24,14 @@ const BUYER_NAV = [
 export function BuyerTopbar({
   user,
   cartCount,
+  cartTotal = 0,
+  wishlistCount = 0,
   index,
 }: {
   user: { name: string; initials: string } | null;
   cartCount: number;
+  cartTotal?: number;
+  wishlistCount?: number;
   index: IndexItem[];
 }) {
   const pathname = usePathname();
@@ -86,11 +91,16 @@ export function BuyerTopbar({
               key={n.href}
               href={n.href}
               className={clsx(
-                "rounded-chip px-3 py-1.5 transition",
+                "flex items-center gap-1.5 rounded-chip px-3 py-1.5 transition",
                 isActive(n.href) ? "bg-[#F0EFEA] text-ink" : "hover:text-ink",
               )}
             >
               {n.label}
+              {n.href === "/wholesale/wishlist" && wishlistCount > 0 ? (
+                <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent px-1 font-mono text-[10px] font-semibold text-white">
+                  {wishlistCount}
+                </span>
+              ) : null}
             </Link>
           ))}
         </nav>
@@ -107,11 +117,24 @@ export function BuyerTopbar({
         </button>
         {signedIn ? (
           <>
-            <Link href="/wholesale/cart" className="relative flex items-center gap-1.5 text-[12px] text-secondary">
-              <span className="rounded-chip border border-border px-2.5 py-1.5">
-                Cart{cartCount > 0 ? ` · ${cartCount}` : ""}
-              </span>
-            </Link>
+            {cartCount > 0 ? (
+              <Link
+                href="/wholesale/checkout"
+                className="flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-chip bg-ink px-3.5 text-[11.5px] font-semibold uppercase tracking-[0.12em] text-ground transition hover:opacity-90"
+              >
+                Checkout
+                <span className="font-mono text-[10.5px] font-normal normal-case tracking-normal text-ground/75">
+                  <span className="hidden sm:inline">
+                    ({cartCount} item{cartCount === 1 ? "" : "s"}, {money(cartTotal)})
+                  </span>
+                  <span className="sm:hidden">({cartCount})</span>
+                </span>
+              </Link>
+            ) : (
+              <Link href="/wholesale/cart" className="relative flex items-center gap-1.5 text-[12px] text-secondary">
+                <span className="rounded-chip border border-border px-2.5 py-1.5">Cart</span>
+              </Link>
+            )}
             <div className="flex items-center gap-2 text-[12px] text-secondary">
               <div className="flex h-7 w-7 items-center justify-center rounded-chip bg-ink text-[10px] font-semibold text-ground">
                 {user.initials}

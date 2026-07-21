@@ -6,6 +6,7 @@ import { StorefrontAvailabilityProvider } from "@/components/StorefrontAvailabil
 import { ROLE } from "@/lib/constants";
 import { getBuyerCart } from "@/lib/firestore/buyers";
 import { listCatalogProducts } from "@/lib/firestore/catalog";
+import { listHoldAlertsForBuyer } from "@/lib/firestore/holdAlerts";
 
 /** Buyer-facing tab title — overrides the root "Wholesale Portal" default for /wholesale/**. */
 export const metadata: Metadata = {
@@ -58,10 +59,20 @@ export default async function WholesaleLayout({ children }: { children: React.Re
   }
 
   let cartCount = 0;
+  let cartTotal = 0;
   try {
-    cartCount = (await getBuyerCart(session.id)).length;
+    const cart = await getBuyerCart(session.id);
+    cartCount = cart.length;
+    cartTotal = cart.reduce((sum, item) => sum + (Number(item.price) || 0), 0);
   } catch (err) {
     console.warn("[wholesale layout] cart unavailable:", err instanceof Error ? err.message : err);
+  }
+
+  let wishlistCount = 0;
+  try {
+    wishlistCount = session.username ? (await listHoldAlertsForBuyer(session.username)).length : 0;
+  } catch (err) {
+    console.warn("[wholesale layout] wishlist unavailable:", err instanceof Error ? err.message : err);
   }
 
   return (
@@ -70,6 +81,8 @@ export default async function WholesaleLayout({ children }: { children: React.Re
         <BuyerTopbar
           user={{ name: session.name, initials: session.initials }}
           cartCount={cartCount}
+          cartTotal={cartTotal}
+          wishlistCount={wishlistCount}
           index={index}
         />
         {children}

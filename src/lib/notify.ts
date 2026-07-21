@@ -23,9 +23,6 @@ const STAFF_ORIGIN =
     ? `${schemeFor(process.env.PUBLIC_HOST)}://${process.env.PUBLIC_HOST}`
     : "https://wholesaleportal.luxesupply.co");
 
-/** @deprecated Prefer BUYER_ORIGIN / STAFF_ORIGIN — kept for any leftover call sites. */
-const STOREFRONT_ORIGIN = BUYER_ORIGIN;
-
 export function buyerStorefrontOrigin(): string {
   return BUYER_ORIGIN.replace(/\/$/, "");
 }

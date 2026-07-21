@@ -1,12 +1,20 @@
 import { listCatalogProducts, getCatalogSettingsState } from "@/lib/firestore/catalog";
 import { CatalogSettingsForm } from "@/components/CatalogSettingsForm";
-import { money } from "@/lib/format";
+import { StaffCatalogGrid, type StaffCatalogCard } from "@/components/StaffCatalogGrid";
+import { PRODUCT_STATUS } from "@/lib/constants";
 import { EmptyState } from "@/components/EmptyState";
 
 export const dynamic = "force-dynamic";
 
-export default async function CatalogPage() {
+type SP = { [k: string]: string | string[] | undefined };
+
+export default async function CatalogPage({ searchParams }: { searchParams: Promise<SP> }) {
+  const sp = await searchParams;
+  const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
+  const pageLimit = Math.min(Math.max(Number(one(sp.limit)) || 60, 24), 800);
+
   let products: Awaited<ReturnType<typeof listCatalogProducts>>["products"] = [];
+  let hasMore = false;
   let settings: Awaited<ReturnType<typeof getCatalogSettingsState>> = {
     mode: "all",
     skus: [],
@@ -15,14 +23,40 @@ export default async function CatalogPage() {
   };
   try {
     const [productsResult, settingsResult] = await Promise.all([
-      listCatalogProducts(48),
+      listCatalogProducts(pageLimit),
       getCatalogSettingsState(),
     ]);
     products = productsResult.products;
+    hasMore = productsResult.hasMore;
     settings = settingsResult;
   } catch (err) {
     console.warn("[rep catalog] Firestore unavailable:", err instanceof Error ? err.message : err);
   }
+
+  // Same card shape the buyer storefront uses (see wholesale/page.tsx) plus a
+  // staff-only `cost` field, so this grid renders with the identical ProductCard.
+  const cards: StaffCatalogCard[] = products.map((p) => ({
+    sku: p.sku,
+    name: p.title,
+    wholesalePrice: Math.round(p.price ?? 0),
+    cost: p.cost,
+    origin: p.brand || "—",
+    era: p.era,
+    material: p.material,
+    status: p.soldOut
+      ? PRODUCT_STATUS.SOLD
+      : p.held
+        ? PRODUCT_STATUS.ON_HOLD
+        : PRODUCT_STATUS.AVAILABLE,
+    location: p.location,
+    imageLabel: p.brand || p.sku,
+    primaryImageUrl: p.imageUrl,
+    imageUrls: p.imageUrls?.length ? p.imageUrls : p.imageUrl ? [p.imageUrl] : [],
+    brand: p.brand,
+    hostCompAvgUsd: p.hostCompAvgUsd,
+    heldByYou: p.heldByYou,
+    heldUntil: p.heldUntil,
+  }));
 
   return (
     <div className="px-10 pb-12 pt-8">
@@ -36,47 +70,14 @@ export default async function CatalogPage() {
       <CatalogSettingsForm mode={settings.mode} curatedCatalog={settings.curatedCatalog} />
 
       <div className="mt-10 mb-4 flex items-baseline gap-3">
-        <h2 className="text-[16px] font-semibold text-ink">Recent products</h2>
-        <span className="text-[12px] text-muted">{products.length} shown</span>
+        <h2 className="text-[16px] font-semibold text-ink">Complete catalog</h2>
+        <span className="text-[12px] text-muted">{products.length} loaded · click any item to edit</span>
       </div>
 
       {products.length === 0 ? (
         <EmptyState title="No products found." hint="Check uploadDirectory luxesupply in uploadHistory." />
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {products.map((p, i) => (
-            <div key={`${p.sku}-${i}`} className="overflow-hidden rounded-card border border-border bg-surface">
-              <div className="aspect-[4/3] bg-ground">
-                {p.imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={p.imageUrl} alt={p.title} className="h-full w-full object-cover" />
-                ) : (
-                  <div className="flex h-full items-center justify-center font-mono text-[11px] text-muted">
-                    No image
-                  </div>
-                )}
-              </div>
-              <div className="space-y-1 p-3.5">
-                <div className="line-clamp-2 text-[13px] font-semibold text-ink">{p.title}</div>
-                <div className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted">{p.sku}</div>
-                <div className="text-[11px] text-secondary">{p.brand || "—"}</div>
-                <div className="flex items-center justify-between pt-1">
-                  <span className="font-mono text-[12px] text-ink">
-                    {p.price != null ? money(Math.round(p.price)) : p.priceLabel || "—"}
-                  </span>
-                  {p.hostCompAvgUsd != null ? (
-                    <span className="font-mono text-[10px] text-muted">
-                      comps ~{money(Math.round(p.hostCompAvgUsd))}
-                    </span>
-                  ) : null}
-                </div>
-                {p.soldOut ? (
-                  <div className="text-[10px] uppercase tracking-[0.1em] text-danger">Sold</div>
-                ) : null}
-              </div>
-            </div>
-          ))}
-        </div>
+        <StaffCatalogGrid products={cards} currentLimit={pageLimit} hasMore={hasMore} />
       )}
     </div>
   );

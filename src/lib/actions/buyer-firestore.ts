@@ -106,6 +106,8 @@ export async function addSkusToCart(skus: string[]) {
 
   revalidatePath("/wholesale");
   revalidatePath("/wholesale/cart");
+  // Keep the persistent topbar Checkout button's live count/total in sync everywhere.
+  revalidatePath("/wholesale", "layout");
   return { ok: true, added: added.length, skipped: skipped.length };
 }
 
@@ -124,6 +126,8 @@ export async function removeSkuFromCart(sku: string) {
 
   revalidatePath("/wholesale");
   revalidatePath("/wholesale/cart");
+  // Keep the persistent topbar Checkout button's live count/total in sync everywhere.
+  revalidatePath("/wholesale", "layout");
 }
 
 /**
@@ -215,6 +219,8 @@ export async function submitInvoiceRequest(opts?: {
 
   revalidatePath("/wholesale");
   revalidatePath("/wholesale/cart");
+  // Keep the persistent topbar Checkout button's live count/total in sync everywhere.
+  revalidatePath("/wholesale", "layout");
   revalidatePath("/wholesaleportal/rep");
   return { ok: true, quoteId: id };
 }

@@ -168,9 +168,8 @@ export async function approveBuyerRegistration(
       reviewNote,
     });
 
-    revalidatePath("/wholesaleportal/rep/applications");
-    revalidatePath(`/wholesaleportal/rep/applications/${app.id}`);
     revalidatePath("/wholesaleportal/rep/clients");
+    revalidatePath(`/wholesaleportal/rep/applications/${app.id}`);
 
     return {
       ok: true,
@@ -195,7 +194,7 @@ export async function rejectBuyerRegistration(
       reviewedBy: session.email,
       reviewNote,
     });
-    revalidatePath("/wholesaleportal/rep/applications");
+    revalidatePath("/wholesaleportal/rep/clients");
     revalidatePath(`/wholesaleportal/rep/applications/${applicationId}`);
     return { ok: true };
   } catch (err) {

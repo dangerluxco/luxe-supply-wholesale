@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import { CopyRow } from "@/components/CopyRow";
 
 type BuyerHit = { id: string; displayName: string; username: string; email: string; company: string };
 
@@ -131,7 +132,7 @@ export function CurationBookCall({
       </button>
       {error ? <p className="mt-2 text-[12px] text-danger">{error}</p> : null}
       {result ? (
-        <div className="mt-3 space-y-1 text-[11px] text-muted">
+        <div className="mt-3 space-y-1.5 text-[11px] text-muted">
           <p>
             <a
               href={result.sellerCurationUrl}
@@ -143,16 +144,24 @@ export function CurationBookCall({
             </a>
           </p>
           <p>
-            Buyer link:{" "}
             <a
               href={result.curationUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="text-accent underline-offset-2 hover:underline"
             >
-              {result.curationUrl}
+              Buyer link →
             </a>
           </p>
+          {selected?.email ? (
+            <>
+              <CopyRow label="Buyer email:" value={selected.email} />
+              <p className="text-[10.5px] text-muted">
+                We&apos;ve added them as a guest, but Calendar&apos;s auto-add can be
+                unreliable — paste their email into Guests if it didn&apos;t stick.
+              </p>
+            </>
+          ) : null}
         </div>
       ) : null}
     </div>

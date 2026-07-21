@@ -262,6 +262,42 @@ export async function listActiveCurationShares(limit = 20): Promise<CurationShar
     .slice(0, limit);
 }
 
+/** Minimal shape for performance-dashboard aggregation — every curation session
+ * created in a date range, regardless of active/ended/revoked state. */
+export type CurationSessionStub = { createdByEmail: string; createdAt: string | null };
+
+/** Best-effort proxy for "calls" on the staff performance dashboard: one curation
+ * session created ≈ one client call prepped/run (via "Book call" or the standalone
+ * curation builder). Not a dedicated call log — just what this app can observe. */
+export async function listCurationSessionsInRange(
+  fromIso: string,
+  toIsoParam: string,
+): Promise<CurationSessionStub[]> {
+  const org = await getLuxesupplyOrg();
+  const db = getDb();
+  const from = new Date(fromIso);
+  const to = new Date(toIsoParam);
+
+  let snap;
+  try {
+    snap = await db
+      .collection(COLLECTION)
+      .where("organizationId", "==", org.id)
+      .where("createdAt", ">=", from)
+      .where("createdAt", "<=", to)
+      .limit(1000)
+      .get();
+  } catch (err) {
+    console.warn("[curation] listCurationSessionsInRange:", err instanceof Error ? err.message : err);
+    return [];
+  }
+
+  return snap.docs.map((doc) => {
+    const d = doc.data() || {};
+    return { createdByEmail: takeText(d.createdByEmail), createdAt: toIso(d.createdAt) };
+  });
+}
+
 async function loadDoc(token: string) {
   const clean = takeText(token);
   if (!clean || clean.length < 16 || clean.length > 80 || !/^[A-Za-z0-9_-]+$/.test(clean)) {
@@ -407,6 +443,36 @@ export async function addCurationItem(
     updatedAt: new Date(),
   });
   return { revision, itemCount: nextItems.length };
+}
+
+/**
+ * Staff-only: re-feature a SKU that's already on this curation link — for
+ * bringing an item the buyer already saw back into the hero view to keep
+ * talking about it, without re-adding it (which `addCurationItem` rejects as
+ * a dupe). No-op on pricing/decision/note; only moves the hero pointer.
+ */
+export async function setCurationHero(
+  token: string,
+  skuRaw: string,
+): Promise<{ revision: number }> {
+  const found = await loadDoc(token);
+  if (!found) throw new Error("This curation link is unavailable.");
+  const { ref, data } = found;
+  assertShareWritable(data);
+
+  const sku = takeText(skuRaw);
+  if (!sku) throw new Error("Missing SKU.");
+  const items = Array.isArray(data.items) ? (data.items as Record<string, unknown>[]) : [];
+  const match = items.find((it) => takeText(it.sku).toLowerCase() === sku.toLowerCase());
+  if (!match) throw new Error("That SKU isn't on this curation link yet.");
+
+  const revision = (typeof data.revision === "number" ? data.revision : 0) + 1;
+  await ref.update({
+    heroSku: takeText(match.sku),
+    revision,
+    updatedAt: new Date(),
+  });
+  return { revision };
 }
 
 /**
@@ -564,15 +630,17 @@ function summarize(items: CurationItem[]): CurationSummary {
 
 /**
  * Staff-only: end the live session — buyer becomes read-only; hero clears.
- * Also hands back the approved items + linked order (if this link came from
- * "Book call") so the caller can sync the order request's line items to match
- * what the buyer actually decided on the call.
+ * Also hands back every item (with its final decision + price) plus the
+ * linked order (if this link came from "Book call") so the caller can sync
+ * the order request's line items to match what the buyer actually decided
+ * on the call — see the `end` API route for the approve/decline/maybe rules.
  */
 export async function endCurationSession(token: string): Promise<{
   revision: number;
   summary: CurationSummary;
   quoteId: string | null;
   linkedBuyerId: string | null;
+  items: CurationItem[];
   approvedItems: CurationItem[];
 }> {
   const found = await loadDoc(token);
@@ -598,6 +666,7 @@ export async function endCurationSession(token: string): Promise<{
     summary,
     quoteId: data.quoteId ? takeText(data.quoteId) : null,
     linkedBuyerId: data.linkedBuyerId ? takeText(data.linkedBuyerId) : null,
+    items,
     approvedItems: items.filter((it) => it.decision === "approve"),
   };
 }

@@ -153,7 +153,6 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
     } catch {
       /* ignore */
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [share.token]);
 
   useEffect(() => {
@@ -301,8 +300,12 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
     if (!sku) return;
     setAddStatus(null);
     setError(null);
-    if (share.items.some((it) => it.sku.toLowerCase() === sku.toLowerCase())) {
-      setAddStatus("That SKU is already on this link — find it in the catalog below.");
+    const existing = share.items.find((it) => it.sku.toLowerCase() === sku.toLowerCase());
+    if (existing) {
+      // Already on the link — no need to re-add it, just bring it back into the
+      // hero view so the rep can keep talking about it with the buyer.
+      featureExistingItem(existing.sku);
+      setAddSku("");
       return;
     }
     start(async () => {
@@ -599,6 +602,27 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
     setMessage(`${item.sku} is now featured for the client.`);
   }
 
+  /** Re-feature a SKU that's already on this link — brings it back into the
+   *  hero view without re-adding it (which the server rejects as a dupe). */
+  function featureExistingItem(sku: string) {
+    setError(null);
+    start(async () => {
+      const res = await fetch(`/api/staff/curation/${share.token}/feature`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sku }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok || data.error) {
+        setError(data.error || "Could not feature that item.");
+        return;
+      }
+      setShare((prev) => ({ ...prev, heroSku: sku }));
+      setMessage(`${sku} is back in the hero view for the client.`);
+    });
+  }
+
   function endSession() {
     setError(null);
     if (stats.maybe > 0) {
@@ -626,7 +650,7 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
           "• Live add stops; the featured item is cleared\n" +
           "• Link stays available until expiry (or revoke)\n" +
           (share.quoteId
-            ? "• The linked order request's line items will be updated to match what was approved\n"
+            ? "• The linked order request updates to match: declined items come off (holds released); items already on the order stay unless declined; anything you added live only joins the order if it was approved\n"
             : "") +
           "• You can export the final CSV afterward",
       )
@@ -645,6 +669,7 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
         orderSyncError?: string | null;
         canCreateOrder?: boolean;
         approvedCount?: number;
+        removedCount?: number;
       };
       if (!res.ok || data.error) {
         setError(data.error || "Could not end session.");
@@ -657,8 +682,11 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
         /* ignore */
       }
       if (share.quoteId && data.orderSynced) {
+        const removed = data.removedCount ?? 0;
         setMessage(
-          `Session ended — order request updated with ${data.approvedCount ?? 0} approved item${data.approvedCount === 1 ? "" : "s"}.`,
+          removed > 0
+            ? `Session ended — order request updated (${removed} declined item${removed === 1 ? "" : "s"} removed, holds released).`
+            : "Session ended — order request updated to match today's prices.",
         );
       } else if (share.quoteId && data.orderSyncError) {
         setMessage("Session ended, but the linked order request couldn't be updated automatically.");
@@ -987,7 +1015,8 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
                 <div className="rounded-chip border border-border bg-ground p-4">
                   <p className="text-[11.5px] text-muted">
                     Scan or type a SKU, set the listing price, then share it — the client sees it
-                    featured immediately.
+                    featured immediately. Already on this link? It jumps straight back into the
+                    hero view instead.
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     <input
@@ -1179,7 +1208,7 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
       ) : null}
 
       <div className="overflow-hidden rounded-chip border border-border">
-        <div className="grid grid-cols-[112px_minmax(160px,1fr)_80px_90px_100px_190px_minmax(120px,1fr)_40px] items-center gap-x-3 border-b border-border bg-ground px-3 py-2 font-mono text-[10px] uppercase tracking-[0.1em] text-muted">
+        <div className="grid grid-cols-[112px_minmax(160px,1fr)_80px_90px_100px_190px_minmax(120px,1fr)_84px] items-center gap-x-3 border-b border-border bg-ground px-3 py-2 font-mono text-[10px] uppercase tracking-[0.1em] text-muted">
           <span />
           <span>Item</span>
           <span className="text-right">Cost</span>
@@ -1197,7 +1226,7 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
               <div
                 key={it.sku}
                 className={clsx(
-                  "grid grid-cols-[112px_minmax(160px,1fr)_80px_90px_100px_190px_minmax(120px,1fr)_40px] items-center gap-x-3 border-b border-border/60 px-3 py-2.5 text-[12.5px] last:border-b-0",
+                  "grid grid-cols-[112px_minmax(160px,1fr)_80px_90px_100px_190px_minmax(120px,1fr)_84px] items-center gap-x-3 border-b border-border/60 px-3 py-2.5 text-[12.5px] last:border-b-0",
                   share.heroSku === it.sku && "bg-accent/5",
                 )}
               >
@@ -1264,13 +1293,24 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
                   placeholder="—"
                   className="h-8 min-w-0 rounded-chip border border-border bg-ground px-2 text-[11.5px] text-ink outline-none focus:border-accent disabled:opacity-60"
                 />
-                <div className="text-right">
+                <div className="flex items-center justify-end gap-1">
+                  {share.heroSku !== it.sku ? (
+                    <button
+                      type="button"
+                      disabled={pending || share.sessionEnded || share.revoked}
+                      onClick={() => featureExistingItem(it.sku)}
+                      title="Bring this back into the hero view"
+                      className="inline-flex h-8 items-center rounded-chip border border-border px-2 text-[10px] font-semibold uppercase tracking-[0.06em] text-secondary transition hover:border-accent hover:text-ink disabled:opacity-50"
+                    >
+                      Feature
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     disabled={pending || share.sessionEnded || share.revoked}
                     onClick={() => removeItem(it.sku)}
                     aria-label="Remove item"
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-chip text-muted transition hover:bg-danger/10 hover:text-danger disabled:opacity-50"
+                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-chip text-muted transition hover:bg-danger/10 hover:text-danger disabled:opacity-50"
                   >
                     <TrashIcon className="h-4 w-4" />
                   </button>

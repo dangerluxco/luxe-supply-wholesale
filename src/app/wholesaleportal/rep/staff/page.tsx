@@ -53,12 +53,15 @@ export default async function StaffPage() {
                 key={s.id}
                 className="grid grid-cols-[1.2fr_1.4fr_90px_90px_120px_1.4fr] items-center border-b border-border/60 px-5 py-3.5 text-[12.5px] text-[#3A3934] last:border-b-0"
               >
-                <span className="font-semibold text-ink">
+                <a
+                  href={`/wholesaleportal/rep/staff/${s.id}`}
+                  className="font-semibold text-ink hover:text-accent hover:underline"
+                >
                   {s.displayName || "—"}
                   {isSelf ? (
                     <span className="ml-1.5 font-normal text-muted">(you)</span>
                   ) : null}
-                </span>
+                </a>
                 <span className="truncate">{s.email || "—"}</span>
                 <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">
                   {s.isAdmin ? "Admin" : "Staff"}

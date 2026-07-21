@@ -8,6 +8,7 @@ import { QuoteItemsEditor } from "@/components/QuoteItemsEditor";
 import { QuoteClaimControls } from "@/components/QuoteClaimControls";
 import { GenerateInvoiceButton } from "@/components/GenerateInvoiceButton";
 import { BookCallButton } from "@/components/BookCallButton";
+import { OpenCurationViewButton } from "@/components/OpenCurationViewButton";
 import { InfoTip } from "@/components/InfoTip";
 import { fullDate, money } from "@/lib/format";
 import { buyerStorefrontOrigin, staffPortalOrigin } from "@/lib/notify";
@@ -48,19 +49,20 @@ export default async function StaffQuoteDetailPage({
         ‹ Back to order requests
       </a>
 
-      <div className="mb-6 mt-3 flex flex-wrap items-end gap-4">
-        <div className="min-w-0 flex-1">
-          <h1 className="flex items-center gap-2 text-[24px] font-semibold text-ink">
-            {quote.customerName || quote.buyerDisplayName || "Order request"}
-            <InfoTip label="Holds and sold status on this request">
-              Line items stay soft-held for the buyer until you invoice (sold + off store),
-              decline/close (holds released), remove a line (that SKU’s hold releases), or the
-              request times out after 7 days (holds released; suggested lots in the request
-              deactivate).
-            </InfoTip>
-          </h1>
-          <span className="font-mono text-[11px] text-muted">#{quote.id}</span>
-        </div>
+      <div className="mb-6 mt-3">
+        <h1 className="flex items-center gap-2 text-[24px] font-semibold text-ink">
+          {quote.customerName || quote.buyerDisplayName || "Order request"}
+          <InfoTip label="Holds and sold status on this request">
+            Line items stay soft-held for the buyer until you invoice (sold + off store),
+            decline/close (holds released), remove a line (that SKU’s hold releases), or the
+            request times out after 7 days (holds released; suggested lots in the request
+            deactivate).
+          </InfoTip>
+        </h1>
+        <span className="font-mono text-[11px] text-muted">#{quote.id}</span>
+      </div>
+
+      <div className="mb-6 flex flex-wrap items-stretch gap-4">
         <div className="min-w-[160px] rounded-card border border-border bg-surface px-4 py-3">
           <div className="micro-badge mb-2 text-[10px] tracking-[0.14em] text-accent">STATUS</div>
           <QuoteStatusSelect quoteId={quote.id} status={quote.status} />
@@ -79,15 +81,33 @@ export default async function StaffQuoteDetailPage({
             <div className="micro-badge text-[10px] tracking-[0.14em] text-accent">CLIENT CALL</div>
             <InfoTip label="What happens when you book a call">
               Creates a fresh curation link from this request&apos;s items (valid 7 days) and opens
-              a pre-filled Google Calendar event with the buyer added as a guest. The invite&apos;s
-              description includes both the buyer link and your seller curation manager link, so
-              whenever the call actually happens you can open the invite and jump straight in —
-              no digging through past order requests.
+              a pre-filled Google Calendar event, best-effort adding the buyer as a guest. The
+              invite&apos;s description includes both the buyer link and your seller curation
+              manager link, plus the buyer&apos;s email is shown below to copy in if Calendar
+              doesn&apos;t pick up the guest automatically.
             </InfoTip>
           </div>
           <BookCallButton
             quoteId={quote.id}
+            buyerEmail={quote.customerEmail}
             initialCurationUrl={initialCurationUrl}
+            initialSellerCurationUrl={initialSellerCurationUrl}
+          />
+        </div>
+        <div className="min-w-[220px] max-w-sm rounded-card border border-border bg-surface px-4 py-3">
+          <div className="mb-2 flex items-center gap-1.5">
+            <div className="micro-badge text-[10px] tracking-[0.14em] text-accent">CURATION</div>
+            <InfoTip label="Jumping straight into curation">
+              Opens the curation working view for this order — no calendar invite, just the
+              session. Reuses this order&apos;s curation link if one already exists (from a
+              past &quot;Book call&quot; or a previous visit here); otherwise creates one from
+              the order&apos;s current items. Ending the session syncs this order automatically:
+              items already on the order stay unless declined (holds released if so); anything
+              you added live during the call only joins the order if it was approved.
+            </InfoTip>
+          </div>
+          <OpenCurationViewButton
+            quoteId={quote.id}
             initialSellerCurationUrl={initialSellerCurationUrl}
           />
         </div>

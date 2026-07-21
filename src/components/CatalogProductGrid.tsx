@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { ProductCard, type CatalogProduct } from "./ProductCard";
 import { addSkusToCart } from "@/lib/actions/buyer-firestore";
+import { addHoldAlertAction, removeHoldAlertAction } from "@/lib/actions/wishlist";
 import { PRODUCT_STATUS } from "@/lib/constants";
 import { clsx } from "@/lib/clsx";
 import { money } from "@/lib/format";
@@ -15,19 +17,60 @@ export function CatalogProductGrid({
   products,
   pricesVisible = true,
   cartSkus = [],
+  wishlistSkus = [],
 }: {
   products: CatalogProduct[];
   pricesVisible?: boolean;
   /** SKUs already in the buyer's cart (including pieces inside suggested lots). */
   cartSkus?: string[];
+  /** SKUs the buyer already has a "notify me" wishlist entry for. */
+  wishlistSkus?: string[];
 }) {
   const router = useRouter();
   const { isBundled } = useStorefrontAvailability();
   const [layout, setLayout] = useState<"grid" | "list">("grid");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [pending, start] = useTransition();
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<
+    { text: string; kind: "success" | "error"; showCheckout?: boolean } | null
+  >(null);
   const [quickAddingSku, setQuickAddingSku] = useState<string | null>(null);
+  const [wishlisted, setWishlisted] = useState<Set<string>>(
+    () => new Set(wishlistSkus.map((s) => String(s || "").trim().toUpperCase()).filter(Boolean)),
+  );
+  const [wishlistPendingSku, setWishlistPendingSku] = useState<string | null>(null);
+
+  const isWishlisted = (sku: string) => wishlisted.has(String(sku || "").trim().toUpperCase());
+
+  function toggleWishlist(sku: string) {
+    if (!pricesVisible) {
+      router.push("/wholesale/sign-in?next=/wholesale");
+      return;
+    }
+    const key = String(sku || "").trim().toUpperCase();
+    const currentlyWishlisted = isWishlisted(sku);
+    setWishlistPendingSku(sku);
+    start(async () => {
+      const res = currentlyWishlisted
+        ? await removeHoldAlertAction(sku)
+        : await addHoldAlertAction(sku);
+      setWishlistPendingSku(null);
+      if (res?.error) {
+        setMessage({ text: res.error, kind: "error" });
+        return;
+      }
+      setWishlisted((prev) => {
+        const next = new Set(prev);
+        if (currentlyWishlisted) next.delete(key);
+        else next.add(key);
+        return next;
+      });
+      setMessage({
+        text: currentlyWishlisted ? "Removed from wishlist." : "Added to wishlist.",
+        kind: "success",
+      });
+    });
+  }
 
   const inCart = useMemo(() => {
     const set = new Set(cartSkus.map((s) => String(s || "").trim().toUpperCase()).filter(Boolean));
@@ -66,7 +109,8 @@ export function CatalogProductGrid({
   // otherwise the message lives inside the persistent selection bar).
   useEffect(() => {
     if (!message || selectedList.length > 0) return;
-    const id = setTimeout(() => setMessage(null), 3000);
+    // Give the success toast's "Checkout" CTA a little longer to be noticed/clicked.
+    const id = setTimeout(() => setMessage(null), message.showCheckout ? 6000 : 3000);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [message]);
@@ -125,10 +169,14 @@ export function CatalogProductGrid({
       const res = await addSkusToCart([sku]);
       setQuickAddingSku(null);
       if (res?.error) {
-        setMessage(res.error);
+        setMessage({ text: res.error, kind: "error" });
         return;
       }
-      setMessage(res.skipped ? "Already held — could not add." : "Added to your order.");
+      setMessage(
+        res.skipped
+          ? { text: "Already held — could not add.", kind: "error" }
+          : { text: "Added to your order.", kind: "success", showCheckout: true },
+      );
       router.refresh();
     });
   }
@@ -142,14 +190,16 @@ export function CatalogProductGrid({
     start(async () => {
       const res = await addSkusToCart(selectedList);
       if (res?.error) {
-        setMessage(res.error);
+        setMessage({ text: res.error, kind: "error" });
         return;
       }
-      setMessage(
-        res.skipped
+      setMessage({
+        text: res.skipped
           ? `Added ${res.added} · ${res.skipped} skipped`
           : `Added ${res.added} to your order`,
-      );
+        kind: "success",
+        showCheckout: true,
+      });
       clearSelection();
       router.refresh();
     });
@@ -223,6 +273,9 @@ export function CatalogProductGrid({
             onToggleSelect={toggle}
             onQuickAdd={quickAdd}
             quickAddPending={quickAddingSku === p.sku}
+            onWishlist={toggleWishlist}
+            wishlistPending={wishlistPendingSku === p.sku}
+            wishlisted={isWishlisted(p.sku)}
           />
         ))}
       </div>
@@ -258,12 +311,30 @@ export function CatalogProductGrid({
             </button>
           </div>
           {message ? (
-            <div className="mx-auto mt-2 max-w-6xl text-[12px] text-secondary">{message}</div>
+            <div className="mx-auto mt-2 flex max-w-6xl items-center gap-3 text-[12px] text-secondary">
+              <span>{message.text}</span>
+              {message.showCheckout ? (
+                <Link
+                  href="/wholesale/checkout"
+                  className="rounded-chip bg-ink px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.1em] text-ground transition hover:opacity-90"
+                >
+                  Checkout →
+                </Link>
+              ) : null}
+            </div>
           ) : null}
         </div>
       ) : message ? (
-        <div className="fixed bottom-6 right-6 z-40 rounded-chip border border-border bg-surface px-4 py-2.5 text-[12px] text-secondary shadow-[0_12px_32px_-16px_rgba(22,22,26,0.35)]">
-          {message}
+        <div className="fixed bottom-6 right-6 z-40 flex items-center gap-3 rounded-chip border border-border bg-surface px-4 py-2.5 text-[12px] text-secondary shadow-[0_12px_32px_-16px_rgba(22,22,26,0.35)]">
+          <span>{message.text}</span>
+          {message.showCheckout ? (
+            <Link
+              href="/wholesale/checkout"
+              className="rounded-chip bg-ink px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-ground transition hover:opacity-90"
+            >
+              Checkout →
+            </Link>
+          ) : null}
         </div>
       ) : null}
     </div>

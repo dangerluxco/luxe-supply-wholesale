@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getCurationShareForStaff } from "@/lib/firestore/curation";
 import { buyerStorefrontOrigin } from "@/lib/notify";
@@ -18,12 +19,12 @@ export default async function CurationManagePage({
 
   return (
     <div className="px-10 pb-12 pt-8">
-      <a
+      <Link
         href="/wholesaleportal/rep/curation"
         className="text-[12px] text-muted transition hover:text-ink"
       >
         ‹ Back to Curation
-      </a>
+      </Link>
       <div className="mb-6 mt-3 flex flex-wrap items-baseline gap-3">
         <h1 className="text-[24px] font-semibold text-ink">
           {share.clientName || "Curation link"}

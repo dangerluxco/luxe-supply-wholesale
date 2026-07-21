@@ -96,5 +96,6 @@ export async function addSuggestedLotToCart(lotId: string) {
 
   revalidatePath("/wholesale");
   revalidatePath("/wholesale/cart");
+  revalidatePath("/wholesale", "layout");
   return { ok: true };
 }

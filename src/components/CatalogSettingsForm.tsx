@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { money } from "@/lib/format";
+import { marginFor, marginToneClass, marginTone } from "@/lib/pricing";
 import { portalDisplayTitle, portalShowSkuLine } from "@/components/PortalItemLine";
 import { Placeholder } from "@/components/Placeholder";
 
@@ -39,18 +41,6 @@ function fmtDate(iso: string | null): string {
   } catch {
     return "—";
   }
-}
-
-function marginFor(cost: number | null, price: number | null): {
-  amount: number | null;
-  percent: number | null;
-} {
-  if (cost == null || price == null || !Number.isFinite(cost) || !Number.isFinite(price)) {
-    return { amount: null, percent: null };
-  }
-  const amount = price - cost;
-  const percent = price > 0 ? Math.round((amount / price) * 100) : null;
-  return { amount, percent };
 }
 
 // New items land at the TOP of the working list (not appended) so a fresh
@@ -182,10 +172,15 @@ export function CatalogSettingsForm({
   });
   const [batchText, setBatchText] = useState("");
   const [listQuery, setListQuery] = useState("");
+  const [sortMode, setSortMode] = useState<"recent" | "az" | "price_asc" | "price_desc">("recent");
+  const [showNewOnly, setShowNewOnly] = useState(false);
   const [pending, start] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [justAddedSkuKeys, setJustAddedSkuKeys] = useState<Set<string>>(new Set());
+  // Once a catalog is already saved and clean, hide the batch-add/edit tools by
+  // default — further review happens in the complete catalog grid below, not here.
+  const [reviewExpanded, setReviewExpanded] = useState(!curatedCatalog?.items.length);
 
   const draftUnresolvedSkus = useMemo(
     () => draft.items.filter((i) => !i.inDb).map((i) => i.sku),
@@ -196,7 +191,7 @@ export function CatalogSettingsForm({
     () => draft.items.reduce((sum, i) => sum + (i.price || 0), 0),
     [draft],
   );
-  const savedItems = curated?.items || [];
+  const savedItems = useMemo(() => curated?.items || [], [curated]);
   const dirty = useMemo(
     () => JSON.stringify(draft.items) !== JSON.stringify(savedItems),
     [draft.items, savedItems],
@@ -204,19 +199,33 @@ export function CatalogSettingsForm({
 
   const filteredDraft = useMemo(() => {
     const q = listQuery.trim().toLowerCase().replace(/\s+/g, " ");
-    if (!q) {
-      return draft.items.map((item, index) => ({ item, index }));
-    }
-    return draft.items
-      .map((item, index) => ({ item, index }))
-      .filter(({ item }) => {
+    let rows = draft.items.map((item, index) => ({ item, index }));
+    if (q) {
+      rows = rows.filter(({ item }) => {
         const hay = [item.title, item.sku, item.brand]
           .filter(Boolean)
           .join(" ")
           .toLowerCase();
         return hay.includes(q);
       });
-  }, [draft.items, listQuery]);
+    }
+    if (showNewOnly) {
+      rows = rows.filter(({ item }) => justAddedSkuKeys.has(item.sku.trim().toLowerCase()));
+    }
+    if (sortMode === "az") {
+      rows = [...rows].sort((a, b) =>
+        (a.item.title || a.item.sku).localeCompare(b.item.title || b.item.sku, undefined, {
+          sensitivity: "base",
+        }),
+      );
+    } else if (sortMode === "price_asc") {
+      rows = [...rows].sort((a, b) => (a.item.price ?? 0) - (b.item.price ?? 0));
+    } else if (sortMode === "price_desc") {
+      rows = [...rows].sort((a, b) => (b.item.price ?? 0) - (a.item.price ?? 0));
+    }
+    // "recent" = current array order, which already has newest batches at the top.
+    return rows;
+  }, [draft.items, listQuery, showNewOnly, sortMode, justAddedSkuKeys]);
 
   function addBatchToDraft() {
     setError(null);
@@ -309,6 +318,18 @@ export function CatalogSettingsForm({
     setMessage("Working changes discarded.");
   }
 
+  function clearAllDraft() {
+    if (draft.items.length === 0) return;
+    const ok = window.confirm(
+      `Remove all ${draft.items.length} item${draft.items.length === 1 ? "" : "s"} from the working list? This can't be undone (though nothing is saved until you click Save catalog).`,
+    );
+    if (!ok) return;
+    setDraft({ items: [] });
+    setJustAddedSkuKeys(new Set());
+    setShowNewOnly(false);
+    setMessage("Working list cleared.");
+  }
+
   function saveCatalog() {
     setError(null);
     setMessage(null);
@@ -331,18 +352,44 @@ export function CatalogSettingsForm({
       const now = new Date().toISOString();
       setCurated({ items: draft.items, unresolvedSkus, updatedAt: now, updatedBy: "you" });
       setJustAddedSkuKeys(new Set());
+      setReviewExpanded(false);
       setMessage(data.message || "Curated catalog saved.");
     });
   }
 
   return (
     <div className="mt-6 max-w-4xl space-y-4 rounded-card border border-border bg-surface p-6">
-      <div className="micro-badge text-[10px] tracking-[0.14em] text-accent">
-        CATALOG MANAGEMENT
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="micro-badge text-[10px] tracking-[0.14em] text-accent">
+          CATALOG MANAGEMENT
+        </div>
+        <div className="flex rounded-chip border border-border p-0.5 text-[11px] font-semibold uppercase tracking-[0.08em]">
+          <button
+            type="button"
+            onClick={() => setReviewExpanded(false)}
+            className={
+              "rounded-chip px-3 py-1.5 transition " +
+              (!reviewExpanded ? "bg-ink text-ground" : "text-secondary hover:text-ink")
+            }
+          >
+            Browse
+          </button>
+          <button
+            type="button"
+            onClick={() => setReviewExpanded(true)}
+            className={
+              "rounded-chip px-3 py-1.5 transition " +
+              (reviewExpanded ? "bg-ink text-ground" : "text-secondary hover:text-ink")
+            }
+          >
+            Import
+          </button>
+        </div>
       </div>
       <p className="text-[12.5px] text-secondary">
-        The buyer storefront now uses this curated catalog. Remove items from the working list,
-        paste batches of new SKUs, adjust prices, then save when ready.
+        {reviewExpanded
+          ? "Import mode — paste batches of new SKUs, adjust prices, review the working list, then save when ready."
+          : "Browse mode — the batch-import tools are tucked away. Switch to Import to paste more SKUs or edit the working list."}
       </p>
 
       {mode !== "sku_list" ? (
@@ -366,11 +413,14 @@ export function CatalogSettingsForm({
           </span>
         </div>
         <p className="mt-2 text-[11.5px] text-muted">
-          The working list below starts from this saved catalog. Removing rows or adding a batch
-          does not affect buyers until you click Save catalog.
+          {reviewExpanded
+            ? "The working list below starts from this saved catalog. Removing rows or adding a batch does not affect buyers until you click Save catalog."
+            : "Saved and live. Browse or edit any item directly in the complete catalog below, or switch to Import to paste in more SKUs."}
         </p>
       </div>
 
+      {reviewExpanded ? (
+      <>
       <div className="space-y-2 rounded-card border border-border bg-ground p-4">
         <label className="flex flex-col gap-1.5">
           <span className="micro-badge text-[10px] tracking-[0.14em] text-muted">
@@ -414,24 +464,52 @@ export function CatalogSettingsForm({
         </div>
 
         {draft.items.length > 0 ? (
-          <label className="flex flex-col gap-1.5">
-            <span className="sr-only">Search working catalog</span>
-            <input
-              type="search"
-              value={listQuery}
-              onChange={(e) => setListQuery(e.target.value)}
-              placeholder="Search title, SKU, or brand to find items to remove…"
-              className="h-10 w-full rounded-chip border border-border bg-surface px-3 text-[12.5px] text-ink outline-none focus:border-accent"
-              autoComplete="off"
-              enterKeyHint="search"
-            />
-            {listQuery.trim() ? (
+          <div className="space-y-1.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="search"
+                value={listQuery}
+                onChange={(e) => setListQuery(e.target.value)}
+                placeholder="Search title, SKU, or brand to find items to remove…"
+                className="h-10 min-w-[220px] flex-1 rounded-chip border border-border bg-surface px-3 text-[12.5px] text-ink outline-none focus:border-accent"
+                autoComplete="off"
+                enterKeyHint="search"
+              />
+              <select
+                value={sortMode}
+                onChange={(e) => setSortMode(e.target.value as typeof sortMode)}
+                className="h-10 rounded-chip border border-border bg-surface px-2.5 text-[12px] text-ink outline-none focus:border-accent"
+              >
+                <option value="recent">Sort: Recent</option>
+                <option value="az">Sort: A–Z</option>
+                <option value="price_asc">Sort: Price low–high</option>
+                <option value="price_desc">Sort: Price high–low</option>
+              </select>
+              <label className="flex h-10 items-center gap-1.5 rounded-chip border border-border px-2.5 text-[12px] text-secondary">
+                <input
+                  type="checkbox"
+                  checked={showNewOnly}
+                  onChange={(e) => setShowNewOnly(e.target.checked)}
+                  disabled={justAddedSkuKeys.size === 0}
+                  className="h-3.5 w-3.5 accent-[var(--accent,#B08D3E)]"
+                />
+                New only
+              </label>
+              <button
+                type="button"
+                onClick={clearAllDraft}
+                className="h-10 rounded-chip border border-border px-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted transition hover:border-danger hover:text-danger"
+              >
+                Clear all
+              </button>
+            </div>
+            {listQuery.trim() || showNewOnly ? (
               <span className="text-[11px] text-muted">
                 Showing {filteredDraft.length} of {draft.items.length}
-                {filteredDraft.length === 0 ? " — try a different search" : ""}
+                {filteredDraft.length === 0 ? " — try different filters" : ""}
               </span>
             ) : null}
-          </label>
+          </div>
         ) : null}
 
         {draftUnresolvedCount > 0 ? (
@@ -459,7 +537,9 @@ export function CatalogSettingsForm({
           </div>
         ) : filteredDraft.length === 0 ? (
           <div className="rounded-chip border border-border px-4 py-8 text-center text-[12.5px] text-muted">
-            No items match “{listQuery.trim()}”.
+            {listQuery.trim()
+              ? `No items match "${listQuery.trim()}".`
+              : "No new items in this working list right now."}
           </div>
         ) : (
           <div className="overflow-hidden rounded-chip border border-border">
@@ -497,7 +577,12 @@ export function CatalogSettingsForm({
                             NEW
                           </span>
                         ) : null}
-                        <span className="truncate">{portalDisplayTitle(item.title, item.sku)}</span>
+                        <Link
+                          href={`/wholesaleportal/rep/catalog/${encodeURIComponent(item.sku)}/edit`}
+                          className="truncate hover:text-accent hover:underline"
+                        >
+                          {portalDisplayTitle(item.title, item.sku)}
+                        </Link>
                       </div>
                       {portalShowSkuLine(item.title, item.sku) ? (
                         <div className="truncate font-mono text-[11px] text-muted">{item.sku}</div>
@@ -533,20 +618,10 @@ export function CatalogSettingsForm({
                         }
                       />
                     </div>
-                    <span
-                      className={
-                        "text-right font-mono " +
-                        (margin.amount != null && margin.amount < 0 ? "text-danger" : "text-ink")
-                      }
-                    >
+                    <span className={"text-right font-mono " + marginToneClass(marginTone(margin.percent))}>
                       {margin.amount != null ? money(Math.round(margin.amount)) : "—"}
                     </span>
-                    <span
-                      className={
-                        "text-right font-mono " +
-                        (margin.percent != null && margin.percent < 0 ? "text-danger" : "text-secondary")
-                      }
-                    >
+                    <span className={"text-right font-mono " + marginToneClass(marginTone(margin.percent))}>
                       {margin.percent != null ? `${margin.percent}%` : "—"}
                     </span>
                     <div className="text-right">
@@ -583,8 +658,17 @@ export function CatalogSettingsForm({
           >
             Discard changes
           </button>
+          <button
+            type="button"
+            onClick={() => setReviewExpanded(false)}
+            className="text-[11px] text-muted hover:text-ink"
+          >
+            Switch to Browse
+          </button>
         </div>
       </div>
+      </>
+      ) : null}
 
       {error ? <p className="text-[12px] text-danger">{error}</p> : null}
       {message ? <p className="text-[12px] text-[#4E9A6A]">{message}</p> : null}

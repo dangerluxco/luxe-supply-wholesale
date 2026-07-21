@@ -36,7 +36,8 @@ export async function POST(request: Request) {
   const form = await request.formData();
   const email = formField(form, "email").trim().toLowerCase();
   const password = formField(form, "password");
-  const cookieOpts = sessionCookieOptions(sessionMaxAgeFromForm(form));
+  // Cast avoids a DOM/undici FormData type clash in this Next build (see lib/form.ts).
+  const cookieOpts = sessionCookieOptions(sessionMaxAgeFromForm(form as unknown as FormData));
 
   let staffOk: Awaited<ReturnType<typeof authenticateStaff>> | null = null;
   let firestoreDown = false;

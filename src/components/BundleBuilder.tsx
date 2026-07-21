@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { bundlePricing } from "@/lib/bundle";
 import { BUNDLE_DEFAULT_DISCOUNT_PERCENT } from "@/lib/constants";
 import { money } from "@/lib/format";
+import { MARGIN_TARGET_PERCENT, marginFor, marginTone, marginToneClass, type MarginTone } from "@/lib/pricing";
 import { Placeholder } from "./Placeholder";
 import { MicroBadge } from "./badges";
 import { clsx } from "@/lib/clsx";
@@ -52,14 +53,34 @@ function uniqueBySku(items: Item[]): Item[] {
   return out;
 }
 
-function pieceMargin(cost: number | null, price: number) {
-  if (cost == null || !Number.isFinite(cost) || !Number.isFinite(price)) {
-    return { amount: null as number | null, percent: null as number | null };
+/** Parses a paste-to-pin blob — SKUs one per line, comma-separated, or space-separated
+ * (barcode scanners send a single code followed by Enter, which lands here too). */
+function parsePinSkus(text: string): string[] {
+  const tokens = text
+    .split(/[\r\n,]+/)
+    .flatMap((line) => line.trim().split(/\s+/))
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const t of tokens) {
+    const key = t.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(t);
   }
-  const amount = price - cost;
-  const percent = price > 0 ? Math.round((amount / price) * 100) : null;
-  return { amount, percent };
+  return out;
 }
+
+type ResolvedCatalogItem = {
+  sku: string;
+  title: string;
+  brand: string;
+  imageUrl: string | null;
+  inDb: boolean;
+  cost: number | null;
+  price: number | null;
+};
 
 export function BundleBuilder({
   items,
@@ -72,8 +93,16 @@ export function BundleBuilder({
   repName: string;
   initialLot?: BundleBuilderInitialLot | null;
 }) {
-  const inventory = useMemo(() => uniqueBySku(items), [items]);
+  const baseInventory = useMemo(() => uniqueBySku(items), [items]);
   const editing = Boolean(initialLot?.id);
+
+  // Items resolved live via paste-to-pin that weren't in the preloaded catalog window —
+  // merged in locally so they render/select exactly like any other piece.
+  const [extraItems, setExtraItems] = useState<Item[]>([]);
+  const inventory = useMemo(
+    () => uniqueBySku([...baseInventory, ...extraItems]),
+    [baseInventory, extraItems],
+  );
 
   const [selected, setSelected] = useState<Set<string>>(() => {
     if (!initialLot?.skus?.length) return new Set();
@@ -116,6 +145,10 @@ export function BundleBuilder({
     initialPrices ? initialPrices.flat : BUNDLE_DEFAULT_DISCOUNT_PERCENT,
   );
   const [query, setQuery] = useState("");
+  const [pasteText, setPasteText] = useState("");
+  const [pinning, startPin] = useTransition();
+  const [pinFeedback, setPinFeedback] = useState<{ ok: boolean; text: string } | null>(null);
+  const pasteInputRef = useRef<HTMLTextAreaElement>(null);
 
   // Selected order: lot’s saved SKU order first, then any newly toggled-on SKUs
   // (inventory order). Display partitions selected above unselected.
@@ -190,6 +223,97 @@ export function BundleBuilder({
     });
   }
 
+  /** Paste-to-pin: resolve pasted/scanned SKUs and pin them straight into the bundle.
+   * Known pieces pin immediately; unknown ones are resolved against inventory first
+   * (added to the local picker) before pinning. */
+  function pinFromText(raw: string) {
+    const skus = parsePinSkus(raw);
+    if (!skus.length) return;
+
+    const byLower = new Map(inventory.map((i) => [i.sku.toLowerCase(), i] as const));
+    const alreadyPinned: string[] = [];
+    const toPinNow: string[] = [];
+    const toResolve: string[] = [];
+    for (const sku of skus) {
+      const known = byLower.get(sku.toLowerCase());
+      if (known && selected.has(known.sku)) {
+        alreadyPinned.push(sku);
+      } else if (known) {
+        toPinNow.push(known.sku);
+      } else {
+        toResolve.push(sku);
+      }
+    }
+
+    if (toPinNow.length) {
+      setSelected((prev) => {
+        const next = new Set(prev);
+        toPinNow.forEach((s) => next.add(s));
+        return next;
+      });
+    }
+    setPasteText("");
+
+    if (!toResolve.length) {
+      const parts = [`${toPinNow.length} pinned`];
+      if (alreadyPinned.length) parts.push(`${alreadyPinned.length} already in bundle`);
+      setPinFeedback({ ok: toPinNow.length > 0, text: parts.join(" · ") + "." });
+      pasteInputRef.current?.focus();
+      return;
+    }
+
+    startPin(async () => {
+      const res = await fetch("/api/staff/catalog/resolve", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ skusText: toResolve.join("\n") }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        items?: ResolvedCatalogItem[];
+      };
+      if (!res.ok || data.error || !data.items) {
+        setPinFeedback({ ok: false, text: data.error || "Could not resolve pasted SKUs." });
+        pasteInputRef.current?.focus();
+        return;
+      }
+
+      const found = data.items.filter((it) => it.inDb);
+      const notFound = data.items.filter((it) => !it.inDb);
+
+      if (found.length) {
+        setExtraItems((prev) => {
+          const seen = new Set(prev.map((i) => i.sku.toLowerCase()));
+          const additions = found
+            .filter((it) => !seen.has(it.sku.toLowerCase()))
+            .map((it) => ({
+              sku: it.sku,
+              name: it.title || it.sku,
+              wholesalePrice: it.price ?? 0,
+              cost: it.cost,
+              imageUrl: it.imageUrl,
+              brand: it.brand,
+              available: true,
+            }));
+          return [...prev, ...additions];
+        });
+        setSelected((prev) => {
+          const next = new Set(prev);
+          found.forEach((it) => next.add(it.sku));
+          return next;
+        });
+      }
+
+      const parts = [`${toPinNow.length + found.length} pinned`];
+      if (found.length) parts.push(`${found.length} new item${found.length === 1 ? "" : "s"} added`);
+      if (alreadyPinned.length) parts.push(`${alreadyPinned.length} already in bundle`);
+      if (notFound.length) parts.push(`${notFound.length} not found in inventory`);
+      setPinFeedback({ ok: toPinNow.length + found.length > 0, text: parts.join(" · ") + "." });
+      pasteInputRef.current?.focus();
+    });
+  }
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_460px]">
       <div className="border-b border-border p-8 lg:border-b-0 lg:border-r">
@@ -237,6 +361,44 @@ export function BundleBuilder({
           ) : null}
         </label>
 
+        <div className="mb-4 rounded-chip border border-border bg-ground p-3">
+          <div className="mb-1.5 micro-badge text-[10px] tracking-[0.14em] text-accent">
+            PIN SKUS — PASTE OR SCAN
+          </div>
+          <textarea
+            ref={pasteInputRef}
+            value={pasteText}
+            onChange={(e) => setPasteText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                pinFromText(pasteText);
+              }
+            }}
+            rows={2}
+            placeholder="Scan or paste SKUs — one per line, comma, or space separated. Enter pins immediately."
+            className="w-full rounded-chip border border-border bg-surface px-3 py-2 font-mono text-[12px] text-ink outline-none focus:border-accent"
+          />
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              disabled={pinning || !pasteText.trim()}
+              onClick={() => pinFromText(pasteText)}
+              className="h-8 rounded-chip bg-ink px-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-ground disabled:opacity-50"
+            >
+              {pinning ? "Pinning…" : "Pin to bundle"}
+            </button>
+            <span className="text-[11px] text-muted">
+              Known pieces pin instantly; new SKUs are added to the catalog, then pinned.
+            </span>
+          </div>
+          {pinFeedback ? (
+            <p className={"mt-1.5 text-[11.5px] " + (pinFeedback.ok ? "text-[#4E9A6A]" : "text-danger")}>
+              {pinFeedback.text}
+            </p>
+          ) : null}
+        </div>
+
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -258,7 +420,7 @@ export function BundleBuilder({
         <div className="max-h-[420px] overflow-auto">
           {filtered.map((it, index) => {
             const on = selected.has(it.sku);
-            const margin = pieceMargin(it.cost, it.wholesalePrice);
+            const margin = marginFor(it.cost, it.wholesalePrice);
             return (
               <button
                 key={`${it.sku}-${index}`}
@@ -289,20 +451,10 @@ export function BundleBuilder({
                   {it.cost != null ? money(it.cost) : "—"}
                 </span>
                 <span className="text-right font-mono">{money(it.wholesalePrice)}</span>
-                <span
-                  className={clsx(
-                    "text-right font-mono",
-                    margin.amount != null && margin.amount < 0 ? "text-danger" : "text-ink",
-                  )}
-                >
+                <span className={clsx("text-right font-mono", marginToneClass(marginTone(margin.percent)))}>
                   {margin.amount != null ? money(Math.round(margin.amount)) : "—"}
                 </span>
-                <span
-                  className={clsx(
-                    "text-right font-mono",
-                    margin.percent != null && margin.percent < 0 ? "text-danger" : "text-secondary",
-                  )}
-                >
+                <span className={clsx("text-right font-mono", marginToneClass(marginTone(margin.percent)))}>
                   {margin.percent != null ? `${margin.percent}%` : "—"}
                 </span>
                 <span
@@ -520,18 +672,16 @@ export function BundleBuilder({
           <Row
             k="Margin $"
             v={marginAmount != null ? money(Math.round(marginAmount)) : "—"}
-            danger={marginAmount != null && marginAmount < 0}
-            good={marginAmount != null && marginAmount >= 0}
+            tone={marginTone(marginPct)}
           />
           <Row
             k="Margin %"
             v={
               marginPct != null
-                ? `${marginPct}% ${marginPct >= 20 ? "✓" : "⚠"}`
+                ? `${marginPct}% ${marginPct >= MARGIN_TARGET_PERCENT ? "✓" : "⚠"}`
                 : "—"
             }
-            danger={marginPct != null && marginPct < 0}
-            good={marginPct != null && marginPct >= 20}
+            tone={marginTone(marginPct)}
           />
         </div>
       </div>
@@ -539,14 +689,36 @@ export function BundleBuilder({
   );
 }
 
-function Row({ k, v, danger, good }: { k: string; v: string; danger?: boolean; good?: boolean }) {
+function Row({
+  k,
+  v,
+  danger,
+  good,
+  tone,
+}: {
+  k: string;
+  v: string;
+  danger?: boolean;
+  good?: boolean;
+  tone?: MarginTone;
+}) {
+  const color = tone
+    ? tone === "good"
+      ? "#4E9A6A"
+      : tone === "low"
+        ? "#B08D3E"
+        : tone === "negative"
+          ? "#A65440"
+          : "#16161A"
+    : danger
+      ? "#A65440"
+      : good
+        ? "#4E9A6A"
+        : "#16161A";
   return (
     <div className="flex justify-between">
       <span className="text-muted">{k}</span>
-      <span
-        className="font-mono"
-        style={{ color: danger ? "#A65440" : good ? "#4E9A6A" : "#16161A" }}
-      >
+      <span className="font-mono" style={{ color }}>
         {v}
       </span>
     </div>

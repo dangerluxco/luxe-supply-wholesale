@@ -44,10 +44,10 @@ export default async function RegistrationDetailPage({
   return (
     <div className="px-8 pb-16 pt-8">
       <Link
-        href="/wholesaleportal/rep/applications"
+        href="/wholesaleportal/rep/clients?tab=applications"
         className="text-[12px] text-secondary underline"
       >
-        ← Registration requests
+        ← Applications
       </Link>
 
       <div className="mt-4 flex flex-wrap items-end justify-between gap-4">

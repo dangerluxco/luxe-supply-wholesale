@@ -63,7 +63,7 @@ function parseMoney(raw: string): number | null {
 }
 
 /** Staff-facing default: cost marked up to an 80% cost ratio, rounded to whole dollars (catalog prices are whole USD). */
-function defaultPriceFromCost(cost: number | null): number | null {
+export function defaultPriceFromCost(cost: number | null): number | null {
   if (cost == null || !Number.isFinite(cost) || cost <= 0) return null;
   return Math.round(cost / 0.8);
 }
@@ -1032,6 +1032,58 @@ export async function getCatalogProductBySku(
     holds.get(group.sku),
     buyerUsername,
   );
+}
+
+/** Raw inventory-resolved facts for one SKU, with no catalog-mode/curated/bundled
+ * gating applied — staff editing a product needs to see and adjust the item
+ * regardless of whether it's currently selected onto the buyer storefront. */
+export type StaffProductBase = {
+  sku: string;
+  inDb: boolean;
+  title: string;
+  brand: string;
+  cost: number | null;
+  imageUrls: string[];
+  era: string;
+  material: string;
+  condition: string;
+  soldOut: boolean;
+};
+
+/** Staff-only: resolve a single SKU's raw inventory facts for the product edit page. */
+export async function getStaffProductBaseBySku(skuRaw: string): Promise<StaffProductBase | null> {
+  const sku = String(skuRaw || "").trim();
+  if (!sku) return null;
+
+  const [uploadMap, iiqMap] = await Promise.all([
+    loadUploadGroupsBySku([sku]),
+    loadIiqBySku([sku]),
+  ]);
+  const group = uploadMap.get(sku) || null;
+  const iiq = iiqMap.get(sku) || null;
+  if (!group && !iiq) return null;
+
+  const askMap = await loadAskBySku([sku], uploaderEmailsFromGroups(group ? [group] : []));
+  const ask = askMap.get(sku) || null;
+
+  const resolvedSku = group?.sku || sku;
+  const iiqCost =
+    iiq && typeof iiq.cost === "number" && Number.isFinite(iiq.cost as number)
+      ? (iiq.cost as number)
+      : null;
+
+  return {
+    sku: resolvedSku,
+    inDb: true,
+    title: resolveTitle(group, iiq, ask, resolvedSku),
+    brand: resolveBrand(group, iiq, ask),
+    cost: group?.inventoryCost ?? iiqCost ?? null,
+    imageUrls: group?.imageUrls || [],
+    era: String((iiq && (iiq.Era || iiq.era || iiq.Period)) || "").trim(),
+    material: String((iiq && (iiq.Material || iiq.material)) || "").trim(),
+    condition: String((iiq && (iiq.Condition || iiq.condition)) || "").trim(),
+    soldOut: !!(iiq && (iiq.sold === true || iiq.Sold === true)),
+  };
 }
 
 export type SimilarCatalogItem = {

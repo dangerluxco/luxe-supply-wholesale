@@ -197,7 +197,9 @@ export async function createInvoiceFromQuote(
 
 export async function listInvoices(opts?: { limit?: number }): Promise<PortalInvoice[]> {
   const org = await getLuxesupplyOrg();
-  const limitCount = Math.min(Math.max(opts?.limit || 100, 1), 300);
+  // Ceiling raised from 300 to 1000 so the performance dashboard can pull a full
+  // year of invoices; existing callers still pass their own smaller limits.
+  const limitCount = Math.min(Math.max(opts?.limit || 100, 1), 1000);
   const db = getDb();
 
   let snap;

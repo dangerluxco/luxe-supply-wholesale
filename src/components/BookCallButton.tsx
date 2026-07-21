@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { CopyRow } from "@/components/CopyRow";
 
 type BookCallResult = { curationUrl: string; sellerCurationUrl: string };
 
@@ -18,10 +19,12 @@ type BookCallResult = { curationUrl: string; sellerCurationUrl: string };
  */
 export function BookCallButton({
   quoteId,
+  buyerEmail,
   initialCurationUrl,
   initialSellerCurationUrl,
 }: {
   quoteId: string;
+  buyerEmail?: string | null;
   initialCurationUrl?: string | null;
   initialSellerCurationUrl?: string | null;
 }) {
@@ -71,7 +74,7 @@ export function BookCallButton({
       </button>
       {error ? <p className="mt-2 text-[12px] text-danger">{error}</p> : null}
       {result ? (
-        <div className="mt-2 space-y-1 text-[11px] text-muted">
+        <div className="mt-2 space-y-1.5 text-[11px] text-muted">
           <p>
             <a
               href={result.sellerCurationUrl}
@@ -83,16 +86,24 @@ export function BookCallButton({
             </a>
           </p>
           <p>
-            Buyer link:{" "}
             <a
               href={result.curationUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="text-accent underline-offset-2 hover:underline"
             >
-              {result.curationUrl}
+              Buyer link →
             </a>
           </p>
+          {buyerEmail ? (
+            <>
+              <CopyRow label="Buyer email:" value={buyerEmail} />
+              <p className="text-[10.5px] text-muted">
+                We&apos;ve added them as a guest, but Calendar&apos;s auto-add can be
+                unreliable — paste their email into Guests if it didn&apos;t stick.
+              </p>
+            </>
+          ) : null}
         </div>
       ) : null}
     </div>

@@ -74,7 +74,6 @@ export function QuoteClaimControls({
 
   useEffect(() => {
     loadStaffOptions();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Who's-working-it lives inside the dropdown itself (its closed-state value) instead

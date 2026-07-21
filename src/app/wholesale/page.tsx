@@ -4,10 +4,14 @@ import { CatalogProductGrid } from "@/components/CatalogProductGrid";
 import { CatalogLoadMore } from "@/components/CatalogLoadMore";
 import { EmptyState } from "@/components/EmptyState";
 import { BundleStrip } from "@/components/BundleStrip";
+import { BundlesSection } from "@/components/BundlesSection";
 import { PRODUCT_STATUS, ROLE } from "@/lib/constants";
 import { getSession } from "@/lib/auth";
 import { getActiveLotsForBuyer } from "@/lib/firestore/suggestedLots";
 import { cartHoldSkus, getBuyerCart } from "@/lib/firestore/buyers";
+import { listHoldAlertsForBuyer } from "@/lib/firestore/holdAlerts";
+import { loadProductOverridesBySku, type ProductOverrides } from "@/lib/firestore/productOverrides";
+import { matchesKeywords } from "@/lib/search";
 import { Suspense } from "react";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +31,7 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
   const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
   const q = one(sp.q).trim();
   const brand = one(sp.brand).trim();
+  const category = one(sp.category).trim();
   const availability = one(sp.availability) || "available";
   const sort = one(sp.sort) || "newest";
   const pageLimit = Math.min(Math.max(Number(one(sp.limit)) || 200, 24), 800);
@@ -38,8 +43,9 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
   let lots: Awaited<ReturnType<typeof getActiveLotsForBuyer>> = [];
   let cartSkus: string[] = [];
   let cartLotIds = new Set<string>();
+  let wishlistSkus: string[] = [];
   try {
-    const [catalogResult, lotsResult, cartResult] = await Promise.all([
+    const [catalogResult, lotsResult, cartResult, wishlistResult] = await Promise.all([
       listCatalogProducts(pageLimit, {
         buyerUsername: isBuyer ? session?.username : null,
       }),
@@ -49,6 +55,9 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
       isBuyer && session?.id
         ? getBuyerCart(session.id).catch(() => [])
         : Promise.resolve([]),
+      isBuyer && session.username
+        ? listHoldAlertsForBuyer(session.username).catch(() => [])
+        : Promise.resolve([]),
     ]);
     all = catalogResult.products;
     hasMore = catalogResult.hasMore;
@@ -57,13 +66,40 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
     cartLotIds = new Set(
       cartResult.filter((i) => i.isSuggestedLot && i.lotId).map((i) => String(i.lotId)),
     );
+    wishlistSkus = wishlistResult.map((w) => w.sku);
   } catch (err) {
     console.warn("[wholesale catalog] Firestore unavailable:", err instanceof Error ? err.message : err);
   }
 
-  const brands = [
-    ...new Set(all.map((p) => p.brand).filter((b) => b && b !== "—")),
-  ].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+  // Category/description are staff-entered overrides (no field on the base catalog
+  // read model), so batch-resolve them for the currently-loaded page of SKUs —
+  // needed for both search (FR-010) and the category filter (FR-011).
+  let overridesBySku = new Map<string, ProductOverrides>();
+  try {
+    overridesBySku = await loadProductOverridesBySku(all.map((p) => p.sku));
+  } catch (err) {
+    console.warn(
+      "[wholesale catalog] product overrides unavailable:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+  const categoryFor = (sku: string) => overridesBySku.get(sku)?.category || "";
+  const descriptionFor = (sku: string) => overridesBySku.get(sku)?.description || "";
+
+  function withCounts(values: string[]): { name: string; count: number }[] {
+    const counts = new Map<string, number>();
+    for (const v of values) {
+      const key = v.trim();
+      if (!key || key === "—") continue;
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+    return [...counts.entries()]
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+  }
+
+  const brands = withCounts(all.map((p) => p.brand));
+  const categories = withCounts(all.map((p) => categoryFor(p.sku)));
 
   // Bundled SKUs are omitted from `all`, so resolve their individual wholesale
   // prices separately — otherwise BundleStrip falls back to lotPrice for both lines.
@@ -105,10 +141,15 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
     }
 
     if (brand && norm(p.brand) !== norm(brand)) return false;
+    if (category && norm(categoryFor(p.sku)) !== norm(category)) return false;
 
     if (q) {
-      const hay = norm([p.title, p.sku, p.brand].filter(Boolean).join(" "));
-      if (!hay.includes(norm(q))) return false;
+      // Order-independent, partial, case-insensitive keyword match across every
+      // searchable field — "prada nylon black" matches "Black Prada Nylon Bag".
+      const hay = [p.title, p.sku, p.brand, descriptionFor(p.sku), categoryFor(p.sku)]
+        .filter(Boolean)
+        .join(" ");
+      if (!matchesKeywords(hay, q)) return false;
     }
     return true;
   });
@@ -135,6 +176,8 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
     // newest — listCatalogProducts already roughly newest-first; keep stable sku order as fallback
     return 0;
   });
+
+  const eligibleLots = lots.filter((lot) => lot.lotPrice != null && lot.items.length > 0);
 
   const cards = products.map((p) => ({
     sku: p.sku,
@@ -169,6 +212,7 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
       >
         <CatalogFilters
           brands={brands}
+          categories={categories}
           resultCount={products.length}
           totalCount={all.length}
           pricesVisible={pricesVisible}
@@ -200,9 +244,8 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
           </div>
         ) : null}
 
-        {lots
-          .filter((lot) => lot.lotPrice != null && lot.items.length > 0)
-          .map((lot) => {
+        <BundlesSection count={eligibleLots.length}>
+          {eligibleLots.map((lot) => {
             const individualSum = lot.items.reduce((s, it) => {
               const unit =
                 priceBySku.get(it.sku) ??
@@ -244,6 +287,7 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
               />
             );
           })}
+        </BundlesSection>
 
         {products.length === 0 ? (
           <EmptyState
@@ -257,6 +301,7 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
               products={cards}
               pricesVisible={pricesVisible}
               cartSkus={cartSkus}
+              wishlistSkus={wishlistSkus}
             />
             <Suspense fallback={null}>
               <CatalogLoadMore currentLimit={pageLimit} hasMore={hasMore} />

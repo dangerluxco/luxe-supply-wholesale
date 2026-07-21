@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Placeholder, OneOfOneBadge } from "./Placeholder";
 import { MicroBadge } from "./badges";
 import { money } from "@/lib/format";
+import { formatMargin, marginFor, marginTone, marginToneClass } from "@/lib/pricing";
 import { PRODUCT_STATUS } from "@/lib/constants";
 import { ProductGallery } from "./ProductGallery";
 import { clsx } from "@/lib/clsx";
@@ -37,6 +38,11 @@ export function ProductCard({
   onToggleSelect,
   onQuickAdd,
   quickAddPending = false,
+  onWishlist,
+  wishlistPending = false,
+  wishlisted = false,
+  linkHref,
+  staffCost,
 }: {
   p: CatalogProduct;
   layout?: "grid" | "list";
@@ -48,6 +54,14 @@ export function ProductCard({
   /** Adds just this piece to the cart — no selection step required. */
   onQuickAdd?: (sku: string) => void;
   quickAddPending?: boolean;
+  /** Toggles a "notify me" wishlist entry — offered for pieces on hold, which can't be quick-added. */
+  onWishlist?: (sku: string) => void;
+  wishlistPending?: boolean;
+  wishlisted?: boolean;
+  /** Overrides the default buyer PDP link — e.g. the staff catalog links to the edit page instead. */
+  linkHref?: string;
+  /** Staff-only: cost basis, shown with a color-coded profit margin line. Omit entirely for buyers. */
+  staffCost?: number | null;
 }) {
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryIndex, setGalleryIndex] = useState(0);
@@ -64,6 +78,7 @@ export function ProductCard({
       : p.primaryImageUrl
         ? [p.primaryImageUrl]
         : [];
+  const margin = staffCost !== undefined ? marginFor(staffCost, p.wholesalePrice) : null;
 
   function openGallery(e: React.MouseEvent) {
     e.preventDefault();
@@ -95,6 +110,11 @@ export function ProductCard({
       <div className="mt-1 font-mono text-[11px] uppercase text-muted">
         {metaBits.join(" · ")}
       </div>
+      {margin ? (
+        <div className={"mt-1 font-mono text-[10.5px] " + marginToneClass(marginTone(margin.percent))}>
+          cost {staffCost != null ? money(Math.round(staffCost)) : "—"} · margin {formatMargin(margin)}
+        </div>
+      ) : null}
       <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-[11px] text-[#3A3934]">
         {inCart ? (
           <MicroBadge tone="outline-gold">In cart</MicroBadge>
@@ -208,13 +228,38 @@ export function ProductCard({
         <div
           className={clsx("flex flex-1 flex-col", layout === "grid" ? "p-4" : "justify-center p-4 sm:p-5")}
         >
-          <Link href={`/wholesale/product/${encodeURIComponent(p.sku)}`} className="flex flex-1 flex-col">
+          <Link
+            href={linkHref || `/wholesale/product/${encodeURIComponent(p.sku)}`}
+            className="flex flex-1 flex-col"
+          >
             {details}
             {layout === "list" ? (
               <div className="mt-2 font-mono text-[10.5px] text-muted">SKU {p.sku}</div>
             ) : null}
           </Link>
-          {onQuickAdd ? (
+          {onHold && !inCart && onWishlist ? (
+            <button
+              type="button"
+              disabled={wishlistPending}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onWishlist(p.sku);
+              }}
+              className={clsx(
+                "mt-2.5 h-8 w-full shrink-0 rounded-chip border text-[11px] font-semibold uppercase tracking-[0.1em] transition disabled:cursor-default disabled:opacity-50",
+                wishlisted
+                  ? "border-accent/40 text-accent"
+                  : "border-border text-secondary hover:border-accent hover:text-ink",
+              )}
+            >
+              {wishlistPending
+                ? "Saving…"
+                : wishlisted
+                  ? "In wishlist ✓"
+                  : "Add to wishlist"}
+            </button>
+          ) : onQuickAdd ? (
             <button
               type="button"
               disabled={!canSelect || quickAddPending}

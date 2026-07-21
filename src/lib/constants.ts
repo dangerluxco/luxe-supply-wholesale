@@ -111,8 +111,8 @@ export const HOLD_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 // Do not redeclare HOLD_QUOTE_MS elsewhere in this file.
 export const HOLD_QUOTE_MS = HOLD_TTL_MS;
 /** Default order hold limits for new buyers (staff can raise per client). */
-export const DEFAULT_MAX_CART_ITEMS = 5;
-export const DEFAULT_MAX_CART_VALUE = 5000;
+export const DEFAULT_MAX_CART_ITEMS = 20;
+export const DEFAULT_MAX_CART_VALUE = 10000;
 /** Default % off for suggested-lot builder preview. */
 export const BUNDLE_DEFAULT_DISCOUNT_PERCENT = 5;
 /** Active suggested lots auto-archive after this many days so SKUs return to the catalog. */
@@ -166,3 +166,9 @@ export const FULFILLMENT_STATUS = {
 export type FulfillmentStatus = (typeof FULFILLMENT_STATUS)[keyof typeof FULFILLMENT_STATUS];
 
 export const INVOICE_TERMS = "Net 30";
+
+/** Options for a buyer's account-level payment terms (staff "Edit account" panel). */
+export const PAYMENT_TERMS_OPTIONS = ["Due on receipt", "Net 15", "Net 30", "Net 45", "Net 60"];
+
+/** Options for a buyer's preferred payment method. */
+export const PREFERRED_PAYMENT_OPTIONS = ["ACH transfer", "Wire transfer", "Credit card", "Check"];

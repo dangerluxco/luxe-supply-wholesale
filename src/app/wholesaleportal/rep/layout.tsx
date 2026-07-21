@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { ROLE } from "@/lib/constants";
-import { RepTopbar } from "@/components/RepTopbar";
+import { RepSidebar } from "@/components/RepSidebar";
 import { StaffHardNav } from "@/components/StaffHardNav";
 import { repNavItems } from "@/lib/rep-nav";
 
@@ -14,13 +14,13 @@ export default async function RepLayout({ children }: { children: React.ReactNod
   const isManager = session.role === ROLE.MANAGER;
 
   return (
-    <div className="min-h-screen bg-ground">
+    <div className="flex min-h-screen bg-ground">
       <StaffHardNav />
-      <RepTopbar
+      <RepSidebar
         user={{ name: session.name, initials: session.initials }}
         nav={repNavItems(isManager)}
       />
-      {children}
+      <div className="min-w-0 flex-1">{children}</div>
     </div>
   );
 }

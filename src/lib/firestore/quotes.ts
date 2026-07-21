@@ -233,7 +233,9 @@ export async function listQuotes(options?: {
 }): Promise<{ quotes: PortalQuote[]; openCount: number; organizationId: string }> {
   const org = await getLuxesupplyOrg();
   const statusFilter = String(options?.status || "open").toLowerCase();
-  const limitCount = Math.min(Math.max(options?.limit || 50, 1), 100);
+  // Ceiling raised from 100 to 500 so the performance dashboard can pull a full
+  // year of quotes for conversion metrics; existing callers still pass ≤100.
+  const limitCount = Math.min(Math.max(options?.limit || 50, 1), 500);
   const db = getDb();
 
   let query: Query = db
