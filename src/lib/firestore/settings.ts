@@ -1,7 +1,17 @@
 // Org settings under organizations.salesPortal — thresholds, notify emails,
 // company profile, structured invoicing, and feature flags.
+import { unstable_cache, revalidateTag } from "next/cache";
 import { getDb } from "./admin";
 import { getLuxesupplyOrg } from "./staff";
+
+/**
+ * Portal feature flags are read on every staff-portal navigation (rep/layout)
+ * but change rarely, so they're cached across requests (short TTL) on top of the
+ * per-request org memoization. Writers call revalidateTag(PORTAL_FEATURES_TAG)
+ * so an admin's toggle reflects immediately; other sessions pick it up within
+ * the TTL. Only plain booleans are cached (serialization-safe).
+ */
+const PORTAL_FEATURES_TAG = "portal-features";
 
 export type QuoteThresholds = {
   minItemCount: number;
@@ -224,9 +234,17 @@ export async function getPaymentInstructions(): Promise<string> {
   return formatPaymentInstructions(profile);
 }
 
+const loadPortalFeatures = unstable_cache(
+  async (): Promise<PortalFeatures> => {
+    const org = await getLuxesupplyOrg();
+    return normalizePortalFeatures(salesPortalOf(org.data).features);
+  },
+  ["portal-features"],
+  { tags: [PORTAL_FEATURES_TAG], revalidate: 60 },
+);
+
 export async function getPortalFeatures(): Promise<PortalFeatures> {
-  const org = await getLuxesupplyOrg();
-  return normalizePortalFeatures(salesPortalOf(org.data).features);
+  return loadPortalFeatures();
 }
 
 /** Extra staff-notification recipients on top of active `salesPortalStaff` accounts. */
@@ -304,7 +322,13 @@ export async function saveNotifyEmails(emails: string[]): Promise<string[]> {
 }
 
 export async function savePortalFeatures(input: Partial<PortalFeatures>): Promise<PortalFeatures> {
-  const next = normalizePortalFeatures({ ...DEFAULT_FEATURES, ...(await getPortalFeatures()), ...input });
+  // Read the merge base fresh from the org doc (per-request memoized) rather than
+  // the cross-request cache, so a rapid second toggle can't clobber a just-saved
+  // change with stale data.
+  const org = await getLuxesupplyOrg();
+  const current = normalizePortalFeatures(salesPortalOf(org.data).features);
+  const next = normalizePortalFeatures({ ...DEFAULT_FEATURES, ...current, ...input });
   await patchSalesPortal({ features: next });
+  revalidateTag(PORTAL_FEATURES_TAG);
   return next;
 }
