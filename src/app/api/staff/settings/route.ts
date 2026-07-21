@@ -14,6 +14,7 @@ export async function POST(request: Request) {
     minItemCount?: number;
     minCartTotal?: number;
     notifyEmails?: string;
+    paymentInstructions?: string;
   };
 
   const minItemCount = Number(body.minItemCount || 0);
@@ -28,6 +29,7 @@ export async function POST(request: Request) {
       minItemCount: Number.isFinite(minItemCount) ? minItemCount : 0,
       minCartTotal: Number.isFinite(minCartTotal) ? minCartTotal : 0,
       notifyEmails,
+      paymentInstructions: String(body.paymentInstructions ?? ""),
     });
     return NextResponse.json({ ok: true, message: "Settings saved." });
   } catch (err) {

@@ -1,4 +1,5 @@
 import { randomBytes, scryptSync, timingSafeEqual } from "crypto";
+import { cache } from "react";
 import type { QueryDocumentSnapshot } from "firebase-admin/firestore";
 import { getDb, toIso, WHOLESALE_ORG_SLUG } from "./admin";
 import { ROLE, type Role } from "@/lib/constants";
@@ -147,6 +148,27 @@ export async function authenticateStaff(
   }
 
   return { ok: true, staff: serializeStaff(match.id, d) };
+}
+
+/**
+ * Google OAuth sign-in: identity is already proven by a verified Google ID
+ * token, so this only maps the email to an existing staff account — access
+ * stays invite-only (no record → no login). Mirrors authenticateStaff's
+ * disabled check and lastLoginAt touch, minus the password verification.
+ */
+export async function authenticateStaffByOAuthEmail(
+  emailRaw: string,
+): Promise<{ ok: true; staff: StaffRecord } | { ok: false; reason?: string }> {
+  const staff = await findStaffByEmail(emailRaw);
+  if (!staff) return { ok: false };
+  if (staff.status === "disabled") return { ok: false, reason: "disabled" };
+
+  try {
+    await getDb().collection("salesPortalStaff").doc(staff.id).update({ lastLoginAt: new Date() });
+  } catch {
+    /* ignore */
+  }
+  return { ok: true, staff };
 }
 
 export function staffToAppRole(staff: StaffRecord): Role {
@@ -402,7 +424,7 @@ export async function listActiveStaffEmails(): Promise<string[]> {
   ];
 }
 
-export async function getLuxesupplyOrg(): Promise<{
+async function fetchLuxesupplyOrg(): Promise<{
   id: string;
   data: Record<string, unknown>;
 }> {
@@ -415,3 +437,13 @@ export async function getLuxesupplyOrg(): Promise<{
   const doc = snap.docs[0]!;
   return { id: doc.id, data: (doc.data() || {}) as Record<string, unknown> };
 }
+
+/**
+ * Per-request memoized org lookup (React.cache). Nearly every Firestore module
+ * calls this to scope its query, so a single page render used to fire the same
+ * organizations query 5+ times in parallel — now it's one fetch per request.
+ * Scope is a single request only (no cross-request staleness): reads-after-writes
+ * within the same request behave exactly as before, since writers already read
+ * the org once up front.
+ */
+export const getLuxesupplyOrg = cache(fetchLuxesupplyOrg);

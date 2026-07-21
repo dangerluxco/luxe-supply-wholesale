@@ -8,6 +8,7 @@ import { QuoteItemsEditor } from "@/components/QuoteItemsEditor";
 import { QuoteClaimControls } from "@/components/QuoteClaimControls";
 import { GenerateInvoiceButton } from "@/components/GenerateInvoiceButton";
 import { BookCallButton } from "@/components/BookCallButton";
+import { RequestCallButton } from "@/components/RequestCallButton";
 import { OpenCurationViewButton } from "@/components/OpenCurationViewButton";
 import { InfoTip } from "@/components/InfoTip";
 import { fullDate, money } from "@/lib/format";
@@ -79,20 +80,23 @@ export default async function StaffQuoteDetailPage({
         <div className="min-w-[220px] max-w-sm rounded-card border border-border bg-surface px-4 py-3">
           <div className="mb-2 flex items-center gap-1.5">
             <div className="micro-badge text-[10px] tracking-[0.14em] text-accent">CLIENT CALL</div>
-            <InfoTip label="What happens when you book a call">
-              Creates a fresh curation link from this request&apos;s items (valid 7 days) and opens
-              a pre-filled Google Calendar event, best-effort adding the buyer as a guest. The
-              invite&apos;s description includes both the buyer link and your seller curation
-              manager link, plus the buyer&apos;s email is shown below to copy in if Calendar
-              doesn&apos;t pick up the guest automatically.
+            <InfoTip label="Requesting vs booking a call">
+              Request a call first — it emails the buyer asking for a few times that work
+              (replies go straight to you). Once they answer, Book call creates a fresh
+              curation link from this request&apos;s items (valid 7 days) and opens a
+              pre-filled Google Calendar event with the buyer as guest; the invite includes
+              both the buyer link and your seller curation manager link.
             </InfoTip>
           </div>
-          <BookCallButton
-            quoteId={quote.id}
-            buyerEmail={quote.customerEmail}
-            initialCurationUrl={initialCurationUrl}
-            initialSellerCurationUrl={initialSellerCurationUrl}
-          />
+          <div className="flex flex-wrap items-start gap-2">
+            <RequestCallButton quoteId={quote.id} initialRequestedAt={quote.callRequestedAt} />
+            <BookCallButton
+              quoteId={quote.id}
+              buyerEmail={quote.customerEmail}
+              initialCurationUrl={initialCurationUrl}
+              initialSellerCurationUrl={initialSellerCurationUrl}
+            />
+          </div>
         </div>
         <div className="min-w-[220px] max-w-sm rounded-card border border-border bg-surface px-4 py-3">
           <div className="mb-2 flex items-center gap-1.5">

@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ProductCard, type CatalogProduct } from "./ProductCard";
-import { addSkusToCart } from "@/lib/actions/buyer-firestore";
 import { addHoldAlertAction, removeHoldAlertAction } from "@/lib/actions/wishlist";
 import { PRODUCT_STATUS } from "@/lib/constants";
 import { clsx } from "@/lib/clsx";
@@ -12,6 +11,27 @@ import { money } from "@/lib/format";
 import { useStorefrontAvailability } from "@/components/StorefrontAvailability";
 
 const STORAGE_KEY = "luxe-wholesale-catalog-view";
+
+type AddCartResult = {
+  error?: string;
+  added?: number;
+  skipped?: number;
+  ok?: boolean;
+};
+
+async function postAddToCart(skus: string[]): Promise<AddCartResult> {
+  const res = await fetch("/api/buyer/cart/add", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ skus }),
+  });
+  const data = (await res.json().catch(() => ({}))) as AddCartResult;
+  if (!res.ok && !data.error) {
+    return { error: "Could not add to cart." };
+  }
+  return data;
+}
 
 export function CatalogProductGrid({
   products,
@@ -166,9 +186,9 @@ export function CatalogProductGrid({
     setMessage(null);
     setQuickAddingSku(sku);
     start(async () => {
-      const res = await addSkusToCart([sku]);
+      const res = await postAddToCart([sku]);
       setQuickAddingSku(null);
-      if (res?.error) {
+      if (res.error) {
         setMessage({ text: res.error, kind: "error" });
         return;
       }
@@ -188,15 +208,15 @@ export function CatalogProductGrid({
       return;
     }
     start(async () => {
-      const res = await addSkusToCart(selectedList);
-      if (res?.error) {
+      const res = await postAddToCart(selectedList);
+      if (res.error) {
         setMessage({ text: res.error, kind: "error" });
         return;
       }
       setMessage({
         text: res.skipped
-          ? `Added ${res.added} · ${res.skipped} skipped`
-          : `Added ${res.added} to your order`,
+          ? `Added ${res.added ?? 0} · ${res.skipped} skipped`
+          : `Added ${res.added ?? selectedList.length} to your order`,
         kind: "success",
         showCheckout: true,
       });

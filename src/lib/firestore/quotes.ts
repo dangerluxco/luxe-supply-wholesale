@@ -38,6 +38,8 @@ export type PortalQuote = {
    *  links stay visible on this request after navigating away and back. */
   curationToken: string | null;
   curationCreatedAt: string | null;
+  /** When staff last emailed the buyer asking for call times ("Request a call"). */
+  callRequestedAt: string | null;
 };
 
 export type QuoteItemInput = {
@@ -182,6 +184,7 @@ function serializeQuote(id: string, d: Record<string, unknown>): PortalQuote {
     invoiceNumber: d.invoiceNumber ? String(d.invoiceNumber) : null,
     curationToken: d.curationToken ? String(d.curationToken) : null,
     curationCreatedAt: toIso(d.curationCreatedAt),
+    callRequestedAt: toIso(d.callRequestedAt),
   };
 }
 
@@ -430,6 +433,14 @@ export async function linkQuoteToInvoice(
     invoiceId: invoice.id,
     invoiceNumber: invoice.invoiceNumber,
     status: "quoted",
+    updatedAt: new Date(),
+  });
+}
+
+/** Record that staff emailed the buyer asking for call times ("Request a call"). */
+export async function markCallRequested(quoteId: string): Promise<void> {
+  await getDb().collection("salesPortalQuotes").doc(quoteId).update({
+    callRequestedAt: new Date(),
     updatedAt: new Date(),
   });
 }

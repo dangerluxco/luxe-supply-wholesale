@@ -5,7 +5,6 @@ import { ROLE } from "@/lib/constants";
 import { getInvoiceByNumber, displayInvoiceStatus } from "@/lib/firestore/invoices";
 import { money, fullDate } from "@/lib/format";
 import { InvoiceBadge, FulfillmentBadge } from "@/components/badges";
-import { PrintButton } from "@/components/PrintButton";
 import { Logo } from "@/components/Logo";
 
 export const dynamic = "force-dynamic";
@@ -33,7 +32,12 @@ export default async function InvoiceDetail({ params }: { params: Promise<{ numb
           >
             Download CSV ↓
           </a>
-          <PrintButton />
+          <a
+            href={`/wholesale/invoices/${inv.invoiceNumber}/pdf`}
+            className="flex h-10 items-center rounded-chip bg-ink px-5 text-[12px] uppercase tracking-[0.12em] text-ground transition hover:opacity-90"
+          >
+            Download PDF ↓
+          </a>
         </div>
       </div>
 
@@ -110,8 +114,9 @@ export default async function InvoiceDetail({ params }: { params: Promise<{ numb
         </div>
 
         <div className="mt-8 border-t border-border pt-5 text-[11px] text-muted">
-          Payment due within 30 days of issue. Wire details on file. Every piece is one of one and
-          insured in transit. Thank you for collecting with Luxe Supply Co.
+          Payment terms: {inv.terms}. Wire instructions are on the downloadable PDF invoice.
+          Every piece is one of one and insured in transit. Thank you for collecting with Luxe
+          Supply Co.
         </div>
       </div>
     </div>

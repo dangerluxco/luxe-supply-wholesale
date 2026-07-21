@@ -791,81 +791,63 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
 
   return (
     <div className="space-y-6">
-      <div className="rounded-card border border-border bg-surface p-6">
-        <div className="flex flex-wrap items-center gap-2">
-          <input
-            readOnly
-            value={buyerUrl}
-            onFocus={(e) => e.currentTarget.select()}
-            className="h-10 min-w-[260px] flex-1 rounded-chip border border-border bg-ground px-3 font-mono text-[12px] text-ink"
-          />
-          <button
-            type="button"
-            onClick={() => {
-              navigator.clipboard?.writeText(buyerUrl).catch(() => {});
-              setCopied(true);
-              setTimeout(() => setCopied(false), 1500);
-            }}
-            className="h-10 rounded-chip border border-border px-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-secondary hover:border-accent hover:text-ink"
-          >
-            {copied ? "Copied" : "Copy"}
-          </button>
-          <a
-            href={buyerUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="h-10 rounded-chip bg-ink px-3 text-[11px] font-semibold uppercase tracking-[0.1em] leading-10 text-ground"
-          >
-            Open
-          </a>
-          <a
-            href={`/api/staff/curation/${share.token}/export`}
-            className="h-10 rounded-chip border border-border px-3 text-[11px] font-semibold uppercase tracking-[0.1em] leading-10 text-secondary hover:border-accent hover:text-ink"
-          >
-            Export CSV
-          </a>
-          {!share.revoked ? (
-            <button
-              type="button"
-              disabled={pending}
-              onClick={revoke}
-              className="h-10 rounded-chip border border-danger/40 px-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-danger hover:bg-danger/5 disabled:opacity-60"
-            >
-              Revoke
-            </button>
-          ) : null}
-        </div>
+      {/* Branded session header — same ink/gold treatment as the buyer-facing
+          storefront chrome and the PDF invoice, so the seller's working view
+          feels like Luxe, not an admin tool. */}
+      <div className="overflow-hidden rounded-card bg-ink shadow-[0_18px_48px_-24px_rgba(22,22,26,0.55)]">
+        <div className="flex flex-wrap items-start justify-between gap-4 px-6 pb-5 pt-6">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2.5">
+              <span className="font-sans text-[13px] font-semibold tracking-[0.08em] text-ground">
+                LUXE SUPPLY<span className="text-accent">*</span>
+              </span>
+              <span className="micro-badge rounded-full border border-accent/40 px-2 py-0.5 text-[9px] tracking-[0.14em] text-accent">
+                CURATION SESSION
+              </span>
+            </div>
+            <h1 className="mt-2.5 truncate text-[24px] font-semibold text-ground">
+              {share.clientName || "Curation link"}
+            </h1>
+            <div className="mt-1 font-mono text-[11px] text-white/45">
+              #{share.token.slice(0, 10)}…
+              {share.quoteId ? (
+                <a
+                  href={`/wholesaleportal/rep/quotes/${share.quoteId}`}
+                  className="ml-3 text-accent underline-offset-2 hover:underline"
+                >
+                  Linked order #{share.quoteId.slice(0, 10)}… — approvals sync back on end →
+                </a>
+              ) : null}
+            </div>
+          </div>
 
-        <div className="mt-4 flex flex-wrap items-center gap-4 text-[12.5px]">
-          <span
-            className={
-              share.revoked
-                ? "font-semibold uppercase tracking-[0.08em] text-danger"
-                : share.sessionEnded
-                  ? "font-semibold uppercase tracking-[0.08em] text-muted"
-                  : "font-semibold uppercase tracking-[0.08em] text-[#4E9A6A]"
-            }
-          >
-            {share.revoked ? "Revoked" : share.sessionEnded ? "Session ended" : "Live"}
-          </span>
-          {share.quoteId ? (
-            <a
-              href={`/wholesaleportal/rep/quotes/${share.quoteId}`}
-              className="text-[11px] font-semibold uppercase tracking-[0.08em] text-accent hover:underline"
+          <div className="flex shrink-0 flex-col items-end gap-2">
+            <span
+              className={
+                "micro-badge inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[9.5px] tracking-[0.14em] " +
+                (share.revoked
+                  ? "border border-danger/50 text-danger"
+                  : share.sessionEnded
+                    ? "border border-white/25 text-white/60"
+                    : "border border-[#4E9A6A]/60 text-[#7BC49A]")
+              }
             >
-              Linked order #{share.quoteId.slice(0, 10)}… — approvals sync back on end →
-            </a>
-          ) : null}
-          {!share.revoked ? (
-            <>
-              <span className="text-muted">{expiresLabel(share.expiresAt)}</span>
+              {!share.revoked && !share.sessionEnded ? (
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#7BC49A]" />
+              ) : null}
+              {share.revoked ? "REVOKED" : share.sessionEnded ? "SESSION ENDED" : "LIVE"}
+            </span>
+            {!share.revoked ? (
               <div className="flex items-center gap-1.5">
+                <span className="font-mono text-[11px] text-white/50">
+                  {expiresLabel(share.expiresAt)}
+                </span>
                 <select
                   value={extendHours}
                   onChange={(e) => setExtendHours(e.target.value)}
                   disabled={pending}
                   aria-label="Restart link for"
-                  className="h-8 rounded-chip border border-border bg-ground px-2 text-[11px] text-secondary outline-none focus:border-accent disabled:opacity-60"
+                  className="h-8 rounded-chip border border-white/20 bg-white/5 px-2 text-[11px] text-white/75 outline-none focus:border-accent disabled:opacity-60"
                 >
                   <option value="24">24 hours</option>
                   <option value="48">48 hours</option>
@@ -876,13 +858,62 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
                   type="button"
                   disabled={pending}
                   onClick={restartExpiry}
-                  className="h-8 rounded-chip border border-border px-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-secondary transition hover:border-accent hover:text-ink disabled:opacity-60"
+                  className="h-8 rounded-chip border border-white/20 px-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-white/75 transition hover:border-accent hover:text-ground disabled:opacity-60"
                 >
                   Restart
                 </button>
               </div>
-            </>
-          ) : null}
+            ) : null}
+          </div>
+        </div>
+
+        <div className="border-t border-white/10 bg-white/[0.04] px-6 py-4">
+          <div className="micro-badge mb-2 text-[9.5px] tracking-[0.14em] text-accent">
+            BUYER LINK — SEND ANYTIME
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              readOnly
+              value={buyerUrl}
+              onFocus={(e) => e.currentTarget.select()}
+              className="h-10 min-w-[260px] flex-1 rounded-chip border border-white/15 bg-ink px-3 font-mono text-[12px] text-white/80 outline-none focus:border-accent"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard?.writeText(buyerUrl).catch(() => {});
+                setCopied(true);
+                setTimeout(() => setCopied(false), 1500);
+              }}
+              className="h-10 rounded-chip border border-white/20 px-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-white/75 transition hover:border-accent hover:text-ground"
+            >
+              {copied ? "Copied" : "Copy"}
+            </button>
+            <a
+              href={buyerUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="h-10 rounded-chip bg-accent px-3.5 text-[11px] font-semibold uppercase tracking-[0.1em] leading-10 text-ink transition hover:opacity-90"
+            >
+              Open
+            </a>
+            <a
+              href={`/api/staff/curation/${share.token}/export`}
+              className="h-10 rounded-chip border border-white/20 px-3 text-[11px] font-semibold uppercase tracking-[0.1em] leading-10 text-white/75 transition hover:border-accent hover:text-ground"
+            >
+              Export CSV
+            </a>
+            {!share.revoked ? (
+              <button
+                type="button"
+                disabled={pending}
+                onClick={revoke}
+                className="h-10 rounded-chip border border-danger/50 px-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-[#D98A75] transition hover:bg-danger/15 disabled:opacity-60"
+              >
+                Revoke
+              </button>
+            ) : null}
+          </div>
         </div>
       </div>
 

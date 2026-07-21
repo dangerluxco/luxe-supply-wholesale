@@ -65,6 +65,14 @@ export default async function RepDashboard({
         >
           View clients
         </Link>
+        {/* Plain <a> (not next/link): staff console uses hard navigation everywhere to avoid a Next 15 soft-nav webpack bug. */}
+        {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+        <a
+          href="/wholesaleportal/rep/curation"
+          className="inline-flex h-10 items-center rounded-chip bg-accent px-4 text-[11.5px] font-semibold uppercase tracking-[0.1em] text-ink transition hover:opacity-90"
+        >
+          + New order request
+        </a>
       </div>
 
       <div className="mb-6 flex flex-wrap gap-2">

@@ -11,10 +11,12 @@ export function ThresholdSettingsForm({
   minItemCount,
   minCartTotal,
   notifyEmails,
+  paymentInstructions = "",
 }: {
   minItemCount: number;
   minCartTotal: number;
   notifyEmails: string[];
+  paymentInstructions?: string;
 }) {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -37,6 +39,7 @@ export function ThresholdSettingsForm({
               minItemCount: Number(fd.get("minItemCount") || 0),
               minCartTotal: Number(fd.get("minCartTotal") || 0),
               notifyEmails: String(fd.get("notifyEmails") || ""),
+              paymentInstructions: String(fd.get("paymentInstructions") || ""),
             }),
           });
           const data = (await res.json().catch(() => ({}))) as {
@@ -99,6 +102,29 @@ export function ThresholdSettingsForm({
         extra recipients here if needed. Sending requires{" "}
         <code className="font-mono">SENDGRID_API_KEY</code> to be configured on the server.
       </p>
+
+      <div className="border-t border-border pt-5">
+        <div className="micro-badge text-[10px] tracking-[0.14em] text-accent">
+          INVOICE PDF · WIRE INSTRUCTIONS
+        </div>
+        <p className="mt-2 text-[12.5px] text-secondary">
+          Printed in the payment block of every downloaded invoice PDF — bank name, account,
+          routing/ABA, SWIFT, remittance contact. The invoice number is appended automatically
+          as the wire reference.
+        </p>
+        <label className="mt-3 flex flex-col gap-1.5">
+          <span className={labelClass}>WIRE / PAYMENT INSTRUCTIONS</span>
+          <textarea
+            name="paymentInstructions"
+            rows={6}
+            defaultValue={paymentInstructions}
+            placeholder={
+              "Bank: …\nAccount name: Luxe Supply Corporation\nAccount #: …\nRouting / ABA: …\nSWIFT: …"
+            }
+            className="rounded-chip border border-border bg-ground px-3 py-2 font-mono text-[12px] text-ink outline-none focus:border-accent"
+          />
+        </label>
+      </div>
 
       {error ? <p className="text-[12px] text-danger">{error}</p> : null}
       {message ? <p className="text-[12px] text-[#4E9A6A]">{message}</p> : null}

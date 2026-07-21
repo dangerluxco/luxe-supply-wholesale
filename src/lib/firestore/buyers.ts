@@ -4,6 +4,7 @@ import { getLuxesupplyOrg } from "./staff";
 import {
   DEFAULT_MAX_CART_ITEMS,
   DEFAULT_MAX_CART_VALUE,
+  DEFAULT_PAYMENT_TIER,
   DEFAULT_SHIPPING_METHOD_ID,
   INVOICE_TERMS,
 } from "@/lib/constants";
@@ -28,6 +29,8 @@ export type PortalBuyer = {
   // no data migration assumed; every field defaults to empty/null.
   city: string;
   state: string;
+  /** Payment tier 1–3 (see PAYMENT_TIERS) — trust level carrying default terms. */
+  paymentTier: number;
   /** e.g. "Net 30" — defaults to the org-wide INVOICE_TERMS when unset. */
   paymentTerms: string;
   preferredPayment: string;
@@ -77,6 +80,10 @@ function serializeBuyer(id: string, d: Record<string, unknown>): PortalBuyer {
 
     city: String(d.city || ""),
     state: String(d.state || ""),
+    paymentTier:
+      typeof d.paymentTier === "number" && [1, 2, 3].includes(d.paymentTier)
+        ? d.paymentTier
+        : DEFAULT_PAYMENT_TIER,
     paymentTerms: String(d.paymentTerms || INVOICE_TERMS),
     preferredPayment: String(d.preferredPayment || ""),
     creditLimit,
@@ -229,6 +236,7 @@ export async function updateBuyerProfile(
 export type BuyerAccountDetailsInput = {
   city?: string;
   state?: string;
+  paymentTier?: number;
   paymentTerms?: string;
   preferredPayment?: string;
   creditLimit?: number | null;
@@ -272,6 +280,11 @@ export async function updateBuyerAccountDetails(
   for (const key of textFields) {
     const v = updates[key];
     if (v != null) payload[key] = String(v).trim().slice(0, 160);
+  }
+  if (updates.paymentTier !== undefined) {
+    const tier = Number(updates.paymentTier);
+    if (![1, 2, 3].includes(tier)) throw new Error("Payment tier must be 1, 2, or 3.");
+    payload.paymentTier = tier;
   }
   if (updates.creditLimit !== undefined) {
     const n = updates.creditLimit == null ? null : Number(updates.creditLimit);
@@ -412,6 +425,36 @@ export async function authenticateBuyer(
   if (!verifyPortalPassword(password, d.passwordSalt, d.passwordHash)) {
     return { ok: false };
   }
+
+  try {
+    await snap.ref.update({
+      lastLoginAt: new Date(),
+      status: d.status === "invited" ? "active" : d.status || "active",
+    });
+  } catch {
+    /* ignore */
+  }
+
+  return { ok: true, buyer: serializeBuyer(snap.id, d) };
+}
+
+/**
+ * Google OAuth sign-in: identity is already proven by a verified Google ID
+ * token, so this only maps the email to an existing buyer account — access
+ * stays invite-only (no record → no login). Mirrors authenticateBuyer's
+ * disabled check, lastLoginAt touch, and invited→active flip, minus the
+ * password verification.
+ */
+export async function authenticateBuyerByOAuthEmail(
+  emailRaw: string,
+): Promise<{ ok: true; buyer: PortalBuyer } | { ok: false; reason?: string }> {
+  const buyer = await findBuyerByIdentifier(emailRaw);
+  if (!buyer) return { ok: false };
+
+  const snap = await getDb().collection("salesPortalBuyers").doc(buyer.id).get();
+  if (!snap.exists) return { ok: false };
+  const d = snap.data() || {};
+  if (d.status === "disabled") return { ok: false, reason: "disabled" };
 
   try {
     await snap.ref.update({

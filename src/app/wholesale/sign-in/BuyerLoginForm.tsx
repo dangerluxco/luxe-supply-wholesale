@@ -3,6 +3,7 @@
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Logo } from "@/components/Logo";
+import { GoogleSignInButton } from "@/components/GoogleSignInButton";
 
 const isDev = process.env.NODE_ENV === "development";
 const REMEMBER_KEY = "luxe-wholesale-buyer-remember";
@@ -132,6 +133,9 @@ export default function BuyerLoginForm() {
             {pending ? "Signing in…" : "Sign in"}
           </button>
         </form>
+
+        <GoogleSignInButton area="buyer" next={next} remember={remember} />
+
         <p className="mt-6 text-center text-[12.5px] text-secondary">
           Need access?{" "}
           <a href="/wholesale/register" className="text-accent underline">

@@ -3,6 +3,7 @@
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Logo } from "@/components/Logo";
+import { GoogleSignInButton } from "@/components/GoogleSignInButton";
 
 const isDev = process.env.NODE_ENV === "development";
 const REMEMBER_KEY = "luxe-wholesale-staff-remember";
@@ -128,6 +129,8 @@ export default function LoginForm() {
             {pending ? "Signing in…" : "Sign in"}
           </button>
         </form>
+
+        <GoogleSignInButton area="staff" remember={remember} />
       </div>
     </div>
   );

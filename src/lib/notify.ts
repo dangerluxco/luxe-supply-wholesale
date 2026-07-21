@@ -164,6 +164,47 @@ export async function notifyStaffOfRegistrationRequest(opts: {
   return { sent, recipients };
 }
 
+/**
+ * Buyer-facing "we'd like to schedule a call" email — the precursor to Book
+ * Call. Reply-to is the requesting rep, so the buyer's proposed times land
+ * straight in their inbox and the rep books from there.
+ */
+export async function sendCallRequestEmail(opts: {
+  quoteId: string;
+  customerName: string;
+  customerEmail: string;
+  itemCount: number;
+  orderTotal: number | null;
+  staffName: string;
+  staffEmail: string;
+}): Promise<boolean> {
+  const orderUrl = `${buyerStorefrontOrigin()}/wholesale/orders/${opts.quoteId}`;
+  const firstName = (opts.customerName || "").trim().split(/\s+/)[0] || "there";
+  const html = `<!DOCTYPE html>
+<html><body style="font-family:Segoe UI,Roboto,Helvetica,sans-serif;line-height:1.6;color:#333;max-width:640px;">
+  <p style="font-size:15px;font-weight:600;letter-spacing:0.06em;">LUXE SUPPLY<span style="color:#B08D3E;">*</span></p>
+  <p>Hi ${escapeHtml(firstName)},</p>
+  <p>Thanks for your order request${
+    opts.itemCount
+      ? ` (<strong>${opts.itemCount} item${opts.itemCount === 1 ? "" : "s"}</strong>${
+          opts.orderTotal != null ? ` · ${escapeHtml(money(Math.round(opts.orderTotal)))}` : ""
+        })`
+      : ""
+  }. We'd love to hop on a quick call to walk through the pieces together, answer questions, and finalize your order.</p>
+  <p><strong>Just reply to this email with a few times that work for you</strong> and we'll send over a calendar invite.</p>
+  <p><a href="${orderUrl}" style="display:inline-block;padding:10px 20px;background:#16161a;color:#fff;text-decoration:none;border-radius:4px;">View your order request</a></p>
+  <p>Talk soon,<br/>${escapeHtml(opts.staffName)}<br/><span style="color:#666;">Luxe Supply Co. · ${escapeHtml(opts.staffEmail)}</span></p>
+  <p style="color:#666;font-size:12px;">Request ID: ${escapeHtml(opts.quoteId)}</p>
+</body></html>`;
+
+  return sendEmail({
+    to: [opts.customerEmail],
+    subject: "Let's schedule a call about your order — Luxe Supply Co.",
+    html,
+    replyTo: opts.staffEmail || undefined,
+  });
+}
+
 /** Invite email for a new buyer storefront login. Non-blocking. */
 export async function sendBuyerInviteEmail(opts: {
   email: string;

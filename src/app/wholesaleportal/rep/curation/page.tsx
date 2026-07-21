@@ -14,7 +14,7 @@ export default async function CurationPage() {
   return (
     <div className="px-10 pb-12 pt-8">
       <div className="mb-6 flex flex-wrap items-baseline gap-3">
-        <h1 className="text-[24px] font-semibold text-ink">Curation</h1>
+        <h1 className="text-[24px] font-semibold text-ink">Curate Order</h1>
         <span className="text-[12px] text-muted">
           Build a shareable, time-limited link for a client to approve/decline items during a
           sales call.

@@ -1,12 +1,13 @@
-import { getQuoteThresholds, getNotifyEmails } from "@/lib/firestore/settings";
+import { getQuoteThresholds, getNotifyEmails, getPaymentInstructions } from "@/lib/firestore/settings";
 import { ThresholdSettingsForm } from "@/components/ThresholdSettingsForm";
 
 export const dynamic = "force-dynamic";
 
 export default async function StaffSettingsPage() {
-  const [thresholds, notifyEmails] = await Promise.all([
+  const [thresholds, notifyEmails, paymentInstructions] = await Promise.all([
     getQuoteThresholds(),
     getNotifyEmails(),
+    getPaymentInstructions().catch(() => ""),
   ]);
 
   return (
@@ -22,6 +23,7 @@ export default async function StaffSettingsPage() {
         minItemCount={thresholds.minItemCount}
         minCartTotal={thresholds.minCartTotal}
         notifyEmails={notifyEmails}
+        paymentInstructions={paymentInstructions}
       />
     </div>
   );

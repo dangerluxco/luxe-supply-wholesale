@@ -203,15 +203,14 @@ export function BundleBuilder({
     ? null
     : buyers.find((b) => b.username === buyerUsername);
 
+  // Picker rows stay in inventory order — toggling an item on must NOT jump it
+  // to the top (it makes the list feel like it reshuffles under your cursor).
+  // `selectedOrder`/`chosen` still track selection order for preview + pricing.
   const filtered = useMemo(() => {
     const matches = (i: Item) =>
       !query || `${i.name} ${i.sku}`.toLowerCase().includes(query.toLowerCase());
-    const selectedRows = selectedOrder
-      .map((sku) => inventoryBySku.get(sku))
-      .filter((i): i is Item => !!i && matches(i));
-    const unselectedRows = inventory.filter((i) => !selected.has(i.sku) && matches(i));
-    return [...selectedRows, ...unselectedRows];
-  }, [inventory, inventoryBySku, query, selected, selectedOrder]);
+    return inventory.filter(matches);
+  }, [inventory, query]);
 
   function toggle(sku: string, available: boolean) {
     if (!available) return;

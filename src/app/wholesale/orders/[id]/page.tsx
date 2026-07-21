@@ -5,19 +5,11 @@ import { ROLE } from "@/lib/constants";
 import { getQuoteById } from "@/lib/firestore/quotes";
 import { PortalItemLine, portalDisplayTitle } from "@/components/PortalItemLine";
 import { MicroBadge } from "@/components/badges";
+import { BuyerOrderStatusBadge } from "@/components/BuyerOrderStatusBadge";
 import { BundleImageStrip } from "@/components/BundleImageStrip";
 import { fullDate, money } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
-
-const STATUS_LABEL: Record<string, string> = {
-  open: "Submitted",
-  contacted: "Seller contacted",
-  quoted: "Invoice sent",
-  closed: "Closed",
-  declined: "Declined",
-  timed_out: "Timed out",
-};
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
@@ -93,9 +85,7 @@ export default async function BuyerOrderDetailPage({
       <div className="mb-6 mt-3 flex flex-wrap items-baseline gap-3">
         <h1 className="text-[24px] font-semibold text-ink">Order request</h1>
         <span className="font-mono text-[11px] text-muted">#{quote.id}</span>
-        <span className="text-[11px] uppercase tracking-[0.08em] text-secondary">
-          {STATUS_LABEL[quote.status] || quote.status}
-        </span>
+        <BuyerOrderStatusBadge status={quote.status} />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.3fr_1fr]">

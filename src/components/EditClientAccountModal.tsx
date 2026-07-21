@@ -2,7 +2,12 @@
 
 import { useState, useTransition } from "react";
 import type { PortalBuyer } from "@/lib/firestore/buyers";
-import { PAYMENT_TERMS_OPTIONS, PREFERRED_PAYMENT_OPTIONS, SHIPPING_OPTIONS } from "@/lib/constants";
+import {
+  PAYMENT_TERMS_OPTIONS,
+  PAYMENT_TIERS,
+  PREFERRED_PAYMENT_OPTIONS,
+  SHIPPING_OPTIONS,
+} from "@/lib/constants";
 
 const fieldClass =
   "h-10 w-full rounded-chip border border-border bg-ground px-3 text-[13px] text-ink outline-none focus:border-accent";
@@ -19,6 +24,7 @@ export function EditClientAccountModal({
 }) {
   const [city, setCity] = useState(buyer.city);
   const [state, setState] = useState(buyer.state);
+  const [paymentTier, setPaymentTier] = useState(buyer.paymentTier);
   const [paymentTerms, setPaymentTerms] = useState(buyer.paymentTerms);
   const [preferredPayment, setPreferredPayment] = useState(buyer.preferredPayment);
   const [creditLimit, setCreditLimit] = useState(buyer.creditLimit != null ? String(buyer.creditLimit) : "");
@@ -51,6 +57,7 @@ export function EditClientAccountModal({
         body: JSON.stringify({
           city,
           state,
+          paymentTier,
           paymentTerms,
           preferredPayment,
           creditLimit: trimmedLimit ? Number(trimmedLimit) : null,
@@ -109,6 +116,26 @@ export function EditClientAccountModal({
           <div>
             <div className="micro-badge mb-2 text-[10px] tracking-[0.14em] text-accent">BILLING &amp; CREDIT</div>
             <div className="grid grid-cols-2 gap-3">
+              <label className="flex flex-col gap-1.5">
+                <span className={labelClass}>PAYMENT TIER</span>
+                <select
+                  value={paymentTier}
+                  onChange={(e) => {
+                    const tier = Number(e.target.value);
+                    setPaymentTier(tier);
+                    // Picking a tier pre-fills its default terms — still editable below.
+                    const preset = PAYMENT_TIERS.find((t) => t.tier === tier);
+                    if (preset) setPaymentTerms(preset.defaultTerms);
+                  }}
+                  className={fieldClass}
+                >
+                  {PAYMENT_TIERS.map((t) => (
+                    <option key={t.tier} value={t.tier}>
+                      {t.label} ({t.defaultTerms})
+                    </option>
+                  ))}
+                </select>
+              </label>
               <label className="flex flex-col gap-1.5">
                 <span className={labelClass}>PAYMENT TERMS</span>
                 <select value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)} className={fieldClass}>

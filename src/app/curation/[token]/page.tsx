@@ -1,16 +1,13 @@
 import { Suspense } from "react";
 import { ClientOnly } from "@/components/ClientOnly";
+import { BrandedLoader } from "@/components/BrandedLoader";
 import { CurationViewer } from "@/components/CurationViewer";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 function ViewerLoading() {
-  return (
-    <div className="flex min-h-screen items-center justify-center text-[13px] text-muted">
-      Loading…
-    </div>
-  );
+  return <BrandedLoader fullScreen />;
 }
 
 /**

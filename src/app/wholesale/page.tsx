@@ -2,6 +2,7 @@ import { listCatalogProducts, resolveStorefrontPricesForSkus } from "@/lib/fires
 import { CatalogFilters } from "@/components/CatalogFilters";
 import { CatalogProductGrid } from "@/components/CatalogProductGrid";
 import { CatalogLoadMore } from "@/components/CatalogLoadMore";
+import { PaginationControls } from "@/components/PaginationControls";
 import { EmptyState } from "@/components/EmptyState";
 import { BundleStrip } from "@/components/BundleStrip";
 import { BundlesSection } from "@/components/BundlesSection";
@@ -35,6 +36,8 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
   const availability = one(sp.availability) || "available";
   const sort = one(sp.sort) || "newest";
   const pageLimit = Math.min(Math.max(Number(one(sp.limit)) || 200, 24), 800);
+  const PER_PAGE = 24;
+  const pageParam = Math.max(1, Math.floor(Number(one(sp.page)) || 1));
 
   // Never let a transient Firestore hiccup blank the whole page — degrade to an
   // empty catalog (same resilience pattern as WholesaleLayout's index fetch).
@@ -179,7 +182,13 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
 
   const eligibleLots = lots.filter((lot) => lot.lotPrice != null && lot.items.length > 0);
 
-  const cards = products.map((p) => ({
+  // Paginate the filtered result set (filters run over everything loaded, so
+  // page numbers always agree with the search/brand/category selection).
+  const totalPages = Math.max(1, Math.ceil(products.length / PER_PAGE));
+  const page = Math.min(pageParam, totalPages);
+  const pageProducts = products.slice((page - 1) * PER_PAGE, page * PER_PAGE);
+
+  const cards = pageProducts.map((p) => ({
     sku: p.sku,
     name: p.title,
     wholesalePrice: Math.round(p.price ?? 0),
@@ -304,8 +313,18 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
               wishlistSkus={wishlistSkus}
             />
             <Suspense fallback={null}>
-              <CatalogLoadMore currentLimit={pageLimit} hasMore={hasMore} />
+              <PaginationControls
+                page={page}
+                totalPages={totalPages}
+                totalItems={products.length}
+                perPage={PER_PAGE}
+              />
             </Suspense>
+            {page >= totalPages ? (
+              <Suspense fallback={null}>
+                <CatalogLoadMore currentLimit={pageLimit} hasMore={hasMore} />
+              </Suspense>
+            ) : null}
           </>
         )}
       </div>

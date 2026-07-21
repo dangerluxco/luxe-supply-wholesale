@@ -1,10 +1,12 @@
 import { getDb, toIso } from "./admin";
 import { getLuxesupplyOrg } from "./staff";
 import { getQuoteById, linkQuoteToInvoice, finalizeInvoiceRequestAsSold } from "./quotes";
+import { findBuyerByIdentifier } from "./buyers";
 import {
   FIRESTORE_INVOICE_STATUS,
   FULFILLMENT_STATUS,
   INVOICE_TERMS,
+  netDaysFromTerms,
   type FulfillmentStatus,
 } from "@/lib/constants";
 
@@ -142,7 +144,20 @@ export async function createInvoiceFromQuote(
   const org = await getLuxesupplyOrg();
   const invoiceNumber = await nextInvoiceNumber(org.id);
   const now = new Date();
-  const dueDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+  // Per-buyer payment terms (set on the client account / payment tier) drive
+  // the invoice terms + due date; org-wide Net-30 is only the fallback for
+  // guests or lookup failures.
+  let terms: string = INVOICE_TERMS;
+  if (quote.portalUsername) {
+    try {
+      const buyer = await findBuyerByIdentifier(quote.portalUsername);
+      if (buyer?.paymentTerms) terms = buyer.paymentTerms;
+    } catch (err) {
+      console.warn("[invoices] buyer terms lookup failed:", err instanceof Error ? err.message : err);
+    }
+  }
+  const dueDate = new Date(now.getTime() + netDaysFromTerms(terms) * 24 * 60 * 60 * 1000);
 
   const items: InvoiceLineItem[] = quote.items.map((i) => ({
     sku: String(i.sku || ""),
@@ -173,7 +188,7 @@ export async function createInvoiceFromQuote(
     subtotal,
     shipping,
     total,
-    terms: INVOICE_TERMS,
+    terms,
     poNumber: null,
     status: FIRESTORE_INVOICE_STATUS.SENT,
     fulfillmentStatus: FULFILLMENT_STATUS.UNFULFILLED,

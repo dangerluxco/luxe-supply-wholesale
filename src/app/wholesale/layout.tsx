@@ -5,7 +5,7 @@ import { BuyerTopbar } from "@/components/BuyerTopbar";
 import { StorefrontAvailabilityProvider } from "@/components/StorefrontAvailability";
 import { ROLE } from "@/lib/constants";
 import { getBuyerCart } from "@/lib/firestore/buyers";
-import { listCatalogProducts } from "@/lib/firestore/catalog";
+import { getCatalogSearchIndex } from "@/lib/catalogIndexCache";
 import { listHoldAlertsForBuyer } from "@/lib/firestore/holdAlerts";
 
 /** Buyer-facing tab title — overrides the root "Wholesale Portal" default for /wholesale/**. */
@@ -17,19 +17,12 @@ export default async function WholesaleLayout({ children }: { children: React.Re
   const store = await cookies();
   const decoded = decodeSession(areaSessionFrom(store.get(SESSION_COOKIE)?.value, "buyer"));
 
-  // Always load a lightweight catalog index for search (guest + buyer).
-  // Never let a transient Firestore hiccup take down sign-in/browsing entirely.
+  // Lightweight catalog index for search (guest + buyer) — served from a 60s
+  // in-process cache so this layout doesn't hydrate 400 products from Firestore
+  // on every page view. Never let a transient hiccup take down browsing.
   let index: { sku: string; name: string; era: string; material: string }[] = [];
   try {
-    const { products } = await listCatalogProducts(400);
-    index = products
-      .filter((p) => !p.soldOut)
-      .map((p) => ({
-        sku: p.sku,
-        name: p.title,
-        era: p.era,
-        material: p.material,
-      }));
+    index = await getCatalogSearchIndex();
   } catch (err) {
     console.warn("[wholesale layout] catalog index unavailable:", err instanceof Error ? err.message : err);
   }

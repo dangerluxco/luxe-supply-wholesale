@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ProductCard, type CatalogProduct } from "@/components/ProductCard";
 import { CatalogLoadMore } from "@/components/CatalogLoadMore";
+import { PaginationControls } from "@/components/PaginationControls";
 import { InfoTip } from "@/components/InfoTip";
 
 const STORAGE_KEY = "luxe-staff-catalog-show-cost";
@@ -19,10 +20,18 @@ export function StaffCatalogGrid({
   products,
   currentLimit,
   hasMore,
+  page = 1,
+  totalPages = 1,
+  totalItems,
+  perPage,
 }: {
   products: StaffCatalogCard[];
   currentLimit: number;
   hasMore: boolean;
+  page?: number;
+  totalPages?: number;
+  totalItems?: number;
+  perPage?: number;
 }) {
   const [showCost, setShowCost] = useState(true);
 
@@ -85,7 +94,15 @@ export function StaffCatalogGrid({
         ))}
       </div>
 
-      <CatalogLoadMore currentLimit={currentLimit} hasMore={hasMore} />
+      {totalItems != null && perPage != null ? (
+        <PaginationControls
+          page={page}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          perPage={perPage}
+        />
+      ) : null}
+      {page >= totalPages ? <CatalogLoadMore currentLimit={currentLimit} hasMore={hasMore} /> : null}
     </div>
   );
 }

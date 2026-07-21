@@ -75,6 +75,13 @@ export async function getQuoteThresholds(): Promise<QuoteThresholds> {
   return normalizeQuoteThresholds(salesPortal.quoteThresholds);
 }
 
+/** Wire/payment instructions printed on branded invoice PDFs (staff-editable). */
+export async function getPaymentInstructions(): Promise<string> {
+  const org = await getLuxesupplyOrg();
+  const salesPortal = (org.data.salesPortal || {}) as Record<string, unknown>;
+  return String(salesPortal.paymentInstructions || "").trim();
+}
+
 /** Extra staff-notification recipients on top of active `salesPortalStaff` accounts. */
 export async function getNotifyEmails(): Promise<string[]> {
   const org = await getLuxesupplyOrg();
@@ -90,6 +97,7 @@ export async function saveQuoteSettings(input: {
   minItemCount: number;
   minCartTotal: number;
   notifyEmails: string[];
+  paymentInstructions?: string;
 }): Promise<void> {
   const org = await getLuxesupplyOrg();
   const ref = getDb().collection("organizations").doc(org.id);
@@ -103,6 +111,9 @@ export async function saveQuoteSettings(input: {
           minCartTotal: input.minCartTotal,
         }),
         notifyEmails: input.notifyEmails,
+        ...(input.paymentInstructions !== undefined
+          ? { paymentInstructions: String(input.paymentInstructions).trim().slice(0, 2000) }
+          : {}),
         updatedAt: new Date(),
       },
       updatedAt: new Date(),

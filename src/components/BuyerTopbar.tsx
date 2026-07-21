@@ -141,11 +141,12 @@ export function BuyerTopbar({
               </div>
               {user.name.split(" ")[0]}
             </div>
-            <form method="POST" action="/api/logout">
-              <button className="rounded-chip border border-border px-2.5 py-1.5 text-[11px] text-secondary transition hover:border-accent hover:text-ink">
-                Sign out
-              </button>
-            </form>
+            <a
+              href="/api/logout?area=buyer"
+              className="rounded-chip border border-border px-2.5 py-1.5 text-[11px] text-secondary transition hover:border-accent hover:text-ink"
+            >
+              Sign out
+            </a>
           </>
         ) : (
           <Link

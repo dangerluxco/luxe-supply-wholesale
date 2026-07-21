@@ -9,10 +9,11 @@ import { computeBuyerAccountMetrics } from "@/lib/buyerAccount";
 import { EmptyState } from "@/components/EmptyState";
 import { ClientCartLimitsForm } from "@/components/ClientCartLimitsForm";
 import { ClientPasswordResetButton } from "@/components/ClientPasswordResetButton";
+import { AssignCreditButton } from "@/components/AssignCreditButton";
 import { EditClientAccountButton } from "@/components/EditClientAccountButton";
 import { PortalItemLine, PortalThumbnailTile } from "@/components/PortalItemLine";
-import { MicroBadge, InvoiceBadge } from "@/components/badges";
-import { resolveShippingOption } from "@/lib/constants";
+import { MicroBadge, InvoiceBadge, TierBadge } from "@/components/badges";
+import { PAYMENT_TIERS, resolveShippingOption } from "@/lib/constants";
 import { money, fullDate, initialsOf } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -101,6 +102,7 @@ export default async function ClientDetailPage({
               <MicroBadge tone={buyer.status === "active" ? "solid-green" : "outline-gray"}>
                 {buyer.status.toUpperCase()}
               </MicroBadge>
+              <TierBadge tier={buyer.paymentTier} />
               <MicroBadge tone="outline-gold">{buyer.paymentTerms}</MicroBadge>
               <MicroBadge tone="outline-gray">{shippingOption.label}</MicroBadge>
               {buyer.resaleCertVerified ? (
@@ -116,6 +118,7 @@ export default async function ClientDetailPage({
           >
             Message buyer
           </a>
+          <AssignCreditButton buyer={buyer} outstanding={metrics.outstanding} />
           <EditClientAccountButton buyer={buyer} />
         </div>
       </div>
@@ -350,6 +353,10 @@ export default async function ClientDetailPage({
               PAYMENT TERMS &amp; STANDING
             </div>
             <div className="space-y-2 text-[12.5px]">
+              <Row
+                label="Payment tier"
+                value={PAYMENT_TIERS.find((t) => t.tier === buyer.paymentTier)?.label || `Tier ${buyer.paymentTier}`}
+              />
               <Row label="Terms" value={buyer.paymentTerms} />
               <Row label="Preferred payment" value={buyer.preferredPayment || "—"} />
               <Row
@@ -357,24 +364,39 @@ export default async function ClientDetailPage({
                 value={metrics.onTimePaymentRate != null ? `${metrics.onTimePaymentRate}%` : "—"}
               />
             </div>
-            {buyer.creditLimit != null ? (
-              <div className="mt-3.5 border-t border-border/60 pt-3.5">
-                <div className="mb-1.5 flex items-center justify-between text-[11px] text-muted">
-                  <span>Credit used</span>
-                  <span className="font-mono">
-                    {money(metrics.outstanding)} / {money(buyer.creditLimit)}
-                  </span>
-                </div>
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-ground">
-                  <div
-                    className={
-                      "h-full rounded-full " + ((creditPct ?? 0) >= 90 ? "bg-danger" : "bg-accent")
-                    }
-                    style={{ width: `${creditPct ?? 0}%` }}
-                  />
-                </div>
+            <div className="mt-3.5 border-t border-border/60 pt-3.5">
+              <div className="mb-1.5 flex items-center justify-between gap-3 text-[11px] text-muted">
+                <span>{buyer.creditLimit != null ? "Credit used" : "Credit limit"}</span>
+                <AssignCreditButton
+                  buyer={buyer}
+                  outstanding={metrics.outstanding}
+                  variant="link"
+                />
               </div>
-            ) : null}
+              {buyer.creditLimit != null ? (
+                <>
+                  <div className="mb-1.5 flex items-center justify-between font-mono text-[12px] text-ink">
+                    <span>
+                      {money(metrics.outstanding)} / {money(buyer.creditLimit)}
+                    </span>
+                    <span className="text-muted">{creditPct ?? 0}% used</span>
+                  </div>
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-ground">
+                    <div
+                      className={
+                        "h-full rounded-full " +
+                        ((creditPct ?? 0) >= 90 ? "bg-danger" : "bg-accent")
+                      }
+                      style={{ width: `${creditPct ?? 0}%` }}
+                    />
+                  </div>
+                </>
+              ) : (
+                <p className="text-[12.5px] text-muted">
+                  No credit assigned — buyer is cash / due-on-receipt until a limit is set.
+                </p>
+              )}
+            </div>
           </div>
 
           <div className="rounded-card border border-border bg-surface p-5">

@@ -23,16 +23,11 @@ export default async function CurationManagePage({
         href="/wholesaleportal/rep/curation"
         className="text-[12px] text-muted transition hover:text-ink"
       >
-        ‹ Back to Curation
+        ‹ Back to Curate Order
       </Link>
-      <div className="mb-6 mt-3 flex flex-wrap items-baseline gap-3">
-        <h1 className="text-[24px] font-semibold text-ink">
-          {share.clientName || "Curation link"}
-        </h1>
-        <span className="font-mono text-[11px] text-muted">#{share.token.slice(0, 10)}…</span>
+      <div className="mt-3">
+        <CurationManage initialShare={share} buyerUrl={buyerUrl} />
       </div>
-
-      <CurationManage initialShare={share} buyerUrl={buyerUrl} />
     </div>
   );
 }

@@ -2,6 +2,8 @@
 
 import { usePathname } from "next/navigation";
 import { clsx } from "@/lib/clsx";
+import { SearchIcon } from "@/components/icons";
+import { OPEN_STAFF_SEARCH_EVENT } from "@/components/StaffCommandPalette";
 import type { RepNavItem, RepNavIconKey } from "@/lib/rep-nav";
 import {
   DashboardIcon,
@@ -63,10 +65,24 @@ export function RepSidebar({
           LUXE SUPPLY<span className="text-accent">*</span>
         </span>
       </a>
-      <div className="px-5 pb-5">
+      <div className="px-5 pb-4">
         <span className="micro-badge inline-block rounded-full border border-accent/40 px-2 py-1 text-[9px] tracking-[0.14em] text-accent">
           {isManager ? "MANAGER" : "REP CONSOLE"}
         </span>
+      </div>
+
+      <div className="px-3 pb-4">
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new CustomEvent(OPEN_STAFF_SEARCH_EVENT))}
+          className="flex w-full items-center gap-2 rounded-chip border border-white/15 px-3 py-2 text-[12px] text-white/50 transition hover:border-accent/60 hover:text-white/80"
+        >
+          <SearchIcon className="h-3.5 w-3.5 shrink-0" />
+          <span>Search…</span>
+          <span className="ml-auto rounded border border-white/15 px-1 py-0.5 font-mono text-[9.5px] text-white/40">
+            ⌘K
+          </span>
+        </button>
       </div>
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 pb-4">
@@ -96,11 +112,13 @@ export function RepSidebar({
           </div>
           <span className="truncate">{user.name}</span>
         </div>
-        <form method="POST" action="/api/logout">
-          <button className="w-full rounded-chip border border-white/20 px-2.5 py-1.5 text-[11px] text-white/60 transition hover:border-accent hover:text-ground">
-            Sign out
-          </button>
-        </form>
+        {/* Plain <a> + GET logout: hard-nav friendly; never leaves you on /api/logout. */}
+        <a
+          href="/api/logout?area=staff"
+          className="block w-full rounded-chip border border-white/20 px-2.5 py-1.5 text-center text-[11px] text-white/60 transition hover:border-accent hover:text-ground"
+        >
+          Sign out
+        </a>
       </div>
     </aside>
   );

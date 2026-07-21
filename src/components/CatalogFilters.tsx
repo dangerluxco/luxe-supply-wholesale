@@ -62,6 +62,8 @@ export function CatalogFilters({
       if (v === null || v === "") sp.delete(k);
       else sp.set(k, v);
     }
+    // Changing any filter re-slices the result set — always restart at page 1.
+    sp.delete("page");
     // Drop legacy chip-filter params if present
     sp.delete("material");
     sp.delete("era");

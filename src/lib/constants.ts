@@ -147,6 +147,18 @@ export const QUOTE_STATUSES = [
 ] as const;
 export type QuoteStatus = (typeof QUOTE_STATUSES)[number];
 
+/** Buyer-facing (frontend portal) labels for order-request statuses. A fresh
+ * request sits in "Pending Approval" until the sales team acts on it — staff
+ * keep their own pipeline vocabulary (Open/Contacted/Invoiced) internally. */
+export const BUYER_QUOTE_STATUS_LABEL: Record<string, string> = {
+  open: "Pending approval",
+  contacted: "Seller contacted",
+  quoted: "Invoice sent",
+  closed: "Closed",
+  declined: "Declined",
+  timed_out: "Timed out",
+};
+
 /** Pending invoice requests auto-timeout after this many days. */
 export const INVOICE_REQUEST_TIMEOUT_DAYS = 7;
 
@@ -169,6 +181,28 @@ export const INVOICE_TERMS = "Net 30";
 
 /** Options for a buyer's account-level payment terms (staff "Edit account" panel). */
 export const PAYMENT_TERMS_OPTIONS = ["Due on receipt", "Net 15", "Net 30", "Net 45", "Net 60"];
+
+/**
+ * Payment tiers — a per-buyer trust level that carries default payment terms.
+ * Picking a tier in "Edit account" pre-fills the terms (still individually
+ * overridable); invoices generated for the buyer use whatever terms their
+ * account carries. Tier numbering matches the existing TierBadge styling
+ * (1 = solid gold, 2 = outline gold, 3 = gray).
+ */
+export const PAYMENT_TIERS = [
+  { tier: 1, label: "Tier 1 · Established", defaultTerms: "Net 60" },
+  { tier: 2, label: "Tier 2 · Preferred", defaultTerms: "Net 30" },
+  { tier: 3, label: "Tier 3 · Standard", defaultTerms: "Due on receipt" },
+] as const;
+export const DEFAULT_PAYMENT_TIER = 3;
+
+/** "Net 30" → 30, "Due on receipt" → 0. Unknown/empty strings fall back to Net-30. */
+export function netDaysFromTerms(terms: string): number {
+  const t = String(terms || "").trim().toLowerCase();
+  if (t === "due on receipt") return 0;
+  const m = t.match(/net\s*(\d{1,3})/);
+  return m ? Number(m[1]) : 30;
+}
 
 /** Options for a buyer's preferred payment method. */
 export const PREFERRED_PAYMENT_OPTIONS = ["ACH transfer", "Wire transfer", "Credit card", "Check"];

@@ -35,7 +35,7 @@ export default async function StaffInvoiceDetailPage({
         ‹ Back to invoices
       </Link>
 
-      <div className="mb-6 mt-3 flex flex-wrap items-baseline gap-4">
+      <div className="mb-6 mt-3 flex flex-wrap items-center gap-4">
         <h1 className="font-mono text-[24px] font-semibold text-ink">{invoice.invoiceNumber}</h1>
         <span className="text-[13px] text-secondary">
           {invoice.customerName || invoice.buyerDisplayName || "—"}
@@ -43,6 +43,12 @@ export default async function StaffInvoiceDetailPage({
         <div className="flex-1" />
         <InvoiceBadge status={status} />
         <FulfillmentBadge status={invoice.fulfillmentStatus} />
+        <a
+          href={`/api/staff/invoices/${invoice.id}/pdf`}
+          className="flex h-9 items-center rounded-chip bg-ink px-4 text-[11px] font-semibold uppercase tracking-[0.12em] text-ground transition hover:opacity-90"
+        >
+          Download PDF ↓
+        </a>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.3fr_1fr]">

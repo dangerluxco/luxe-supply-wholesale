@@ -2,7 +2,6 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { addSkuToCart } from "@/lib/actions/buyer-firestore";
 import { money } from "@/lib/format";
 
 export function AddToOrderButton({
@@ -32,12 +31,19 @@ export function AddToOrderButton({
         disabled={pending}
         onClick={() =>
           start(async () => {
-            const res = await addSkuToCart(sku);
-            if (res?.error) setMsg(res.error);
-            else {
-              setMsg(null);
-              router.push("/wholesale/cart");
+            const res = await fetch("/api/buyer/cart/add", {
+              method: "POST",
+              credentials: "same-origin",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ skus: [sku] }),
+            });
+            const data = (await res.json().catch(() => ({}))) as { error?: string };
+            if (!res.ok || data.error) {
+              setMsg(data.error || "Could not add to cart.");
+              return;
             }
+            setMsg(null);
+            router.push("/wholesale/cart");
           })
         }
         className="flex h-[50px] items-center justify-center rounded-chip bg-ink text-[12.5px] font-semibold uppercase tracking-[0.14em] text-ground transition hover:opacity-90 disabled:opacity-60"

@@ -3,19 +3,11 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { ROLE } from "@/lib/constants";
 import { EmptyState } from "@/components/EmptyState";
+import { BuyerOrderStatusBadge } from "@/components/BuyerOrderStatusBadge";
 import { listQuotesForBuyer } from "@/lib/firestore/quotes";
 import { money, fullDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
-
-const STATUS_LABEL: Record<string, string> = {
-  open: "Submitted",
-  contacted: "Seller contacted",
-  quoted: "Invoice sent",
-  closed: "Closed",
-  declined: "Declined",
-  timed_out: "Timed out",
-};
 
 export default async function OrdersPage() {
   const session = await getSession();
@@ -27,8 +19,8 @@ export default async function OrdersPage() {
     <div className="px-8 pb-16 pt-8">
       <h1 className="text-[24px] font-semibold text-ink">Order requests</h1>
       <p className="mt-1 text-[13px] text-secondary">
-        Orders you submit for review appear here as the sales team works them.
-        Full order history is coming with Net-30 invoices.
+        New requests start as Pending approval while the sales team reviews them — the
+        status updates here as your order is worked and invoiced.
       </p>
 
       {quotes.length === 0 ? (
@@ -67,8 +59,8 @@ export default async function OrdersPage() {
                   ? money(Math.round(q.cartTotal + (q.shipping || 0)))
                   : "—"}
               </span>
-              <span className="text-center text-[11px] uppercase tracking-[0.08em] text-muted">
-                {STATUS_LABEL[q.status] || q.status}
+              <span className="flex justify-center">
+                <BuyerOrderStatusBadge status={q.status} />
               </span>
               <span className="text-center">
                 {q.invoiceNumber ? (
