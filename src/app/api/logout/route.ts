@@ -44,8 +44,8 @@ export async function POST(request: Request) {
 }
 
 /**
- * GET fallback — StaffHardNav / plain links / accidental form GET must not
- * leave the browser stuck on `/api/logout?`. Same clear + redirect as POST.
+ * GET fallback — plain links / accidental form GET must not leave the browser
+ * stuck on `/api/logout?`. Same clear + redirect as POST.
  */
 export async function GET(request: Request) {
   return clearAndRedirect(request);

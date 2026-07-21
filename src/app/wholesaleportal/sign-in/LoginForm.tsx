@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Logo } from "@/components/Logo";
@@ -95,9 +96,9 @@ export default function LoginForm() {
             />
           </label>
           <p className="text-right text-[12.5px]">
-            <a href="/wholesaleportal/forgot-password" className="text-accent underline">
+            <Link href="/wholesaleportal/forgot-password" className="text-accent underline">
               Forgot password?
-            </a>
+            </Link>
           </p>
           <label className="flex cursor-pointer items-center gap-2 text-[12.5px] text-secondary">
             <input

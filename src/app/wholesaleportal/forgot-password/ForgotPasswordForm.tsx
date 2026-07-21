@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { Logo } from "@/components/Logo";
@@ -51,9 +52,9 @@ export default function ForgotPasswordForm() {
         )}
 
         <p className="mt-6 text-center text-[12.5px] text-secondary">
-          <a href="/wholesaleportal/sign-in" className="text-accent underline">
+          <Link href="/wholesaleportal/sign-in" className="text-accent underline">
             Back to sign in
-          </a>
+          </Link>
         </p>
       </div>
     </div>

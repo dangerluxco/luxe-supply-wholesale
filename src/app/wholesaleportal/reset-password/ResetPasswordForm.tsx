@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { Logo } from "@/components/Logo";
@@ -20,9 +21,9 @@ export default function ResetPasswordForm() {
         {!token ? (
           <div className="mt-8 rounded-chip border border-danger/40 bg-danger/5 px-4 py-4 text-[12.5px] text-danger">
             Missing or invalid reset link.{" "}
-            <a href="/wholesaleportal/forgot-password" className="underline">
+            <Link href="/wholesaleportal/forgot-password" className="underline">
               Request a new one
-            </a>
+            </Link>
             .
           </div>
         ) : (
@@ -72,9 +73,9 @@ export default function ResetPasswordForm() {
         )}
 
         <p className="mt-6 text-center text-[12.5px] text-secondary">
-          <a href="/wholesaleportal/sign-in" className="text-accent underline">
+          <Link href="/wholesaleportal/sign-in" className="text-accent underline">
             Back to sign in
-          </a>
+          </Link>
         </p>
       </div>
     </div>

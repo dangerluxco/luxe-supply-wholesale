@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { SearchIcon } from "@/components/icons";
 import { clsx } from "@/lib/clsx";
 
@@ -14,10 +16,10 @@ export const OPEN_STAFF_SEARCH_EVENT = "luxe:open-staff-search";
  * Global ⌘K / Ctrl+K search palette for the staff portal — searches clients,
  * order requests, invoices, bundles, catalog SKUs, and staff via
  * /api/staff/search. Mounted once in the rep layout so it works on every page.
- * Navigation is a hard window.location.assign, consistent with the console's
- * hard-nav convention.
+ * Navigation is client-side soft-nav (router.push / next/link).
  */
 export function StaffCommandPalette() {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [groups, setGroups] = useState<Group[]>([]);
@@ -35,6 +37,14 @@ export function StaffCommandPalette() {
     setGroups([]);
     setActiveIndex(0);
   }, []);
+
+  const go = useCallback(
+    (href: string) => {
+      setOpen(false);
+      router.push(href);
+    },
+    [router],
+  );
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -112,7 +122,7 @@ export function StaffCommandPalette() {
     } else if (e.key === "Enter") {
       e.preventDefault();
       const hit = flatHits[activeIndex];
-      if (hit) window.location.assign(hit.href);
+      if (hit) go(hit.href);
     }
   }
 
@@ -169,9 +179,10 @@ export function StaffCommandPalette() {
                   const isActive = runningIndex === activeIndex;
                   const index = runningIndex;
                   return (
-                    <a
+                    <Link
                       key={`${g.label}-${hit.id}`}
                       href={hit.href}
+                      onClick={() => setOpen(false)}
                       onMouseEnter={() => setActiveIndex(index)}
                       className={clsx(
                         "block rounded-chip px-3 py-2 transition",
@@ -180,7 +191,7 @@ export function StaffCommandPalette() {
                     >
                       <div className="truncate text-[13px] font-medium text-ink">{hit.title}</div>
                       <div className="truncate font-mono text-[10.5px] text-muted">{hit.subtitle}</div>
-                    </a>
+                    </Link>
                   );
                 })}
               </div>

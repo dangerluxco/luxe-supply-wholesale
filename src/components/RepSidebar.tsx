@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { clsx } from "@/lib/clsx";
 import { SearchIcon } from "@/components/icons";
@@ -37,10 +38,9 @@ const ICONS: Record<RepNavIconKey, (props: { className?: string }) => React.Reac
 };
 
 /**
- * Staff console left sidebar — plain <a> hard navigations (not next/link
- * soft-nav). Soft-nav between pages that still embed server-action stubs can
- * throw webpack "reading 'call'" in Next 15 — hard nav avoids that entirely.
- * StaffHardNav (mounted once in the layout) intercepts these clicks globally.
+ * Staff console left sidebar — client-side soft navigation via next/link.
+ * The staff console has no server actions in its client graph (mutations go
+ * through /api/staff/* fetch routes), so soft-nav is safe here.
  */
 export function RepSidebar({
   user,
@@ -62,9 +62,9 @@ export function RepSidebar({
 
   return (
     <aside className="sticky top-0 flex h-screen w-[220px] shrink-0 flex-col border-r border-white/10 bg-ink">
-      <a href="/wholesaleportal/rep" className="flex items-center gap-2 px-5 pt-6 pb-5">
+      <Link href="/wholesaleportal/rep" className="flex items-center gap-2 px-5 pt-6 pb-5">
         <Logo tone="light" height={26} priority />
-      </a>
+      </Link>
       <div className="px-5 pb-4">
         <span className="micro-badge inline-block rounded-full border border-accent/40 px-2 py-1 text-[9px] tracking-[0.14em] text-accent">
           {isManager ? "MANAGER" : "REP CONSOLE"}
@@ -90,7 +90,7 @@ export function RepSidebar({
           const Icon = ICONS[n.icon];
           const active = isActive(n.href);
           return (
-            <a
+            <Link
               key={n.href}
               href={n.href}
               className={clsx(
@@ -100,7 +100,7 @@ export function RepSidebar({
             >
               <Icon className="h-[18px] w-[18px] shrink-0" />
               {n.label}
-            </a>
+            </Link>
           );
         })}
       </nav>

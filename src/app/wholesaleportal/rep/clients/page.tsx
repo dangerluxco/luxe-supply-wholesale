@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { listBuyers } from "@/lib/firestore/buyers";
 import {
   listRegistrationRequests,
@@ -53,14 +54,11 @@ export default async function ClientsPage({
         </span>
       </div>
 
-      {/* Plain <a> (not next/link): staff console uses hard navigation everywhere to avoid a Next 15 soft-nav webpack bug. */}
       <div className="mb-6 flex flex-wrap gap-2">
-        {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-        <a href="/wholesaleportal/rep/clients" className={tabClass(tab === "clients")}>
+        <Link href="/wholesaleportal/rep/clients" className={tabClass(tab === "clients")}>
           Clients
-        </a>
-        {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-        <a
+        </Link>
+        <Link
           href="/wholesaleportal/rep/clients?tab=applications"
           className={tabClass(tab === "applications")}
         >
@@ -70,7 +68,7 @@ export default async function ClientsPage({
               {pendingApplications.length}
             </span>
           ) : null}
-        </a>
+        </Link>
       </div>
 
       {tab === "clients" ? (

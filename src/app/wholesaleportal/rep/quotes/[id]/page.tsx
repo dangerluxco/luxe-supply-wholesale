@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { ROLE } from "@/lib/constants";
@@ -46,9 +47,9 @@ export default async function StaffQuoteDetailPage({
 
   return (
     <div className="px-10 pb-12 pt-8">
-      <a href="/wholesaleportal/rep" className="text-[12px] text-muted transition hover:text-ink">
+      <Link href="/wholesaleportal/rep" className="text-[12px] text-muted transition hover:text-ink">
         ‹ Back to order requests
-      </a>
+      </Link>
 
       <div className="mb-6 mt-3">
         <h1 className="flex items-center gap-2 text-[24px] font-semibold text-ink">

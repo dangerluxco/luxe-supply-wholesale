@@ -7,8 +7,8 @@ import { clsx } from "@/lib/clsx";
 /**
  * Numbered pagination over the currently loaded (and filtered) result set —
  * `?page=N` in the URL, all other params preserved. Used by both the buyer
- * storefront catalog and the staff portal catalog. On the staff console,
- * StaffHardNav turns these links into full navigations automatically.
+ * storefront catalog and the staff portal catalog. Client-side soft-nav via
+ * next/link on both surfaces.
  */
 export function PaginationControls({
   page,
