@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { bundlePricing } from "@/lib/bundle";
 import { BUNDLE_DEFAULT_DISCOUNT_PERCENT } from "@/lib/constants";
 import { money } from "@/lib/format";
@@ -98,6 +99,7 @@ export function BundleBuilder({
 
   // Items resolved live via paste-to-pin that weren't in the preloaded catalog window —
   // merged in locally so they render/select exactly like any other piece.
+  const router = useRouter();
   const [extraItems, setExtraItems] = useState<Item[]>([]);
   const inventory = useMemo(
     () => uniqueBySku([...baseInventory, ...extraItems]),
@@ -501,7 +503,7 @@ export function BundleBuilder({
                 setSaveError(data.error || "Could not save bundle.");
                 return;
               }
-              window.location.assign(data.redirectTo || "/wholesaleportal/rep/bundles");
+              router.push(data.redirectTo || "/wholesaleportal/rep/bundles");
             });
           }}
         >

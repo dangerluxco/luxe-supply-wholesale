@@ -1,10 +1,12 @@
 "use client";
 
 import { useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { PressableButton } from "@/components/PressableButton";
 
 /** Archive lot via fetch API — no `"use server"` (soft-nav safe). */
 export function ArchiveLotButton({ lotId }: { lotId: string }) {
+  const router = useRouter();
   const [pending, start] = useTransition();
   return (
     <PressableButton
@@ -21,7 +23,7 @@ export function ArchiveLotButton({ lotId }: { lotId: string }) {
             alert(data.error || "Could not archive lot.");
             return;
           }
-          window.location.reload();
+          router.refresh();
         })
       }
       className="text-[11px] uppercase tracking-[0.1em] text-muted hover:text-danger disabled:opacity-50"

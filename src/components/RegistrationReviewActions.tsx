@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 
 /** Approve/reject via fetch API — no `"use server"` (soft-nav safe). */
 export function RegistrationReviewActions({ applicationId }: { applicationId: string }) {
+  const router = useRouter();
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [credentials, setCredentials] = useState<{
@@ -44,7 +46,7 @@ export function RegistrationReviewActions({ applicationId }: { applicationId: st
         // application record after reload.
         return;
       }
-      window.location.reload();
+      router.refresh();
     });
   }
 
@@ -66,7 +68,7 @@ export function RegistrationReviewActions({ applicationId }: { applicationId: st
         setError(data.error || "Could not reject.");
         return;
       }
-      window.location.reload();
+      router.refresh();
     });
   }
 

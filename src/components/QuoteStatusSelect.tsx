@@ -1,6 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { QUOTE_STATUSES } from "@/lib/constants";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -22,6 +23,7 @@ export function QuoteStatusSelect({
   quoteId: string;
   status: string;
 }) {
+  const router = useRouter();
   const [pending, start] = useTransition();
 
   return (
@@ -37,7 +39,7 @@ export function QuoteStatusSelect({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ status: next }),
           });
-          window.location.reload();
+          router.refresh();
         });
       }}
       className="h-8 w-full rounded-chip border border-border bg-ground px-2 text-[11px] disabled:opacity-60"

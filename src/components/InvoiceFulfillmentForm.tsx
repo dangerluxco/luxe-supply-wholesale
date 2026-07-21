@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { CARRIERS } from "@/lib/constants";
 
 const fieldClass =
@@ -9,6 +10,7 @@ const labelClass = "micro-badge text-[10px] tracking-[0.14em] text-muted";
 
 /** Mark shipped via fetch API — no `"use server"` (soft-nav safe). */
 export function InvoiceFulfillmentForm({ invoiceId }: { invoiceId: string }) {
+  const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -43,7 +45,7 @@ export function InvoiceFulfillmentForm({ invoiceId }: { invoiceId: string }) {
             return;
           }
           setMessage(data.message || "Marked shipped.");
-          window.location.reload();
+          router.refresh();
         });
       }}
     >

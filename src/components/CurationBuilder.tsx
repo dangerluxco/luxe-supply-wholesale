@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { money } from "@/lib/format";
 import { portalDisplayTitle, portalShowSkuLine } from "@/components/PortalItemLine";
 import { Placeholder } from "@/components/Placeholder";
@@ -103,6 +104,7 @@ export function CurationBuilder({
   /** Prefill client dropdown when this buyer id is present in the loaded list. */
   initialBuyerId?: string;
 }) {
+  const router = useRouter();
   const [draft, setDraft] = useState<DraftItem[]>([]);
   const [skusText, setSkusText] = useState("");
   const [missing, setMissing] = useState<string[]>([]);
@@ -289,7 +291,7 @@ export function CurationBuilder({
           return;
         }
         setSessionQuoteId(data.quoteId);
-        window.location.assign(
+        router.push(
           data.quoteUrl || `/wholesaleportal/rep/quotes/${data.quoteId}`,
         );
       } finally {
@@ -352,7 +354,7 @@ export function CurationBuilder({
       }
       // Jump straight into the live manage view (stats, decisions, live-add) —
       // that's the "sales call" screen, not this builder.
-      window.location.assign(`/wholesaleportal/rep/curation/${data.share.token}`);
+      router.push(`/wholesaleportal/rep/curation/${data.share.token}`);
     });
   }
 

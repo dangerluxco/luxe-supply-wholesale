@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import type { PortalBuyer } from "@/lib/firestore/buyers";
 import { money } from "@/lib/format";
 
@@ -19,6 +20,7 @@ export function AssignCreditButton({
   /** "button" = header CTA; "link" = inline text action in the standing card */
   variant?: "button" | "link";
 }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [creditLimit, setCreditLimit] = useState(
     buyer.creditLimit != null ? String(buyer.creditLimit) : "",
@@ -65,7 +67,7 @@ export function AssignCreditButton({
         return;
       }
       setOpen(false);
-      window.location.reload();
+      router.refresh();
     });
   }
 

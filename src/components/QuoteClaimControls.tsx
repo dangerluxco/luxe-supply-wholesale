@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 
 type StaffOption = { email: string; displayName: string };
 
@@ -22,6 +23,7 @@ export function QuoteClaimControls({
   currentStaffEmail: string;
   compact?: boolean;
 }) {
+  const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [staffOptions, setStaffOptions] = useState<StaffOption[]>([]);
@@ -54,7 +56,7 @@ export function QuoteClaimControls({
     start(async () => {
       try {
         await post(path, body);
-        window.location.reload();
+        router.refresh();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Request failed.");
       }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { PressableButton } from "@/components/PressableButton";
 
 /**
@@ -13,6 +14,7 @@ export function GenerateInvoiceButton({
   quoteId: string;
   disabled?: boolean;
 }) {
+  const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -38,7 +40,7 @@ export function GenerateInvoiceButton({
               return;
             }
             if (data.invoiceId) {
-              window.location.assign(`/wholesaleportal/rep/invoices/${data.invoiceId}`);
+              router.push(`/wholesaleportal/rep/invoices/${data.invoiceId}`);
             }
           });
         }}

@@ -1,10 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import type { PortalBuyer } from "@/lib/firestore/buyers";
 import { EditClientAccountModal } from "@/components/EditClientAccountModal";
 
 export function EditClientAccountButton({ buyer }: { buyer: PortalBuyer }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
 
   return (
@@ -22,7 +24,7 @@ export function EditClientAccountButton({ buyer }: { buyer: PortalBuyer }) {
           onClose={() => setOpen(false)}
           onSaved={() => {
             setOpen(false);
-            window.location.reload();
+            router.refresh();
           }}
         />
       ) : null}

@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { PressableButton } from "@/components/PressableButton";
 
 /** Mark paid via fetch API — no `"use server"` (soft-nav safe). */
 export function InvoiceMarkPaidButton({ invoiceId }: { invoiceId: string }) {
+  const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -25,7 +27,7 @@ export function InvoiceMarkPaidButton({ invoiceId }: { invoiceId: string }) {
               setError(data.error || "Could not update invoice.");
               return;
             }
-            window.location.reload();
+            router.refresh();
           });
         }}
         className="h-9 rounded-chip border border-border px-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-secondary hover:border-accent hover:text-ink disabled:opacity-60"

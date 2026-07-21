@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 
 const btnClass =
   "rounded-chip border border-border px-2.5 py-1.5 text-[11px] text-secondary transition hover:border-accent hover:text-ink disabled:opacity-50";
@@ -19,6 +20,7 @@ export function StaffMemberActions({
   status: string;
   isSelf: boolean;
 }) {
+  const router = useRouter();
   const [pending, start] = useTransition();
   const [busyAction, setBusyAction] = useState<"admin" | "reset" | "status" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -69,7 +71,7 @@ export function StaffMemberActions({
                   { isAdmin: !isAdmin },
                 );
                 setMessage(data.message || "Updated.");
-                window.location.reload();
+                router.refresh();
               } catch (err) {
                 setError(err instanceof Error ? err.message : "Could not update admin.");
                 setBusyAction(null);
@@ -135,7 +137,7 @@ export function StaffMemberActions({
                   { status: disabled ? "active" : "disabled" },
                 );
                 setMessage(data.message || "Updated.");
-                window.location.reload();
+                router.refresh();
               } catch (err) {
                 setError(err instanceof Error ? err.message : "Could not update status.");
                 setBusyAction(null);

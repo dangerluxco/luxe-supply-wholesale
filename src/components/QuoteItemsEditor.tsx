@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { PortalItemLine } from "@/components/PortalItemLine";
 import { SimilarItemsCarousel, type SimilarItem } from "@/components/SimilarItemsLink";
 import { money } from "@/lib/format";
@@ -69,6 +70,7 @@ export function QuoteItemsEditor({
   items: Array<Record<string, unknown>>;
 }) {
   const initial = useMemo(() => toEditable(items), [items]);
+  const router = useRouter();
   const [rows, setRows] = useState<EditableItem[]>(initial);
   const [savedRows, setSavedRows] = useState<EditableItem[]>(initial);
   const [pending, start] = useTransition();
@@ -140,7 +142,7 @@ export function QuoteItemsEditor({
       }
       setSavedRows(rows);
       setMessage(data.message || "Order request updated.");
-      window.location.reload();
+      router.refresh();
     });
   }
 
