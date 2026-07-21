@@ -13,6 +13,7 @@ import { exchangeGoogleAuthCode, verifyGoogleOAuthState } from "@/lib/googleOAut
 import { authenticateStaffByOAuthEmail, staffToAppRole } from "@/lib/firestore/staff";
 import { authenticateBuyerByOAuthEmail } from "@/lib/firestore/buyers";
 import { ROLE } from "@/lib/constants";
+import { staffPostLoginPath } from "@/lib/staff-totp-gate";
 
 export const dynamic = "force-dynamic";
 
@@ -64,7 +65,12 @@ export async function GET(request: Request) {
         );
       }
       const role = staffToAppRole(auth.staff);
-      const res = NextResponse.redirect(new URL(homeForRole(role), origin));
+      const dest = staffPostLoginPath({
+        role,
+        totpEnabled: auth.staff.totpEnabled,
+        home: homeForRole(role),
+      });
+      const res = NextResponse.redirect(new URL(dest, origin));
       res.cookies.set(
         SESSION_COOKIE,
         withAreaSession(existingRaw, "staff", encodeSession(auth.staff.id, role, "firestore")),

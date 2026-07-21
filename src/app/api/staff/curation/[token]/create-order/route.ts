@@ -8,10 +8,10 @@ import { staffPortalOrigin } from "@/lib/notify";
 export const dynamic = "force-dynamic";
 
 /**
- * Turns an ad-hoc curation session's approved items into a brand-new order
- * request once the call is over — the counterpart to syncing INTO an existing
- * order when the session already had one. Staff explicitly confirms this from
- * the UI; it's never automatic.
+ * Creates a brand-new order request from a curation session and links it.
+ * - Live / pre-call: all priced items (same idea as Curate Order builder).
+ * - After session end: approved items only.
+ * Staff must confirm from the UI; never automatic.
  */
 export async function POST(_request: Request, ctx: { params: Promise<{ token: string }> }) {
   const session = await requireStaffSession();
@@ -36,12 +36,21 @@ export async function POST(_request: Request, ctx: { params: Promise<{ token: st
   if (!buyer) return NextResponse.json({ error: "Linked buyer not found." }, { status: 404 });
 
   const approved = share.items.filter((it) => it.decision === "approve");
-  if (!approved.length) {
-    return NextResponse.json({ error: "No approved items to create an order from." }, { status: 400 });
+  const priced = share.items.filter((it) => Number(it.price) > 0);
+  const source = share.sessionEnded ? approved : priced;
+  if (!source.length) {
+    return NextResponse.json(
+      {
+        error: share.sessionEnded
+          ? "No approved items to create an order from."
+          : "Add at least one priced item before creating an order request.",
+      },
+      { status: 400 },
+    );
   }
 
   try {
-    const items: QuoteItemInput[] = approved.map((it) => ({
+    const items: QuoteItemInput[] = source.map((it) => ({
       sku: it.sku,
       title: it.title,
       brand: it.brand,
@@ -61,7 +70,9 @@ export async function POST(_request: Request, ctx: { params: Promise<{ token: st
       },
       items,
       status: "contacted",
-      message: `Created from a curation call (${approved.length} item${approved.length === 1 ? "" : "s"} approved).`,
+      message: share.sessionEnded
+        ? `Created from a curation call (${source.length} item${source.length === 1 ? "" : "s"} approved).`
+        : `Created from curation link (${source.length} item${source.length === 1 ? "" : "s"}).`,
       createdByEmail: session.email,
       createdByDisplayName: session.name,
       curationToken: token,
@@ -72,7 +83,7 @@ export async function POST(_request: Request, ctx: { params: Promise<{ token: st
       ok: true,
       quoteId,
       quoteUrl: `${staffPortalOrigin()}/wholesaleportal/rep/quotes/${quoteId}`,
-      itemCount: approved.length,
+      itemCount: source.length,
     });
   } catch (err) {
     return NextResponse.json(

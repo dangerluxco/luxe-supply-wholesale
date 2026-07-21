@@ -4,6 +4,7 @@ import { sendEmail, escapeHtml, isEmailConfigured } from "@/lib/email";
 import { listActiveStaffEmails } from "@/lib/firestore/staff";
 import { getNotifyEmails } from "@/lib/firestore/settings";
 import { money } from "@/lib/format";
+import { plainTextToEmailHtml } from "@/lib/callRequestDraft";
 
 /** localhost/127.* never has a real TLS cert in dev — use http:// for those hosts. */
 function schemeFor(host: string): "http" | "https" {
@@ -177,10 +178,17 @@ export async function sendCallRequestEmail(opts: {
   orderTotal: number | null;
   staffName: string;
   staffEmail: string;
+  /** Staff-edited overrides from the draft preview modal. */
+  subject?: string;
+  bodyText?: string;
 }): Promise<boolean> {
   const orderUrl = `${buyerStorefrontOrigin()}/wholesale/orders/${opts.quoteId}`;
   const firstName = (opts.customerName || "").trim().split(/\s+/)[0] || "there";
-  const html = `<!DOCTYPE html>
+  const subject =
+    (opts.subject || "").trim() || "Let's schedule a call about your order — Luxe Supply Co.";
+  const html = opts.bodyText?.trim()
+    ? plainTextToEmailHtml(opts.bodyText)
+    : `<!DOCTYPE html>
 <html><body style="font-family:Segoe UI,Roboto,Helvetica,sans-serif;line-height:1.6;color:#333;max-width:640px;">
   <p style="font-size:15px;font-weight:600;letter-spacing:0.06em;">LUXE SUPPLY<span style="color:#B08D3E;">*</span></p>
   <p>Hi ${escapeHtml(firstName)},</p>
@@ -199,7 +207,63 @@ export async function sendCallRequestEmail(opts: {
 
   return sendEmail({
     to: [opts.customerEmail],
-    subject: "Let's schedule a call about your order — Luxe Supply Co.",
+    subject,
+    html,
+    replyTo: opts.staffEmail || undefined,
+  });
+}
+
+/**
+ * Buyer-facing call request for an ad-hoc curation share (no order request yet).
+ * Includes the buyer curation URL; reply-to is the rep so proposed times land in
+ * their inbox, then they Book call from the curation manager.
+ */
+export async function sendCurationCallRequestEmail(opts: {
+  token: string;
+  curationUrl: string;
+  customerName: string;
+  customerEmail: string;
+  itemCount: number;
+  estimatedTotal: number | null;
+  clientLabel?: string;
+  staffName: string;
+  staffEmail: string;
+  /** Staff-edited overrides from the draft preview modal. */
+  subject?: string;
+  bodyText?: string;
+}): Promise<boolean> {
+  const firstName = (opts.customerName || "").trim().split(/\s+/)[0] || "there";
+  const selection =
+    opts.clientLabel && opts.clientLabel.trim()
+      ? escapeHtml(opts.clientLabel.trim())
+      : "a curated selection";
+  const subject =
+    (opts.subject || "").trim() ||
+    "Let's schedule a call about your curated selection — Luxe Supply Co.";
+  const html = opts.bodyText?.trim()
+    ? plainTextToEmailHtml(opts.bodyText)
+    : `<!DOCTYPE html>
+<html><body style="font-family:Segoe UI,Roboto,Helvetica,sans-serif;line-height:1.6;color:#333;max-width:640px;">
+  <p style="font-size:15px;font-weight:600;letter-spacing:0.06em;">LUXE SUPPLY<span style="color:#B08D3E;">*</span></p>
+  <p>Hi ${escapeHtml(firstName)},</p>
+  <p>We've put together ${selection}${
+    opts.itemCount
+      ? ` (<strong>${opts.itemCount} item${opts.itemCount === 1 ? "" : "s"}</strong>${
+          opts.estimatedTotal != null
+            ? ` · ${escapeHtml(money(Math.round(opts.estimatedTotal)))}`
+            : ""
+        })`
+      : ""
+  } and would love to hop on a quick call to walk through the pieces together.</p>
+  <p><strong>Just reply to this email with a few times that work for you</strong> and we'll send over a calendar invite.</p>
+  <p><a href="${opts.curationUrl}" style="display:inline-block;padding:10px 20px;background:#16161a;color:#fff;text-decoration:none;border-radius:4px;">View your curated selection</a></p>
+  <p>Talk soon,<br/>${escapeHtml(opts.staffName)}<br/><span style="color:#666;">Luxe Supply Co. · ${escapeHtml(opts.staffEmail)}</span></p>
+  <p style="color:#666;font-size:12px;">Curation link: ${escapeHtml(opts.token)}</p>
+</body></html>`;
+
+  return sendEmail({
+    to: [opts.customerEmail],
+    subject,
     html,
     replyTo: opts.staffEmail || undefined,
   });

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireStaffSession } from "@/lib/staff-api-auth";
 import { rejectRegistrationRequest } from "@/lib/firestore/registrationRequests";
+import { logAudit } from "@/lib/firestore/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,12 @@ export async function POST(
       id: applicationId,
       reviewedBy: session.email,
       reviewNote: body.reviewNote,
+    });
+    await logAudit({
+      actor: session,
+      action: "application.reject",
+      entity: "application",
+      entityId: applicationId,
     });
     return NextResponse.json({ ok: true });
   } catch (err) {

@@ -1,8 +1,5 @@
-// Invoice-request submission thresholds + staff notification emails.
-// Stored on the LuxeSupply `organizations` doc under `salesPortal.quoteThresholds` /
-// `salesPortal.notifyEmails` — same document `catalogSelection` lives on (see catalog.ts) —
-// mirrors the legacy Cloud Functions shape (functions/salesPortal.js normalizeQuoteThresholds /
-// evaluateQuoteThresholds) so existing org docs "just work" if they already have this field.
+// Org settings under organizations.salesPortal — thresholds, notify emails,
+// company profile, structured invoicing, and feature flags.
 import { getDb } from "./admin";
 import { getLuxesupplyOrg } from "./staff";
 
@@ -10,6 +7,52 @@ export type QuoteThresholds = {
   minItemCount: number;
   minCartTotal: number;
 };
+
+export type CompanyProfile = {
+  displayName: string;
+  timezone: string;
+  logoUrl: string;
+  brandColor: string;
+};
+
+export type InvoicingProfile = {
+  legalName: string;
+  addressLine1: string;
+  addressLine2: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+  taxId: string;
+  invoicePrefix: string;
+  defaultTerms: string;
+  bankName: string;
+  accountName: string;
+  accountNumber: string;
+  routingAba: string;
+  swift: string;
+  remittanceEmail: string;
+  /** Legacy freeform block — used as PDF fallback when structured bank fields empty. */
+  paymentInstructions: string;
+};
+
+export type PortalFeatures = {
+  leads: boolean;
+  wishlist: boolean;
+  performance: boolean;
+  curation: boolean;
+};
+
+const DEFAULT_FEATURES: PortalFeatures = {
+  leads: true,
+  wishlist: true,
+  performance: true,
+  curation: true,
+};
+
+function salesPortalOf(orgData: Record<string, unknown>): Record<string, unknown> {
+  return (orgData.salesPortal || {}) as Record<string, unknown>;
+}
 
 export function normalizeQuoteThresholds(raw: unknown): QuoteThresholds {
   const src = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
@@ -69,55 +112,177 @@ export function evaluateQuoteThresholds(
   };
 }
 
+function trimStr(v: unknown, max = 200): string {
+  return String(v ?? "").trim().slice(0, max);
+}
+
+export function normalizeCompanyProfile(raw: unknown): CompanyProfile {
+  const src = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  return {
+    displayName: trimStr(src.displayName, 120),
+    timezone: trimStr(src.timezone, 80) || "America/New_York",
+    logoUrl: trimStr(src.logoUrl, 500),
+    brandColor: trimStr(src.brandColor, 32),
+  };
+}
+
+export function normalizeInvoicingProfile(raw: unknown, legacyPayment = ""): InvoicingProfile {
+  const src = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  return {
+    legalName: trimStr(src.legalName, 160) || "Luxe Supply Corporation",
+    addressLine1: trimStr(src.addressLine1, 160),
+    addressLine2: trimStr(src.addressLine2, 160),
+    city: trimStr(src.city, 80),
+    state: trimStr(src.state, 40),
+    postalCode: trimStr(src.postalCode, 24),
+    country: trimStr(src.country, 80) || "USA",
+    taxId: trimStr(src.taxId, 40),
+    invoicePrefix: trimStr(src.invoicePrefix, 16) || "INV",
+    defaultTerms: trimStr(src.defaultTerms, 40) || "Net 30",
+    bankName: trimStr(src.bankName, 120),
+    accountName: trimStr(src.accountName, 160),
+    accountNumber: trimStr(src.accountNumber, 80),
+    routingAba: trimStr(src.routingAba, 40),
+    swift: trimStr(src.swift, 40),
+    remittanceEmail: trimStr(src.remittanceEmail, 160),
+    paymentInstructions: trimStr(src.paymentInstructions ?? legacyPayment, 2000),
+  };
+}
+
+export function normalizePortalFeatures(raw: unknown): PortalFeatures {
+  const src = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  return {
+    leads: src.leads === false ? false : true,
+    wishlist: src.wishlist === false ? false : true,
+    performance: src.performance === false ? false : true,
+    curation: src.curation === false ? false : true,
+  };
+}
+
+/** Build PDF payment block from structured fields, falling back to freeform text. */
+export function formatPaymentInstructions(profile: InvoicingProfile): string {
+  const lines: string[] = [];
+  if (profile.bankName || profile.accountName || profile.accountNumber || profile.routingAba) {
+    lines.push("Please remit payment by wire or ACH to:");
+    if (profile.bankName) lines.push(`Bank: ${profile.bankName}`);
+    if (profile.accountName) lines.push(`Account name: ${profile.accountName}`);
+    if (profile.accountNumber) lines.push(`Account #: ${profile.accountNumber}`);
+    if (profile.routingAba) lines.push(`Routing / ABA: ${profile.routingAba}`);
+    if (profile.swift) lines.push(`SWIFT: ${profile.swift}`);
+    if (profile.remittanceEmail) lines.push(`Questions: ${profile.remittanceEmail}`);
+    return lines.join("\n");
+  }
+  return profile.paymentInstructions.trim();
+}
+
 export async function getQuoteThresholds(): Promise<QuoteThresholds> {
   const org = await getLuxesupplyOrg();
-  const salesPortal = (org.data.salesPortal || {}) as Record<string, unknown>;
-  return normalizeQuoteThresholds(salesPortal.quoteThresholds);
+  return normalizeQuoteThresholds(salesPortalOf(org.data).quoteThresholds);
+}
+
+export async function getCompanyProfile(): Promise<CompanyProfile> {
+  const org = await getLuxesupplyOrg();
+  const sp = salesPortalOf(org.data);
+  const profile = normalizeCompanyProfile(sp.companyProfile);
+  if (!profile.displayName) {
+    profile.displayName = String(org.data.displayName || org.data.name || "Luxe Supply").trim();
+  }
+  return profile;
+}
+
+export async function getInvoicingProfile(): Promise<InvoicingProfile> {
+  const org = await getLuxesupplyOrg();
+  const sp = salesPortalOf(org.data);
+  return normalizeInvoicingProfile(sp.invoicing, String(sp.paymentInstructions || ""));
 }
 
 /** Wire/payment instructions printed on branded invoice PDFs (staff-editable). */
 export async function getPaymentInstructions(): Promise<string> {
+  const profile = await getInvoicingProfile();
+  return formatPaymentInstructions(profile);
+}
+
+export async function getPortalFeatures(): Promise<PortalFeatures> {
   const org = await getLuxesupplyOrg();
-  const salesPortal = (org.data.salesPortal || {}) as Record<string, unknown>;
-  return String(salesPortal.paymentInstructions || "").trim();
+  return normalizePortalFeatures(salesPortalOf(org.data).features);
 }
 
 /** Extra staff-notification recipients on top of active `salesPortalStaff` accounts. */
 export async function getNotifyEmails(): Promise<string[]> {
   const org = await getLuxesupplyOrg();
-  const salesPortal = (org.data.salesPortal || {}) as Record<string, unknown>;
-  const raw = salesPortal.notifyEmails;
+  const raw = salesPortalOf(org.data).notifyEmails;
   if (!Array.isArray(raw)) return [];
   return raw
     .map((e) => String(e).trim().toLowerCase())
     .filter((e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
 }
 
-export async function saveQuoteSettings(input: {
-  minItemCount: number;
-  minCartTotal: number;
-  notifyEmails: string[];
-  paymentInstructions?: string;
-}): Promise<void> {
+async function patchSalesPortal(patch: Record<string, unknown>): Promise<void> {
   const org = await getLuxesupplyOrg();
   const ref = getDb().collection("organizations").doc(org.id);
-  const prev = (org.data.salesPortal || {}) as Record<string, unknown>;
+  const prev = salesPortalOf(org.data);
   await ref.set(
     {
       salesPortal: {
         ...prev,
-        quoteThresholds: normalizeQuoteThresholds({
-          minItemCount: input.minItemCount,
-          minCartTotal: input.minCartTotal,
-        }),
-        notifyEmails: input.notifyEmails,
-        ...(input.paymentInstructions !== undefined
-          ? { paymentInstructions: String(input.paymentInstructions).trim().slice(0, 2000) }
-          : {}),
+        ...patch,
         updatedAt: new Date(),
       },
       updatedAt: new Date(),
     },
     { merge: true },
   );
+}
+
+export async function saveQuoteSettings(input: {
+  minItemCount: number;
+  minCartTotal: number;
+  notifyEmails?: string[];
+  paymentInstructions?: string;
+}): Promise<void> {
+  const patch: Record<string, unknown> = {
+    quoteThresholds: normalizeQuoteThresholds({
+      minItemCount: input.minItemCount,
+      minCartTotal: input.minCartTotal,
+    }),
+  };
+  if (input.notifyEmails !== undefined) patch.notifyEmails = input.notifyEmails;
+  if (input.paymentInstructions !== undefined) {
+    patch.paymentInstructions = String(input.paymentInstructions).trim().slice(0, 2000);
+  }
+  await patchSalesPortal(patch);
+}
+
+export async function saveCompanyProfile(input: Partial<CompanyProfile>): Promise<CompanyProfile> {
+  const current = await getCompanyProfile();
+  const next = normalizeCompanyProfile({ ...current, ...input });
+  await patchSalesPortal({ companyProfile: next });
+  return next;
+}
+
+export async function saveInvoicingProfile(
+  input: Partial<InvoicingProfile>,
+): Promise<InvoicingProfile> {
+  const current = await getInvoicingProfile();
+  const next = normalizeInvoicingProfile({ ...current, ...input });
+  // Keep legacy field in sync for older readers.
+  await patchSalesPortal({
+    invoicing: next,
+    paymentInstructions: formatPaymentInstructions(next) || next.paymentInstructions,
+  });
+  return next;
+}
+
+export async function saveNotifyEmails(emails: string[]): Promise<string[]> {
+  const cleaned = emails
+    .map((e) => String(e).trim().toLowerCase())
+    .filter((e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+  await patchSalesPortal({ notifyEmails: cleaned });
+  return cleaned;
+}
+
+export async function savePortalFeatures(input: Partial<PortalFeatures>): Promise<PortalFeatures> {
+  const next = normalizePortalFeatures({ ...DEFAULT_FEATURES, ...(await getPortalFeatures()), ...input });
+  await patchSalesPortal({ features: next });
+  return next;
 }

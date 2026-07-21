@@ -128,6 +128,7 @@ export default function BuyerLoginForm() {
           <button
             type="submit"
             disabled={pending}
+            aria-busy={pending || undefined}
             className="mt-1 h-11 rounded-chip bg-ink text-[12.5px] font-semibold uppercase tracking-[0.14em] text-ground transition hover:opacity-90 disabled:opacity-60"
           >
             {pending ? "Signing in…" : "Sign in"}

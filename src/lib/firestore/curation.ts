@@ -48,6 +48,8 @@ export type CurationShare = {
   quoteId: string | null;
   /** Buyer picked via "Book call" on an ad-hoc session (no order yet) — used to create one when the session ends. */
   linkedBuyerId: string | null;
+  /** Staff emailed the buyer asking for call times ("Request a call"). */
+  callRequestedAt: string | null;
 };
 
 export type CurationSummary = {
@@ -121,6 +123,7 @@ function serializeShare(id: string, d: Record<string, unknown>, opts?: { include
     updatedAt: toIso(d.updatedAt),
     quoteId: d.quoteId ? takeText(d.quoteId) : null,
     linkedBuyerId: d.linkedBuyerId ? takeText(d.linkedBuyerId) : null,
+    callRequestedAt: toIso(d.callRequestedAt),
   };
 }
 
@@ -162,6 +165,8 @@ export async function createCurationShare(opts: {
     imageUrls?: string[];
   }>;
   clientName?: string;
+  /** Existing portal buyer — set when curating for a known client. */
+  linkedBuyerId?: string | null;
   invoiceDate?: string;
   note?: string;
   expiresHours?: number;
@@ -202,12 +207,15 @@ export async function createCurationShare(opts: {
   const expiresHours = clampExpiresHours(opts.expiresHours);
   const expiresAt = new Date(now.getTime() + expiresHours * 60 * 60 * 1000);
 
+  const linkedBuyerId = opts.linkedBuyerId ? takeText(opts.linkedBuyerId) : "";
+
   const doc = {
     organizationId: org.id,
     orgSlug: "luxesupply",
     createdByEmail: opts.createdByEmail,
     createdByDisplayName: opts.createdByDisplayName,
     clientName: takeText(opts.clientName),
+    linkedBuyerId: linkedBuyerId || null,
     invoiceDate: takeText(opts.invoiceDate),
     note: takeText(opts.note).slice(0, 500),
     items,
@@ -679,6 +687,16 @@ export async function linkCurationShareToBuyer(token: string, buyerId: string): 
   const clean = takeText(buyerId);
   if (!clean) throw new Error("Missing buyer.");
   await found.ref.update({ linkedBuyerId: clean, updatedAt: new Date() });
+}
+
+/** Record that staff emailed the buyer asking for call times ("Request a call"). */
+export async function markCurationCallRequested(token: string): Promise<void> {
+  const found = await loadDoc(token);
+  if (!found) throw new Error("This curation link is unavailable.");
+  await found.ref.update({
+    callRequestedAt: new Date(),
+    updatedAt: new Date(),
+  });
 }
 
 /** Staff-only: attach a (newly-created, or existing) order request to this curation link. */

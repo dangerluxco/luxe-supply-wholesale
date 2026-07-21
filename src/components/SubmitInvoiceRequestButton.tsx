@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { submitInvoiceRequest } from "@/lib/actions/buyer-firestore";
 import { DEFAULT_SHIPPING_METHOD_ID } from "@/lib/constants";
+import { PressableButton } from "@/components/PressableButton";
 
 export function SubmitInvoiceRequestButton({
   disabled,
@@ -18,8 +19,10 @@ export function SubmitInvoiceRequestButton({
 
   return (
     <div className="flex flex-col gap-2">
-      <button
-        disabled={pending || disabled}
+      <PressableButton
+        pending={pending}
+        pendingLabel="Submitting…"
+        disabled={disabled}
         onClick={() =>
           start(async () => {
             const res = await submitInvoiceRequest({ shippingMethodId });
@@ -33,8 +36,8 @@ export function SubmitInvoiceRequestButton({
         }
         className="flex h-11 w-full items-center justify-center rounded-chip bg-ink text-[12px] font-semibold uppercase tracking-[0.14em] text-ground disabled:opacity-60"
       >
-        {pending ? "Submitting…" : "Submit for review"}
-      </button>
+        Submit for review
+      </PressableButton>
       {error ? <span className="text-[12px] text-danger">{error}</span> : null}
     </div>
   );

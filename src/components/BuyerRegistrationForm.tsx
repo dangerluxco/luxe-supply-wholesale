@@ -10,7 +10,7 @@ const labelClass = "micro-badge text-[10px] tracking-[0.14em] text-muted";
 const fileClass =
   "block w-full rounded-chip border border-dashed border-border bg-ground px-3 py-3 text-[12px] text-secondary file:mr-3 file:rounded-chip file:border-0 file:bg-ink file:px-3 file:py-1.5 file:text-[10px] file:font-semibold file:uppercase file:tracking-[0.12em] file:text-ground";
 
-export function BuyerRegistrationForm() {
+export function BuyerRegistrationForm({ initialCode = "" }: { initialCode?: string }) {
   const [state, action, pending] = useActionState(submitBuyerRegistration, {} as {
     error?: string;
     ok?: boolean;
@@ -39,10 +39,27 @@ export function BuyerRegistrationForm() {
         <div className="micro-badge text-[10px] tracking-[0.14em] text-accent">WHOLESALE ACCESS</div>
         <h1 className="mt-2 text-[24px] font-semibold text-ink">Request to join</h1>
         <p className="mt-2 max-w-2xl text-[13px] text-secondary">
-          Submit your business details and verification documents. Our team reviews each
-          application before creating a storefront login.
+          Submit your invite code, business details, and verification documents. Our team reviews
+          each application before creating a storefront login.
         </p>
       </div>
+
+      <section className="rounded-card border border-border bg-surface p-6">
+        <h2 className="text-[13px] font-semibold uppercase tracking-[0.12em] text-muted">
+          Invite code
+        </h2>
+        <label className="mt-4 flex max-w-md flex-col gap-1.5">
+          <span className={labelClass}>CODE *</span>
+          <input
+            name="inviteCode"
+            required
+            defaultValue={initialCode}
+            autoComplete="off"
+            className={`${fieldClass} font-mono uppercase tracking-[0.12em]`}
+            placeholder="XXXX-XXXX"
+          />
+        </label>
+      </section>
 
       <section className="rounded-card border border-border bg-surface p-6">
         <h2 className="text-[13px] font-semibold uppercase tracking-[0.12em] text-muted">
@@ -158,6 +175,7 @@ export function BuyerRegistrationForm() {
         <button
           type="submit"
           disabled={pending}
+          aria-busy={pending || undefined}
           className="h-11 rounded-chip bg-ink px-5 text-[11px] font-semibold uppercase tracking-[0.14em] text-ground disabled:opacity-60"
         >
           {pending ? "Submitting…" : "Submit application"}

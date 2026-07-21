@@ -2,20 +2,20 @@
 
 import { useState, useTransition } from "react";
 import { CopyRow } from "@/components/CopyRow";
+import { PressableButton } from "@/components/PressableButton";
+import {
+  BookCallEventModal,
+  bookCallDraftFromApi,
+  type BookCallEventDraft,
+} from "@/components/BookCallEventModal";
 
 type BookCallResult = { curationUrl: string; sellerCurationUrl: string };
 
 /**
- * Spins up a fresh curation link from this order request's items, then opens a
- * pre-filled Google Calendar event (buyer as guest; both the buyer-facing link
- * and the seller's own curation manager link included in the description). The
- * call is usually scheduled for later, so only Calendar opens right away — the
- * seller curation manager link stays available here and in the invite itself,
- * ready whenever the rep is ready to run the call.
- *
- * The most recent links are persisted on the order request itself (server-side),
- * so they're still here — not just in this component's state — after navigating
- * away and back.
+ * Spins up a fresh curation link from this order request's items, then opens an
+ * in-portal event editor (date/time, title, description, attendees, notes).
+ * Confirm opens a pre-filled Google Calendar template — Calendar API create
+ * isn't wired (staff OAuth is sign-in only).
  */
 export function BookCallButton({
   quoteId,
@@ -35,43 +35,49 @@ export function BookCallButton({
       ? { curationUrl: initialCurationUrl, sellerCurationUrl: initialSellerCurationUrl }
       : null,
   );
+  const [bookDraft, setBookDraft] = useState<BookCallEventDraft | null>(null);
+
+  function openBookModal() {
+    setError(null);
+    start(async () => {
+      const res = await fetch(`/api/staff/quotes/${quoteId}/book-call`, {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        curationUrl?: string;
+        sellerCurationUrl?: string;
+        event?: {
+          title: string;
+          details: string;
+          guestEmails: string[];
+          startIso: string;
+          durationMinutes: number;
+        };
+      };
+      if (!res.ok || data.error || !data.sellerCurationUrl || !data.event) {
+        setError(data.error || "Could not prepare the call.");
+        return;
+      }
+      setResult({
+        curationUrl: data.curationUrl || "",
+        sellerCurationUrl: data.sellerCurationUrl,
+      });
+      setBookDraft(bookCallDraftFromApi(data.event));
+    });
+  }
 
   return (
     <div>
-      <button
-        type="button"
-        disabled={pending}
-        onClick={() => {
-          setError(null);
-          start(async () => {
-            const res = await fetch(`/api/staff/quotes/${quoteId}/book-call`, {
-              method: "POST",
-              credentials: "same-origin",
-            });
-            const data = (await res.json().catch(() => ({}))) as {
-              error?: string;
-              calendarUrl?: string;
-              curationUrl?: string;
-              sellerCurationUrl?: string;
-            };
-            if (!res.ok || data.error || !data.calendarUrl || !data.sellerCurationUrl) {
-              setError(data.error || "Could not prepare the call.");
-              return;
-            }
-            setResult({
-              curationUrl: data.curationUrl || "",
-              sellerCurationUrl: data.sellerCurationUrl,
-            });
-            // Only Calendar opens automatically — the call is usually for later, so
-            // don't force the seller curation manager open now. It's linked inside
-            // the invite itself and shown below, ready for whenever the call happens.
-            window.open(data.calendarUrl, "_blank", "noopener,noreferrer");
-          });
-        }}
-        className="inline-flex h-9 items-center gap-1.5 rounded-chip bg-ink px-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-ground transition disabled:opacity-60"
+      <PressableButton
+        pending={pending}
+        pendingLabel="Preparing…"
+        onClick={openBookModal}
+        className="inline-flex h-9 items-center gap-1.5 rounded-chip bg-ink px-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-ground disabled:opacity-60"
       >
-        {pending ? "Preparing…" : result ? "Book another call" : "Book call"}
-      </button>
+        {result ? "Book another call" : "Book call"}
+      </PressableButton>
       {error ? <p className="mt-2 text-[12px] text-danger">{error}</p> : null}
       {result ? (
         <div className="mt-2 space-y-1.5 text-[11px] text-muted">
@@ -105,6 +111,18 @@ export function BookCallButton({
             </>
           ) : null}
         </div>
+      ) : null}
+
+      {bookDraft ? (
+        <BookCallEventModal
+          draft={bookDraft}
+          onChange={setBookDraft}
+          onCancel={() => setBookDraft(null)}
+          onConfirm={(calendarUrl) => {
+            setBookDraft(null);
+            window.open(calendarUrl, "_blank", "noopener,noreferrer");
+          }}
+        />
       ) : null}
     </div>
   );

@@ -9,6 +9,7 @@ import {
   LEAD_STATUSES,
   type LeadStatus,
 } from "@/lib/firestore/leads";
+import { featureDisabledResponse } from "@/lib/feature-gates";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,8 @@ export async function GET(_request: Request, ctx: { params: Promise<{ id: string
   if (!session) {
     return NextResponse.json({ error: "Staff session required." }, { status: 401 });
   }
+  const disabled = await featureDisabledResponse("leads");
+  if (disabled) return disabled;
   const { id } = await ctx.params;
   try {
     const lead = await getLeadById(id);
@@ -49,6 +52,8 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
   if (!session) {
     return NextResponse.json({ error: "Staff session required." }, { status: 401 });
   }
+  const disabled = await featureDisabledResponse("leads");
+  if (disabled) return disabled;
   const { id } = await ctx.params;
   const body = (await request.json().catch(() => ({}))) as PatchBody;
   const staff = { email: session.email, name: session.name };

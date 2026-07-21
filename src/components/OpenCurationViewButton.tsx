@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { PressableButton } from "@/components/PressableButton";
 
 /**
  * Direct "open curation view" access from an order — no Google Calendar popup,
@@ -23,9 +24,9 @@ export function OpenCurationViewButton({
 
   return (
     <div>
-      <button
-        type="button"
-        disabled={pending}
+      <PressableButton
+        pending={pending}
+        pendingLabel="Opening…"
         onClick={() => {
           setError(null);
           start(async () => {
@@ -45,10 +46,10 @@ export function OpenCurationViewButton({
             window.open(data.sellerCurationUrl, "_blank", "noopener,noreferrer");
           });
         }}
-        className="inline-flex h-9 items-center gap-1.5 rounded-chip border border-border bg-surface px-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink transition hover:border-accent disabled:opacity-60"
+        className="inline-flex h-9 items-center gap-1.5 rounded-chip border border-border bg-surface px-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink hover:border-accent disabled:opacity-60"
       >
-        {pending ? "Opening…" : "Open curation view →"}
-      </button>
+        Open curation view →
+      </PressableButton>
       {error ? <p className="mt-2 text-[12px] text-danger">{error}</p> : null}
       {sellerCurationUrl ? (
         <p className="mt-2 text-[11px] text-muted">

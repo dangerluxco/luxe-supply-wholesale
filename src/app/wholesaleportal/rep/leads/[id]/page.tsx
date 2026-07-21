@@ -4,12 +4,14 @@ import { getSession } from "@/lib/auth";
 import { ROLE } from "@/lib/constants";
 import { getLeadById, listLeadActivities } from "@/lib/firestore/leads";
 import { LeadDetail } from "@/components/LeadDetail";
+import { requirePortalFeature } from "@/lib/require-feature";
 
 export const dynamic = "force-dynamic";
 
 export default async function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await getSession();
   if (!session || session.role === ROLE.BUYER) redirect("/wholesaleportal/sign-in");
+  await requirePortalFeature("leads");
 
   const { id } = await params;
   const lead = await getLeadById(id);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { PressableButton } from "@/components/PressableButton";
 
 /** Mark paid via fetch API — no `"use server"` (soft-nav safe). */
 export function InvoiceMarkPaidButton({ invoiceId }: { invoiceId: string }) {
@@ -9,9 +10,9 @@ export function InvoiceMarkPaidButton({ invoiceId }: { invoiceId: string }) {
 
   return (
     <div>
-      <button
-        type="button"
-        disabled={pending}
+      <PressableButton
+        pending={pending}
+        pendingLabel="Saving…"
         onClick={() => {
           setError(null);
           start(async () => {
@@ -27,10 +28,10 @@ export function InvoiceMarkPaidButton({ invoiceId }: { invoiceId: string }) {
             window.location.reload();
           });
         }}
-        className="h-9 rounded-chip border border-border px-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-secondary transition hover:border-accent hover:text-ink disabled:opacity-60"
+        className="h-9 rounded-chip border border-border px-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-secondary hover:border-accent hover:text-ink disabled:opacity-60"
       >
-        {pending ? "Saving…" : "Mark paid"}
-      </button>
+        Mark paid
+      </PressableButton>
       {error ? <p className="mt-2 text-[12px] text-danger">{error}</p> : null}
     </div>
   );

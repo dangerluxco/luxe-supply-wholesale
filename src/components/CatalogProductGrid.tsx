@@ -8,6 +8,8 @@ import { addHoldAlertAction, removeHoldAlertAction } from "@/lib/actions/wishlis
 import { PRODUCT_STATUS } from "@/lib/constants";
 import { clsx } from "@/lib/clsx";
 import { money } from "@/lib/format";
+import { useCartBadge } from "@/components/CartBadgeProvider";
+import { CheckoutNavButton } from "@/components/CheckoutNavButton";
 import { useStorefrontAvailability } from "@/components/StorefrontAvailability";
 
 const STORAGE_KEY = "luxe-wholesale-catalog-view";
@@ -17,6 +19,8 @@ type AddCartResult = {
   added?: number;
   skipped?: number;
   ok?: boolean;
+  cartCount?: number;
+  cartTotal?: number;
 };
 
 async function postAddToCart(skus: string[]): Promise<AddCartResult> {
@@ -48,6 +52,7 @@ export function CatalogProductGrid({
 }) {
   const router = useRouter();
   const { isBundled } = useStorefrontAvailability();
+  const { cartCount: badgeCount, cartTotal: badgeTotal, setCartBadge } = useCartBadge();
   const [layout, setLayout] = useState<"grid" | "list">("grid");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [pending, start] = useTransition();
@@ -192,12 +197,16 @@ export function CatalogProductGrid({
         setMessage({ text: res.error, kind: "error" });
         return;
       }
+      if (typeof res.cartCount === "number") {
+        setCartBadge({ cartCount: res.cartCount, cartTotal: res.cartTotal ?? 0 });
+      }
       setMessage(
         res.skipped
           ? { text: "Already held — could not add.", kind: "error" }
           : { text: "Added to your order.", kind: "success", showCheckout: true },
       );
-      router.refresh();
+      // Soft refresh in background so product "in cart" state catches up — don't block UI.
+      void router.refresh();
     });
   }
 
@@ -213,6 +222,9 @@ export function CatalogProductGrid({
         setMessage({ text: res.error, kind: "error" });
         return;
       }
+      if (typeof res.cartCount === "number") {
+        setCartBadge({ cartCount: res.cartCount, cartTotal: res.cartTotal ?? 0 });
+      }
       setMessage({
         text: res.skipped
           ? `Added ${res.added ?? 0} · ${res.skipped} skipped`
@@ -221,7 +233,7 @@ export function CatalogProductGrid({
         showCheckout: true,
       });
       clearSelection();
-      router.refresh();
+      void router.refresh();
     });
   }
 
@@ -320,6 +332,7 @@ export function CatalogProductGrid({
             <button
               type="button"
               disabled={pending}
+              aria-busy={pending || undefined}
               onClick={addSelected}
               className="rounded-chip bg-ink px-4 py-2 text-[11.5px] font-semibold uppercase tracking-[0.12em] text-ground disabled:opacity-60"
             >
@@ -334,12 +347,13 @@ export function CatalogProductGrid({
             <div className="mx-auto mt-2 flex max-w-6xl items-center gap-3 text-[12px] text-secondary">
               <span>{message.text}</span>
               {message.showCheckout ? (
-                <Link
-                  href="/wholesale/checkout"
-                  className="rounded-chip bg-ink px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.1em] text-ground transition hover:opacity-90"
-                >
-                  Checkout →
-                </Link>
+                <CheckoutNavButton
+                  cartCount={badgeCount}
+                  cartTotal={badgeTotal}
+                  compact
+                  label="Checkout →"
+                  className="h-8 px-3 text-[11px]"
+                />
               ) : null}
             </div>
           ) : null}
@@ -348,12 +362,13 @@ export function CatalogProductGrid({
         <div className="fixed bottom-6 right-6 z-40 flex items-center gap-3 rounded-chip border border-border bg-surface px-4 py-2.5 text-[12px] text-secondary shadow-[0_12px_32px_-16px_rgba(22,22,26,0.35)]">
           <span>{message.text}</span>
           {message.showCheckout ? (
-            <Link
-              href="/wholesale/checkout"
-              className="rounded-chip bg-ink px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-ground transition hover:opacity-90"
-            >
-              Checkout →
-            </Link>
+            <CheckoutNavButton
+              cartCount={badgeCount}
+              cartTotal={badgeTotal}
+              compact
+              label="Checkout →"
+              className="h-8 px-3 text-[11px]"
+            />
           ) : null}
         </div>
       ) : null}

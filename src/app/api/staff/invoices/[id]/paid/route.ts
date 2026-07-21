@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireStaffSession } from "@/lib/staff-api-auth";
 import { FIRESTORE_INVOICE_STATUS } from "@/lib/constants";
 import { updateInvoiceStatus } from "@/lib/firestore/invoices";
+import { logAudit } from "@/lib/firestore/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,12 @@ export async function POST(
 
   try {
     await updateInvoiceStatus(invoiceId.trim(), FIRESTORE_INVOICE_STATUS.PAID, session.email);
+    await logAudit({
+      actor: session,
+      action: "invoice.paid",
+      entity: "invoice",
+      entityId: invoiceId.trim(),
+    });
     return NextResponse.json({ ok: true });
   } catch (err) {
     return NextResponse.json(

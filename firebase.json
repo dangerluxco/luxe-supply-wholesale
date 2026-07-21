@@ -102,6 +102,13 @@
             "serviceId": "luxe-wholesale-portal",
             "region": "us-central1"
           }
+        },
+        {
+          "source": "/apple-touch-icon.png",
+          "run": {
+            "serviceId": "luxe-wholesale-portal",
+            "region": "us-central1"
+          }
         }
       ],
       "headers": [
@@ -214,6 +221,13 @@
         },
         {
           "source": "/apple-icon.png",
+          "run": {
+            "serviceId": "luxe-wholesale-portal",
+            "region": "us-central1"
+          }
+        },
+        {
+          "source": "/apple-touch-icon.png",
           "run": {
             "serviceId": "luxe-wholesale-portal",
             "region": "us-central1"

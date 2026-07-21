@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireStaffSession } from "@/lib/staff-api-auth";
 import { markInvoiceShipped } from "@/lib/firestore/invoices";
+import { logAudit } from "@/lib/firestore/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,13 @@ export async function POST(
 
   try {
     await markInvoiceShipped(invoiceId.trim(), { carrier, trackingNumber }, session.email);
+    await logAudit({
+      actor: session,
+      action: "invoice.shipped",
+      entity: "invoice",
+      entityId: invoiceId.trim(),
+      payload: { carrier, trackingNumber },
+    });
     return NextResponse.json({ ok: true, message: "Marked shipped." });
   } catch (err) {
     return NextResponse.json(

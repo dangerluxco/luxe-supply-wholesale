@@ -14,6 +14,7 @@ import {
   type StaffPerformanceRow,
 } from "@/lib/performance";
 import { PerformanceDashboard } from "@/components/PerformanceDashboard";
+import { requirePortalFeature } from "@/lib/require-feature";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
   if (session.role !== ROLE.MANAGER) {
     redirect("/wholesaleportal/rep");
   }
+  await requirePortalFeature("performance");
 
   const sp = await searchParams;
   const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";

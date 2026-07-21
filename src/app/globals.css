@@ -44,3 +44,31 @@ body {
     text-transform: uppercase;
   }
 }
+
+/*
+ * Shared button / CTA press feedback.
+ * - :active → immediate pressed feel before React pending state
+ * - [aria-busy] → held dim/scale while async or navigation is in flight
+ * - .pressable → same for <a> / Link CTAs
+ * - .no-press → opt out (icon-only toggles, custom motion, etc.)
+ */
+@layer base {
+  button:where(:not(.no-press)),
+  .pressable {
+    transition-property: transform, opacity;
+    transition-duration: 120ms;
+    transition-timing-function: ease;
+  }
+
+  button:where(:not(.no-press)):not(:disabled):not([aria-busy="true"]):active,
+  .pressable:not([aria-busy="true"]):not([aria-disabled="true"]):active {
+    transform: scale(0.98);
+    opacity: 0.8;
+  }
+
+  button:where(:not(.no-press))[aria-busy="true"],
+  .pressable[aria-busy="true"] {
+    transform: scale(0.98);
+    opacity: 0.7;
+  }
+}

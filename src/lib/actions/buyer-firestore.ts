@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getSession } from "@/lib/auth";
+import { getSessionForArea } from "@/lib/auth";
 import {
   cartHoldSkus,
   createBuyerQuote,
@@ -16,22 +16,26 @@ import { notifyStaffOfInvoiceRequest } from "@/lib/notify";
 import { resolveShippingOption } from "@/lib/constants";
 import { addSkusToCartForBuyer } from "@/lib/cart/addSkusToCart";
 
+async function requireBuyer() {
+  const session = await getSessionForArea("buyer");
+  if (!session || session.role !== "BUYER" || session.source !== "firestore") return null;
+  return session;
+}
+
 export async function addSkuToCart(sku: string) {
   return addSkusToCart([sku]);
 }
 
 /** @deprecated Prefer POST /api/buyer/cart/add from client components. */
 export async function addSkusToCart(skus: string[]) {
-  const session = await getSession();
-  if (!session || session.role !== "BUYER" || session.source !== "firestore") {
-    return { error: "Sign in required." };
-  }
+  const session = await requireBuyer();
+  if (!session) return { error: "Sign in required." };
   return addSkusToCartForBuyer(session, skus);
 }
 
 export async function removeSkuFromCart(sku: string) {
-  const session = await getSession();
-  if (!session || session.role !== "BUYER") return;
+  const session = await requireBuyer();
+  if (!session) return;
 
   const cart = await getBuyerCart(session.id);
   const next = cart.filter((i) => i.sku !== sku);
@@ -58,8 +62,8 @@ export async function submitInvoiceRequest(opts?: {
   message?: string;
   shippingMethodId?: string;
 }) {
-  const session = await getSession();
-  if (!session || session.role !== "BUYER" || session.source !== "firestore") {
+  const session = await requireBuyer();
+  if (!session) {
     return { error: "Sign in required." };
   }
 

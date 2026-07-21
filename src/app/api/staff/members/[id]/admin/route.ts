@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { ROLE } from "@/lib/constants";
 import { updateStaff } from "@/lib/firestore/staff";
+import { logAudit } from "@/lib/firestore/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,13 @@ export async function POST(
     const staff = await updateStaff(staffId.trim(), {
       isAdmin,
       updatedBy: session.email,
+    });
+    await logAudit({
+      actor: session,
+      action: "staff.admin",
+      entity: "staff",
+      entityId: staff.id,
+      payload: { isAdmin: staff.isAdmin },
     });
     return NextResponse.json({
       ok: true,

@@ -111,7 +111,15 @@ export default async function ClientDetailPage({
             </div>
           </div>
         </div>
-        <div className="flex shrink-0 gap-2">
+        <div className="flex shrink-0 flex-wrap gap-2">
+          {/* Plain <a> (not next/link): staff console uses hard navigation to avoid a Next 15 soft-nav webpack bug. */}
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+          <a
+            href={`/wholesaleportal/rep/curation?buyerId=${encodeURIComponent(buyer.id)}`}
+            className="inline-flex h-9 items-center rounded-chip bg-accent px-3.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-ink transition hover:opacity-90"
+          >
+            + New order request
+          </a>
           <a
             href={buyer.email ? `mailto:${buyer.email}` : undefined}
             className="inline-flex h-9 items-center rounded-chip border border-border px-3.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-ink transition hover:border-accent"

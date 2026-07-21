@@ -40,6 +40,7 @@ type CurationShare = {
   createdAt: string | null;
   quoteId: string | null;
   linkedBuyerId: string | null;
+  callRequestedAt: string | null;
 };
 
 type ResolvedPreview = {
@@ -707,6 +708,63 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
     });
   }
 
+  const approvedCount = share.items.filter((it) => it.decision === "approve").length;
+  const pricedCount = share.items.filter((it) => Number(it.price) > 0).length;
+  const canCreateOrderRequest =
+    !share.quoteId &&
+    !share.revoked &&
+    !!share.linkedBuyerId &&
+    share.items.length > 0 &&
+    (share.sessionEnded ? approvedCount > 0 : pricedCount > 0);
+
+  async function createOrderRequest() {
+    setError(null);
+    if (!share.linkedBuyerId) {
+      setError("Link a portal buyer first (pick one under Client call), then create the order request.");
+      return;
+    }
+    if (share.sessionEnded && approvedCount === 0) {
+      setError("No approved items to create an order from.");
+      return;
+    }
+    if (!share.sessionEnded && pricedCount === 0) {
+      setError("Add at least one priced item before creating an order request.");
+      return;
+    }
+
+    const itemLabel = share.sessionEnded
+      ? `${approvedCount} approved item${approvedCount === 1 ? "" : "s"}`
+      : `${pricedCount} priced item${pricedCount === 1 ? "" : "s"}`;
+    if (
+      !window.confirm(
+        `Create an order request from the ${itemLabel} for ${share.clientName || "this client"}?`,
+      )
+    ) {
+      return;
+    }
+
+    start(async () => {
+      const res = await fetch(`/api/staff/curation/${share.token}/create-order`, {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        quoteId?: string;
+        quoteUrl?: string;
+        itemCount?: number;
+      };
+      if (!res.ok || data.error || !data.quoteId) {
+        setError(data.error || "Could not create the order request.");
+        return;
+      }
+      setShare((prev) => ({ ...prev, quoteId: data.quoteId! }));
+      setMessage(
+        `Order request created with ${data.itemCount ?? 0} item${data.itemCount === 1 ? "" : "s"}.`,
+      );
+    });
+  }
+
   async function createOrderFromApprovals() {
     const res = await fetch(`/api/staff/curation/${share.token}/create-order`, {
       method: "POST",
@@ -921,7 +979,63 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
       {message ? <p className="text-[12.5px] text-[#4E9A6A]">{message}</p> : null}
 
       {!share.quoteId && !share.revoked ? (
-        <CurationBookCall token={share.token} hasLinkedBuyer={!!share.linkedBuyerId} />
+        <CurationBookCall
+          token={share.token}
+          linkedBuyerId={share.linkedBuyerId}
+          initialCallRequestedAt={share.callRequestedAt}
+        />
+      ) : null}
+
+      {!share.quoteId && !share.revoked ? (
+        <div className="rounded-card border border-border bg-surface p-6">
+          <div className="micro-badge text-[10px] tracking-[0.14em] text-accent">
+            ORDER REQUEST
+          </div>
+          <p className="mt-1 text-[12.5px] text-secondary">
+            {share.sessionEnded
+              ? "Turn approved selections into an order request for the linked buyer."
+              : "Save this curation list as an order request for the linked buyer — same as Create order request on Curate Order."}
+          </p>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              disabled={pending || !canCreateOrderRequest}
+              onClick={createOrderRequest}
+              title={
+                !share.linkedBuyerId
+                  ? "Link a portal buyer under Client call first."
+                  : share.sessionEnded && approvedCount === 0
+                    ? "Approve at least one item before creating an order request."
+                    : !share.sessionEnded && pricedCount === 0
+                      ? "Price at least one item above $0 first."
+                      : "Create an order request from this curation."
+              }
+              className="h-11 rounded-chip bg-accent px-6 text-[11.5px] font-semibold uppercase tracking-[0.14em] text-ink disabled:opacity-60"
+            >
+              {pending ? "Creating…" : "Create order request"}
+            </button>
+            {!share.linkedBuyerId ? (
+              <span className="text-[12px] text-muted">
+                Link a portal buyer under Client call first (potential clients can&apos;t become
+                order requests yet).
+              </span>
+            ) : share.sessionEnded && approvedCount === 0 ? (
+              <span className="text-[12px] text-muted">
+                Approve at least one item to create an order request.
+              </span>
+            ) : !canCreateOrderRequest ? (
+              <span className="text-[12px] text-muted">
+                Price at least one item above $0 to create an order request.
+              </span>
+            ) : (
+              <span className="text-[12px] text-secondary">
+                {share.sessionEnded
+                  ? `Creates from ${approvedCount} approved item${approvedCount === 1 ? "" : "s"}.`
+                  : `Creates from ${pricedCount} priced item${pricedCount === 1 ? "" : "s"}.`}
+              </span>
+            )}
+          </div>
+        </div>
       ) : null}
 
       {/* 4. Live add (on the call) */}
@@ -966,12 +1080,22 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
                 ✓{stats.approve} approved · ~{stats.maybe} maybe · ✕{stats.decline} declined ·{" "}
                 {stats.pending} pending · {money(Math.round(stats.cart))} cart
               </p>
-              <a
-                href={`/api/staff/curation/${share.token}/export`}
-                className="mt-3 inline-block h-9 rounded-chip bg-ink px-4 text-[11px] font-semibold uppercase tracking-[0.14em] leading-9 text-ground"
-              >
-                Export final CSV
-              </a>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {share.quoteId ? (
+                  <a
+                    href={`/wholesaleportal/rep/quotes/${share.quoteId}`}
+                    className="inline-block h-9 rounded-chip border border-border px-4 text-[11px] font-semibold uppercase tracking-[0.14em] leading-9 text-ink"
+                  >
+                    Open order request
+                  </a>
+                ) : null}
+                <a
+                  href={`/api/staff/curation/${share.token}/export`}
+                  className="inline-block h-9 rounded-chip bg-ink px-4 text-[11px] font-semibold uppercase tracking-[0.14em] leading-9 text-ground"
+                >
+                  Export final CSV
+                </a>
+              </div>
             </div>
           ) : (
             <>

@@ -63,13 +63,32 @@ export const DEFAULT_PAYMENT_INSTRUCTIONS = [
  * (editable on staff Settings). Pure pdf-lib: no runtime font/file dependencies,
  * so it's safe in the Cloud Run standalone build.
  */
+export type InvoicePdfLetterhead = {
+  brandName?: string;
+  legalName?: string;
+  tagline?: string;
+  taxId?: string;
+};
+
 export async function renderInvoicePdf(
   inv: PortalInvoice,
-  opts: { statusLabel: string; paymentInstructions?: string | null },
+  opts: {
+    statusLabel: string;
+    paymentInstructions?: string | null;
+    letterhead?: InvoicePdfLetterhead | null;
+  },
 ): Promise<Uint8Array> {
+  const brandName = (opts.letterhead?.brandName || "Luxe Supply").trim() || "Luxe Supply";
+  const legalName =
+    (opts.letterhead?.legalName || "Luxe Supply Corporation").trim() || "Luxe Supply Corporation";
+  const tagline =
+    (opts.letterhead?.tagline || "").trim() ||
+    `${legalName.toUpperCase()}  ·  HELP@LUXESUPPLY.CO`;
+  const brandMark = brandName.replace(/\*/g, "").toUpperCase().slice(0, 28);
+
   const doc = await PDFDocument.create();
-  doc.setTitle(`${inv.invoiceNumber} — Luxe Supply Co.`);
-  doc.setAuthor("Luxe Supply Corporation");
+  doc.setTitle(`${inv.invoiceNumber} — ${brandName}`);
+  doc.setAuthor(legalName);
 
   const helv = await doc.embedFont(StandardFonts.Helvetica);
   const helvBold = await doc.embedFont(StandardFonts.HelveticaBold);
@@ -82,15 +101,15 @@ export async function renderInvoicePdf(
   page.drawRectangle({ x: 0, y: PAGE_H - HEADER_H, width: PAGE_W, height: HEADER_H, color: INK });
 
   const brandY = PAGE_H - 40;
-  page.drawText("LUXE SUPPLY", { x: MARGIN, y: brandY, size: 19, font: helvBold, color: WHITE });
+  page.drawText(brandMark, { x: MARGIN, y: brandY, size: 19, font: helvBold, color: WHITE });
   page.drawText("*", {
-    x: MARGIN + helvBold.widthOfTextAtSize("LUXE SUPPLY", 19) + 2,
+    x: MARGIN + helvBold.widthOfTextAtSize(brandMark, 19) + 2,
     y: brandY,
     size: 19,
     font: helvBold,
     color: GOLD,
   });
-  page.drawText("LUXE SUPPLY CORPORATION  ·  NEW YORK  ·  TOKYO  ·  HELP@LUXESUPPLY.CO", {
+  page.drawText(tagline.slice(0, 90), {
     x: MARGIN,
     y: PAGE_H - 62,
     size: 7,
@@ -147,6 +166,9 @@ export async function renderInvoicePdf(
     ["ISSUED", fmtDate(inv.issuedAt)],
     ["DUE", fmtDate(inv.dueDate)],
     ["TERMS", inv.terms || "—"],
+    ...(opts.letterhead?.taxId
+      ? ([["TAX ID", opts.letterhead.taxId]] as Array<[string, string]>)
+      : []),
     ...(inv.paidAt ? ([["PAID", fmtDate(inv.paidAt)]] as Array<[string, string]>) : []),
     ...(inv.fulfillmentStatus === "SHIPPED"
       ? ([

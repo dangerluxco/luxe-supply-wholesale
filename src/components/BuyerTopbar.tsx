@@ -5,7 +5,8 @@ import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Logo } from "./Logo";
 import { clsx } from "@/lib/clsx";
-import { money } from "@/lib/format";
+import { useCartBadge } from "@/components/CartBadgeProvider";
+import { CheckoutNavButton } from "@/components/CheckoutNavButton";
 import { useStorefrontAvailability } from "@/components/StorefrontAvailability";
 import { SearchIcon } from "@/components/icons";
 
@@ -23,20 +24,17 @@ const BUYER_NAV = [
 
 export function BuyerTopbar({
   user,
-  cartCount,
-  cartTotal = 0,
   wishlistCount = 0,
   index,
 }: {
   user: { name: string; initials: string } | null;
-  cartCount: number;
-  cartTotal?: number;
   wishlistCount?: number;
   index: IndexItem[];
 }) {
   const pathname = usePathname();
   const router = useRouter();
   const { isBundled } = useStorefrontAvailability();
+  const { cartCount, cartTotal } = useCartBadge();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const signedIn = !!user;
@@ -118,20 +116,12 @@ export function BuyerTopbar({
         {signedIn ? (
           <>
             {cartCount > 0 ? (
-              <Link
-                href="/wholesale/checkout"
-                className="flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-chip bg-ink px-3.5 text-[11.5px] font-semibold uppercase tracking-[0.12em] text-ground transition hover:opacity-90"
-              >
-                Checkout
-                <span className="font-mono text-[10.5px] font-normal normal-case tracking-normal text-ground/75">
-                  <span className="hidden sm:inline">
-                    ({cartCount} item{cartCount === 1 ? "" : "s"}, {money(cartTotal)})
-                  </span>
-                  <span className="sm:hidden">({cartCount})</span>
-                </span>
-              </Link>
+              <CheckoutNavButton cartCount={cartCount} cartTotal={cartTotal} />
             ) : (
-              <Link href="/wholesale/cart" className="relative flex items-center gap-1.5 text-[12px] text-secondary">
+              <Link
+                href="/wholesale/cart"
+                className="pressable relative flex items-center gap-1.5 text-[12px] text-secondary"
+              >
                 <span className="rounded-chip border border-border px-2.5 py-1.5">Cart</span>
               </Link>
             )}
@@ -143,7 +133,7 @@ export function BuyerTopbar({
             </div>
             <a
               href="/api/logout?area=buyer"
-              className="rounded-chip border border-border px-2.5 py-1.5 text-[11px] text-secondary transition hover:border-accent hover:text-ink"
+              className="pressable rounded-chip border border-border px-2.5 py-1.5 text-[11px] text-secondary hover:border-accent hover:text-ink"
             >
               Sign out
             </a>
@@ -151,7 +141,7 @@ export function BuyerTopbar({
         ) : (
           <Link
             href="/wholesale/sign-in"
-            className="rounded-chip bg-ink px-3.5 py-1.5 text-[11.5px] font-semibold uppercase tracking-[0.12em] text-ground transition hover:opacity-90"
+            className="pressable rounded-chip bg-ink px-3.5 py-1.5 text-[11.5px] font-semibold uppercase tracking-[0.12em] text-ground hover:opacity-90"
           >
             Sign in
           </Link>

@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server";
 import { requireStaffSession } from "@/lib/staff-api-auth";
-import { listQuotes } from "@/lib/firestore/quotes";
+import { getBuyerById } from "@/lib/firestore/buyers";
+import {
+  createStaffQuote,
+  getQuoteById,
+  listQuotes,
+  updateQuoteItems,
+  type QuoteItemInput,
+} from "@/lib/firestore/quotes";
+import { staffPortalOrigin } from "@/lib/notify";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +27,14 @@ export type DashboardOrderRow = {
   status: string;
   claimedByName: string | null;
   createdAt: string | null;
+};
+
+type CreateBody = {
+  buyerId?: string;
+  items?: QuoteItemInput[];
+  /** When set, update this existing order request's items instead of creating another. */
+  quoteId?: string;
+  message?: string;
 };
 
 /** Lightweight, poll-friendly list of order requests for the live staff dashboard. */
@@ -57,6 +73,100 @@ export async function GET(request: Request) {
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Could not load orders." },
+      { status: 400 },
+    );
+  }
+}
+
+/**
+ * Staff-initiated order request from the Curate Order builder (client + priced
+ * draft items). Reuses createStaffQuote — same path as post-call create-order.
+ * Pass quoteId to refresh items on an in-progress session instead of duplicating.
+ */
+export async function POST(request: Request) {
+  const session = await requireStaffSession();
+  if (!session) {
+    return NextResponse.json({ error: "Staff session required." }, { status: 401 });
+  }
+
+  const body = (await request.json().catch(() => ({}))) as CreateBody;
+  const buyerId = String(body.buyerId || "").trim();
+  const existingQuoteId = String(body.quoteId || "").trim();
+  if (!Array.isArray(body.items) || !body.items.length) {
+    return NextResponse.json({ error: "Add at least one priced item." }, { status: 400 });
+  }
+
+  const items: QuoteItemInput[] = body.items.map((it) => ({
+    sku: String(it.sku || "").trim(),
+    title: String(it.title || ""),
+    brand: String(it.brand || ""),
+    quantity: 1,
+    price: Math.max(0, Number(it.price) || 0),
+    imageUrl: it.imageUrl ? String(it.imageUrl) : null,
+  }));
+  if (items.some((it) => !it.sku || !(it.price > 0))) {
+    return NextResponse.json(
+      { error: "Every item needs a SKU and a price above $0." },
+      { status: 400 },
+    );
+  }
+
+  try {
+    if (existingQuoteId) {
+      const existing = await getQuoteById(existingQuoteId);
+      if (!existing) {
+        return NextResponse.json({ error: "Order request not found." }, { status: 404 });
+      }
+      await updateQuoteItems(existingQuoteId, items, session.email);
+      return NextResponse.json({
+        ok: true,
+        quoteId: existingQuoteId,
+        quoteUrl: `${staffPortalOrigin()}/wholesaleportal/rep/quotes/${existingQuoteId}`,
+        itemCount: items.length,
+        updated: true,
+      });
+    }
+
+    if (!buyerId) {
+      return NextResponse.json(
+        { error: "Select an existing portal client to create an order request." },
+        { status: 400 },
+      );
+    }
+
+    const buyer = await getBuyerById(buyerId);
+    if (!buyer || buyer.status === "disabled") {
+      return NextResponse.json({ error: "Selected client was not found." }, { status: 400 });
+    }
+
+    const { id: quoteId } = await createStaffQuote({
+      buyer: {
+        id: buyer.id,
+        username: buyer.username,
+        displayName: buyer.displayName,
+        email: buyer.email,
+        company: buyer.company,
+        phone: buyer.phone,
+      },
+      items,
+      status: "contacted",
+      message:
+        String(body.message || "").trim() ||
+        `Created from Curate Order (${items.length} item${items.length === 1 ? "" : "s"}).`,
+      createdByEmail: session.email,
+      createdByDisplayName: session.name,
+    });
+
+    return NextResponse.json({
+      ok: true,
+      quoteId,
+      quoteUrl: `${staffPortalOrigin()}/wholesaleportal/rep/quotes/${quoteId}`,
+      itemCount: items.length,
+      updated: false,
+    });
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Could not create the order request." },
       { status: 400 },
     );
   }

@@ -7,7 +7,11 @@ import {
 } from "@/lib/firestore/quotes";
 import { createCurationShare } from "@/lib/firestore/curation";
 import { buyerStorefrontOrigin, staffPortalOrigin } from "@/lib/notify";
-import { buildGoogleCalendarUrl } from "@/lib/googleCalendar";
+import {
+  buildGoogleCalendarUrl,
+  defaultCallDurationMinutes,
+  defaultCallStart,
+} from "@/lib/googleCalendar";
 
 export const dynamic = "force-dynamic";
 
@@ -69,15 +73,37 @@ export async function POST(
       `Curation view for the call: ${curationUrl}`,
       `Seller curation manager: ${sellerCurationUrl}`,
       `Order request: ${quoteUrl}`,
-    ].filter((line): line is string => line != null);
+    ]
+      .filter((line): line is string => line != null)
+      .join("\n");
 
+    const title = `Call with ${buyerLabel} — Order #${quote.id}`;
+    const guestEmails = [
+      ...new Set([quote.customerEmail || "", session.email].filter(Boolean)),
+    ];
+    const start = defaultCallStart();
+    const durationMinutes = defaultCallDurationMinutes();
     const calendarUrl = buildGoogleCalendarUrl({
-      title: `Call with ${buyerLabel} — Order #${quote.id}`,
-      details: details.join("\n"),
-      guestEmail: quote.customerEmail || undefined,
+      title,
+      details,
+      guestEmails,
+      start,
+      durationMinutes,
     });
 
-    return NextResponse.json({ ok: true, calendarUrl, curationUrl, sellerCurationUrl });
+    return NextResponse.json({
+      ok: true,
+      calendarUrl,
+      curationUrl,
+      sellerCurationUrl,
+      event: {
+        title,
+        details,
+        guestEmails,
+        startIso: start.toISOString(),
+        durationMinutes,
+      },
+    });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Could not prepare the call." },

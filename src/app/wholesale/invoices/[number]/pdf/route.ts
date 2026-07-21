@@ -1,7 +1,7 @@
 import { getSession } from "@/lib/auth";
 import { ROLE } from "@/lib/constants";
 import { getInvoiceByNumber, displayInvoiceStatus } from "@/lib/firestore/invoices";
-import { getPaymentInstructions } from "@/lib/firestore/settings";
+import { loadInvoicePdfOptions } from "@/lib/invoice-letterhead";
 import { renderInvoicePdf } from "@/lib/invoicePdf";
 
 export const dynamic = "force-dynamic";
@@ -17,10 +17,14 @@ export async function GET(_req: Request, { params }: { params: Promise<{ number:
     return new Response("Not found", { status: 404 });
   }
 
-  const paymentInstructions = await getPaymentInstructions().catch(() => "");
+  const letter = await loadInvoicePdfOptions().catch(() => ({
+    paymentInstructions: "",
+    letterhead: null,
+  }));
   const pdf = await renderInvoicePdf(inv, {
     statusLabel: displayInvoiceStatus(inv),
-    paymentInstructions,
+    paymentInstructions: letter.paymentInstructions,
+    letterhead: letter.letterhead,
   });
 
   return new Response(Buffer.from(pdf), {

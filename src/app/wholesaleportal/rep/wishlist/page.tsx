@@ -1,10 +1,12 @@
 import { listHoldAlertsForStaff } from "@/lib/firestore/holdAlerts";
 import { EmptyState } from "@/components/EmptyState";
 import { fullDate } from "@/lib/format";
+import { requirePortalFeature } from "@/lib/require-feature";
 
 export const dynamic = "force-dynamic";
 
 export default async function StaffWishlistPage() {
+  await requirePortalFeature("wishlist");
   const alerts = await listHoldAlertsForStaff();
 
   return (

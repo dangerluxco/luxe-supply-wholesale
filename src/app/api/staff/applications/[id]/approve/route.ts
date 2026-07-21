@@ -6,6 +6,7 @@ import {
   markRegistrationApproved,
 } from "@/lib/firestore/registrationRequests";
 import { sendBuyerInviteEmail } from "@/lib/notify";
+import { logAudit } from "@/lib/firestore/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +44,14 @@ export async function POST(
       buyerId: buyer.id,
       temporaryPassword,
       reviewNote: body.reviewNote,
+    });
+
+    await logAudit({
+      actor: session,
+      action: "application.approve",
+      entity: "application",
+      entityId: app.id,
+      payload: { buyerId: buyer.id, email: app.email },
     });
 
     let emailSent = false;

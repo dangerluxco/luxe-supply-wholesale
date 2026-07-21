@@ -44,12 +44,13 @@ const ICONS: Record<RepNavIconKey, (props: { className?: string }) => React.Reac
 export function RepSidebar({
   user,
   nav,
+  isManager = false,
 }: {
   user: { name: string; initials: string };
   nav: RepNavItem[];
+  isManager?: boolean;
 }) {
   const pathname = usePathname();
-  const isManager = nav.some((n) => n.href === "/wholesaleportal/rep/staff");
 
   function isActive(href: string) {
     if (href === "/wholesaleportal/rep") {
@@ -115,7 +116,7 @@ export function RepSidebar({
         {/* Plain <a> + GET logout: hard-nav friendly; never leaves you on /api/logout. */}
         <a
           href="/api/logout?area=staff"
-          className="block w-full rounded-chip border border-white/20 px-2.5 py-1.5 text-center text-[11px] text-white/60 transition hover:border-accent hover:text-ground"
+          className="pressable block w-full rounded-chip border border-white/20 px-2.5 py-1.5 text-center text-[11px] text-white/60 hover:border-accent hover:text-ground"
         >
           Sign out
         </a>

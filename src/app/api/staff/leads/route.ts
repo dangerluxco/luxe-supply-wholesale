@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireStaffSession } from "@/lib/staff-api-auth";
 import { createLead, listLeads, autoRouteLead, type LeadStatus } from "@/lib/firestore/leads";
 import { listStaff } from "@/lib/firestore/staff";
+import { featureDisabledResponse } from "@/lib/feature-gates";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,8 @@ export async function GET(request: Request) {
   if (!session) {
     return NextResponse.json({ error: "Staff session required." }, { status: 401 });
   }
+  const disabled = await featureDisabledResponse("leads");
+  if (disabled) return disabled;
 
   const url = new URL(request.url);
   const status = (url.searchParams.get("status") || "all") as LeadStatus | "all";
@@ -46,6 +49,8 @@ export async function POST(request: Request) {
   if (!session) {
     return NextResponse.json({ error: "Staff session required." }, { status: 401 });
   }
+  const disabled = await featureDisabledResponse("leads");
+  if (disabled) return disabled;
 
   const body = (await request.json().catch(() => ({}))) as CreateBody;
   const company = String(body.company || "").trim();

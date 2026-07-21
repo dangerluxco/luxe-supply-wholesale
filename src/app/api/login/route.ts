@@ -13,6 +13,7 @@ import {
 import { authenticateStaff, staffToAppRole } from "@/lib/firestore/staff";
 import { prisma } from "@/lib/db";
 import { formField } from "@/lib/form";
+import { staffPostLoginPath } from "@/lib/staff-totp-gate";
 
 export const dynamic = "force-dynamic";
 
@@ -55,7 +56,12 @@ export async function POST(request: Request) {
 
   if (staffOk?.ok) {
     const role = staffToAppRole(staffOk.staff);
-    const res = loginRedirect(homeForRole(role), request);
+    const dest = staffPostLoginPath({
+      role,
+      totpEnabled: staffOk.staff.totpEnabled,
+      home: homeForRole(role),
+    });
+    const res = loginRedirect(dest, request);
     res.cookies.set(
       SESSION_COOKIE,
       withAreaSession(

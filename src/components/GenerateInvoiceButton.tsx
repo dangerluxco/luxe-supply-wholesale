@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { PressableButton } from "@/components/PressableButton";
 
 /**
  * Generate invoice via API — no `"use server"` imports (soft-nav safe).
@@ -17,9 +18,10 @@ export function GenerateInvoiceButton({
 
   return (
     <div>
-      <button
-        type="button"
-        disabled={disabled || pending}
+      <PressableButton
+        pending={pending}
+        pendingLabel="Generating…"
+        disabled={disabled}
         onClick={() => {
           setError(null);
           start(async () => {
@@ -40,10 +42,10 @@ export function GenerateInvoiceButton({
             }
           });
         }}
-        className="h-9 rounded-chip bg-ink px-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-ground transition disabled:opacity-60"
+        className="h-9 rounded-chip bg-ink px-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-ground disabled:opacity-60"
       >
-        {pending ? "Generating…" : "Generate invoice"}
-      </button>
+        Generate invoice
+      </PressableButton>
       {error ? <p className="mt-2 text-[12px] text-danger">{error}</p> : null}
     </div>
   );

@@ -1,24 +1,29 @@
 import { NextResponse } from "next/server";
 import { requireStaffSession } from "@/lib/staff-api-auth";
 import { getQuoteById, markCallRequested } from "@/lib/firestore/quotes";
-import { sendCallRequestEmail } from "@/lib/notify";
+import { buyerStorefrontOrigin, sendCallRequestEmail } from "@/lib/notify";
 import { isEmailConfigured } from "@/lib/email";
+import { quoteCallRequestDraft } from "@/lib/callRequestDraft";
 
 export const dynamic = "force-dynamic";
 
 /**
  * "Request a call": emails the buyer asking for a few times that work (reply-to
- * the rep), the precursor to Book Call. Without SENDGRID_API_KEY (local dev),
- * falls back to a prefilled mailto: draft the rep sends from their own client —
- * either way the request is stamped on the quote so the card shows when it went out.
+ * the rep). Supports `{ preview: true }` for the draft modal, and optional
+ * `subject` / `body` overrides. Without SENDGRID_API_KEY, falls back to mailto.
  */
-export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await requireStaffSession();
   if (!session) {
     return NextResponse.json({ error: "Staff session required." }, { status: 401 });
   }
 
   const { id } = await params;
+  const body = (await request.json().catch(() => ({}))) as {
+    preview?: boolean;
+    subject?: string;
+    body?: string;
+  };
   const quote = await getQuoteById(id);
   if (!quote) return NextResponse.json({ error: "Order request not found." }, { status: 404 });
   if (!quote.customerEmail) {
@@ -31,6 +36,25 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   const customerName = quote.customerName || quote.buyerDisplayName || "";
   const orderTotal =
     quote.cartTotal != null ? Math.round(quote.cartTotal + (quote.shipping || 0)) : null;
+  const orderUrl = `${buyerStorefrontOrigin()}/wholesale/orders/${quote.id}`;
+  const draft = quoteCallRequestDraft({
+    customerName,
+    orderUrl,
+    orderTotal,
+    staffName: session.name,
+  });
+  const subject = String(body.subject || "").trim() || draft.subject;
+  const bodyText = String(body.body || "").trim() || draft.body;
+
+  if (body.preview) {
+    return NextResponse.json({
+      ok: true,
+      preview: true,
+      to: quote.customerEmail,
+      subject: draft.subject,
+      body: draft.body,
+    });
+  }
 
   try {
     if (isEmailConfigured()) {
@@ -42,6 +66,8 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
         orderTotal,
         staffName: session.name,
         staffEmail: session.email,
+        subject,
+        bodyText,
       });
       if (!sent) {
         return NextResponse.json(
@@ -54,19 +80,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     }
 
     // Dev / no SendGrid: hand back a prefilled draft instead.
-    const firstName = customerName.trim().split(/\s+/)[0] || "there";
-    const subject = "Let's schedule a call about your order — Luxe Supply Co.";
-    const body = [
-      `Hi ${firstName},`,
-      "",
-      `Thanks for your order request${orderTotal != null ? ` ($${orderTotal.toLocaleString("en-US")})` : ""}. We'd love to hop on a quick call to walk through the pieces together and finalize your order.`,
-      "",
-      "Just reply with a few times that work for you and we'll send over a calendar invite.",
-      "",
-      `${session.name}`,
-      "Luxe Supply Co.",
-    ].join("\n");
-    const mailto = `mailto:${encodeURIComponent(quote.customerEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    const mailto = `mailto:${encodeURIComponent(quote.customerEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyText)}`;
     await markCallRequested(quote.id);
     return NextResponse.json({ ok: true, sent: false, mailto, requestedAt: new Date().toISOString() });
   } catch (err) {

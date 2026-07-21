@@ -1034,6 +1034,91 @@ export async function getCatalogProductBySku(
   );
 }
 
+/**
+ * Batch catalog lookup for cart adds — one org/bundled/holds pass instead of
+ * N× getCatalogProductBySku round-trips.
+ */
+export async function getCatalogProductsBySkus(
+  skuRaws: string[],
+  opts?: { buyerUsername?: string | null; includeBundled?: boolean },
+): Promise<Map<string, CatalogProduct>> {
+  const unique = [
+    ...new Set(skuRaws.map((s) => String(s || "").trim()).filter(Boolean)),
+  ];
+  const out = new Map<string, CatalogProduct>();
+  if (!unique.length) return out;
+
+  const buyerUsername = String(opts?.buyerUsername || "")
+    .trim()
+    .toLowerCase();
+  const byUpper = new Map(unique.map((s) => [s.toUpperCase(), s]));
+
+  let bundled = new Set<string>();
+  if (!opts?.includeBundled) {
+    bundled = await listActiveBundledSkus();
+  }
+
+  let candidates = unique.filter((s) => !bundled.has(s.toUpperCase()));
+  if (!candidates.length) return out;
+
+  const org = await getLuxesupplyOrg();
+  const salesPortal = (org.data.salesPortal || {}) as Record<string, unknown>;
+  const catalogSelectionRaw = (salesPortal.catalogSelection || {}) as Record<string, unknown>;
+  const catalogMode = String(catalogSelectionRaw.mode || "all");
+
+  if (catalogMode === "sku_list") {
+    const curatedCatalog = parseCuratedCatalog(salesPortal.curatedCatalog);
+    if (curatedCatalog && curatedCatalog.items.length) {
+      const wanted = new Set(candidates.map((s) => s.toUpperCase()));
+      const items = curatedCatalog.items.filter(
+        (i) => i.price != null && wanted.has(i.sku.toUpperCase()),
+      );
+      const hydrated = await hydrateCuratedItems(items, { buyerUsername });
+      for (const product of hydrated) {
+        const key = byUpper.get(product.sku.toUpperCase()) || product.sku;
+        out.set(key, product);
+        out.set(product.sku.toUpperCase(), product);
+      }
+      return out;
+    }
+    if (Array.isArray(catalogSelectionRaw.skus)) {
+      const allow = new Set(
+        catalogSelectionRaw.skus.map((s) => String(s).trim().toUpperCase()).filter(Boolean),
+      );
+      if (allow.size) {
+        candidates = candidates.filter((s) => allow.has(s.toUpperCase()));
+        if (!candidates.length) return out;
+      }
+    }
+  }
+
+  const uploadMap = await loadUploadGroupsBySku(candidates);
+  const groups = [...uploadMap.values()];
+  if (!groups.length) return out;
+
+  const groupSkus = groups.map((g) => g.sku);
+  const [iiqMap, askMap, holds] = await Promise.all([
+    loadIiqBySku(groupSkus),
+    loadAskBySku(groupSkus, uploaderEmailsFromGroups(groups)),
+    loadActiveHoldsBySku(groupSkus),
+  ]);
+
+  for (const group of groups) {
+    const product = toCatalogProduct(
+      group.sku,
+      group,
+      iiqMap.get(group.sku) || null,
+      askMap.get(group.sku) || null,
+      holds.get(group.sku),
+      buyerUsername,
+    );
+    const key = byUpper.get(group.sku.toUpperCase()) || group.sku;
+    out.set(key, product);
+    out.set(group.sku.toUpperCase(), product);
+  }
+  return out;
+}
+
 /** Raw inventory-resolved facts for one SKU, with no catalog-mode/curated/bundled
  * gating applied — staff editing a product needs to see and adjust the item
  * regardless of whether it's currently selected onto the buyer storefront. */

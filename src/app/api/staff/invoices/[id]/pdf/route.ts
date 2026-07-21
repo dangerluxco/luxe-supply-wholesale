@@ -1,6 +1,6 @@
 import { requireStaffSession } from "@/lib/staff-api-auth";
 import { getInvoiceById, displayInvoiceStatus } from "@/lib/firestore/invoices";
-import { getPaymentInstructions } from "@/lib/firestore/settings";
+import { loadInvoicePdfOptions } from "@/lib/invoice-letterhead";
 import { renderInvoicePdf } from "@/lib/invoicePdf";
 
 export const dynamic = "force-dynamic";
@@ -15,10 +15,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const inv = await getInvoiceById(id);
   if (!inv) return new Response("Not found", { status: 404 });
 
-  const paymentInstructions = await getPaymentInstructions().catch(() => "");
+  const letter = await loadInvoicePdfOptions().catch(() => ({
+    paymentInstructions: "",
+    letterhead: null,
+  }));
   const pdf = await renderInvoicePdf(inv, {
     statusLabel: displayInvoiceStatus(inv),
-    paymentInstructions,
+    paymentInstructions: letter.paymentInstructions,
+    letterhead: letter.letterhead,
   });
 
   const inline = new URL(req.url).searchParams.get("disposition") === "inline";

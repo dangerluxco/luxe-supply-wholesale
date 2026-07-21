@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { ROLE } from "@/lib/constants";
 import { createStaff, markStaffEmailSent } from "@/lib/firestore/staff";
 import { sendStaffInviteEmail } from "@/lib/notify";
+import { logAudit } from "@/lib/firestore/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +46,14 @@ export async function POST(request: Request) {
         );
       }
     }
+
+    await logAudit({
+      actor: session,
+      action: "staff.invite",
+      entity: "staff",
+      entityId: staff.id,
+      payload: { email: staff.email, isAdmin: staff.isAdmin },
+    });
 
     let message = `Staff ${staff.displayName} created.`;
     if (emailSent) message += " Invite email sent.";

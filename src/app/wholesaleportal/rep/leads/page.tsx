@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { ROLE } from "@/lib/constants";
 import { listLeads, type LeadStatus } from "@/lib/firestore/leads";
 import { LeadsList } from "@/components/LeadsList";
+import { requirePortalFeature } from "@/lib/require-feature";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,7 @@ type SP = { [k: string]: string | string[] | undefined };
 export default async function LeadsPage({ searchParams }: { searchParams: Promise<SP> }) {
   const session = await getSession();
   if (!session || session.role === ROLE.BUYER) redirect("/wholesaleportal/sign-in");
+  await requirePortalFeature("leads");
 
   const sp = await searchParams;
   const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";

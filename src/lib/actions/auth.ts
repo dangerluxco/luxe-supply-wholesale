@@ -12,6 +12,7 @@ import {
 } from "@/lib/auth";
 import { SESSION_COOKIE, withAreaSession, withoutAreaSession } from "@/lib/auth-session";
 import { authenticateStaff, staffToAppRole } from "@/lib/firestore/staff";
+import { staffPostLoginPath } from "@/lib/staff-totp-gate";
 
 export async function login(_prev: unknown, formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
@@ -36,7 +37,13 @@ export async function login(_prev: unknown, formData: FormData) {
       withAreaSession(existingRaw, areaForRole(role), encodeSession(staffOk.staff.id, role, "firestore")),
       cookieOpts,
     );
-    redirect(homeForRole(role));
+    redirect(
+      staffPostLoginPath({
+        role,
+        totpEnabled: staffOk.staff.totpEnabled,
+        home: homeForRole(role),
+      }),
+    );
   }
 
   const user = await prisma.user.findUnique({ where: { email } });

@@ -1,9 +1,18 @@
 import { listActiveCurationShares } from "@/lib/firestore/curation";
 import { CurationBuilder } from "@/components/CurationBuilder";
+import { requirePortalFeature } from "@/lib/require-feature";
 
 export const dynamic = "force-dynamic";
 
-export default async function CurationPage() {
+export default async function CurationPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ buyerId?: string; clientId?: string }>;
+}) {
+  await requirePortalFeature("curation");
+  const params = await searchParams;
+  const initialBuyerId = String(params.buyerId || params.clientId || "").trim() || undefined;
+
   let shares: Awaited<ReturnType<typeof listActiveCurationShares>> = [];
   try {
     shares = await listActiveCurationShares();
@@ -21,7 +30,7 @@ export default async function CurationPage() {
         </span>
       </div>
 
-      <CurationBuilder initialShares={shares} />
+      <CurationBuilder initialShares={shares} initialBuyerId={initialBuyerId} />
     </div>
   );
 }

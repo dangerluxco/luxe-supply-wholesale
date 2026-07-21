@@ -19,16 +19,16 @@ export default async function CartPage() {
   const session = await getSession();
   if (!session || session.role !== ROLE.BUYER) redirect("/wholesale/sign-in");
 
-  const [cart, buyer] = await Promise.all([
+  const [cart, buyer, thresholds] = await Promise.all([
     getBuyerCart(session.id),
     getBuyerById(session.id),
+    getQuoteThresholds(),
   ]);
   const total = cart.reduce((s, i) => s + i.price, 0);
   const holdSkus = cartHoldSkus(cart);
-  const holds = await loadActiveHoldsBySku(holdSkus);
+  const holds = holdSkus.length ? await loadActiveHoldsBySku(holdSkus) : new Map();
   const me = (session.username || "").toLowerCase();
 
-  const thresholds = await getQuoteThresholds();
   const thresholdCheck = evaluateQuoteThresholds(thresholds, {
     itemCount: cart.length,
     cartTotal: total,

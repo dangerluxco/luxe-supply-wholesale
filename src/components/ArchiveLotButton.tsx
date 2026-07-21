@@ -1,14 +1,15 @@
 "use client";
 
 import { useTransition } from "react";
+import { PressableButton } from "@/components/PressableButton";
 
 /** Archive lot via fetch API — no `"use server"` (soft-nav safe). */
 export function ArchiveLotButton({ lotId }: { lotId: string }) {
   const [pending, start] = useTransition();
   return (
-    <button
-      type="button"
-      disabled={pending}
+    <PressableButton
+      pending={pending}
+      pendingLabel="Archiving…"
       onClick={() =>
         start(async () => {
           const res = await fetch(
@@ -25,7 +26,7 @@ export function ArchiveLotButton({ lotId }: { lotId: string }) {
       }
       className="text-[11px] uppercase tracking-[0.1em] text-muted hover:text-danger disabled:opacity-50"
     >
-      {pending ? "…" : "Archive"}
-    </button>
+      Archive
+    </PressableButton>
   );
 }

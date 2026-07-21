@@ -3,15 +3,18 @@ import { requireStaffSession } from "@/lib/staff-api-auth";
 import { getCurationShareForStaff, linkCurationShareToBuyer } from "@/lib/firestore/curation";
 import { getBuyerById } from "@/lib/firestore/buyers";
 import { buyerStorefrontOrigin, staffPortalOrigin } from "@/lib/notify";
-import { buildGoogleCalendarUrl } from "@/lib/googleCalendar";
+import {
+  buildGoogleCalendarUrl,
+  defaultCallDurationMinutes,
+  defaultCallStart,
+} from "@/lib/googleCalendar";
 
 export const dynamic = "force-dynamic";
 
 /**
- * "Book call" for an ad-hoc curation session (built before any order request
- * exists). Links the chosen buyer to the session and opens a Calendar invite,
- * same shape as the order-based flow — the difference is there's no order to
- * reference yet; one gets created from the approved items when the call ends.
+ * "Book call" for an ad-hoc curation session. Returns structured event draft
+ * fields for the in-portal modal (Eelo-style), plus a default Calendar template
+ * URL. Full Calendar API create isn't available — staff OAuth is sign-in only.
  */
 export async function POST(request: Request, ctx: { params: Promise<{ token: string }> }) {
   const session = await requireStaffSession();
@@ -21,15 +24,16 @@ export async function POST(request: Request, ctx: { params: Promise<{ token: str
 
   const { token } = await ctx.params;
   const body = (await request.json().catch(() => ({}))) as { buyerId?: string };
-  const buyerId = String(body.buyerId || "").trim();
-  if (!buyerId) {
-    return NextResponse.json({ error: "Pick a buyer first." }, { status: 400 });
-  }
 
   const share = await getCurationShareForStaff(token);
   if (!share) return NextResponse.json({ error: "This curation link is unavailable." }, { status: 404 });
   if (!share.items.length) {
     return NextResponse.json({ error: "Add at least one item before booking a call." }, { status: 400 });
+  }
+
+  const buyerId = String(body.buyerId || share.linkedBuyerId || "").trim();
+  if (!buyerId) {
+    return NextResponse.json({ error: "Pick a buyer first." }, { status: 400 });
   }
 
   const buyer = await getBuyerById(buyerId);
@@ -61,15 +65,35 @@ export async function POST(request: Request, ctx: { params: Promise<{ token: str
       "",
       `Curation view for the call: ${curationUrl}`,
       `Seller curation manager: ${sellerCurationUrl}`,
-    ].filter((line): line is string => line != null);
+    ]
+      .filter((line): line is string => line != null)
+      .join("\n");
 
+    const title = `Call with ${buyerLabel} — curated selection`;
+    const guestEmails = [...new Set([buyer.email, session.email].filter(Boolean))];
+    const start = defaultCallStart();
+    const durationMinutes = defaultCallDurationMinutes();
     const calendarUrl = buildGoogleCalendarUrl({
-      title: `Call with ${buyerLabel} — curated selection`,
-      details: details.join("\n"),
-      guestEmail: buyer.email,
+      title,
+      details,
+      guestEmails,
+      start,
+      durationMinutes,
     });
 
-    return NextResponse.json({ ok: true, calendarUrl, curationUrl, sellerCurationUrl });
+    return NextResponse.json({
+      ok: true,
+      calendarUrl,
+      curationUrl,
+      sellerCurationUrl,
+      event: {
+        title,
+        details,
+        guestEmails,
+        startIso: start.toISOString(),
+        durationMinutes,
+      },
+    });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Could not prepare the call." },

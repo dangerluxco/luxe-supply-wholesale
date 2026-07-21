@@ -37,23 +37,47 @@ export type SessionUser = {
   source: "firestore" | "prisma";
   /** Buyer username when role is BUYER (Firestore portal login). */
   username?: string | null;
+  /** Manager completed TOTP challenge for this browser session. */
+  totpVerified?: boolean;
+  /** Manager has TOTP enrolled on their staff record. */
+  totpEnabled?: boolean;
 };
 
-// Per-area payload: base64("source|userId|role") — optional 4th: username
+export type EncodeSessionOpts = {
+  username?: string;
+  totpVerified?: boolean;
+};
+
+// Per-area payload: base64("source|userId|role[|username][|t1]")
 export function encodeSession(
   userId: string,
   role: string,
   source: "firestore" | "prisma" = "prisma",
-  username?: string,
+  usernameOrOpts?: string | EncodeSessionOpts,
+  maybeOpts?: EncodeSessionOpts,
 ): string {
+  const opts: EncodeSessionOpts =
+    typeof usernameOrOpts === "object" && usernameOrOpts
+      ? usernameOrOpts
+      : { ...(maybeOpts || {}), username: typeof usernameOrOpts === "string" ? usernameOrOpts : undefined };
   const parts = [source, userId, role];
-  if (username) parts.push(username);
+  if (opts.username) parts.push(opts.username);
+  if (opts.totpVerified) {
+    if (!opts.username) parts.push("");
+    parts.push("t1");
+  }
   return Buffer.from(parts.join("|")).toString("base64");
 }
 
 export function decodeSession(
   value: string | undefined,
-): { userId: string; role: string; source: "firestore" | "prisma"; username?: string } | null {
+): {
+  userId: string;
+  role: string;
+  source: "firestore" | "prisma";
+  username?: string;
+  totpVerified?: boolean;
+} | null {
   if (!value) return null;
   try {
     const parts = Buffer.from(value, "base64").toString("utf8").split("|");
@@ -62,10 +86,20 @@ export function decodeSession(
       if (!userId || !role) return null;
       return { userId, role, source: "prisma" };
     }
-    const [source, userId, role, username] = parts;
+    const [source, userId, role, a, b] = parts;
     if (!userId || !role) return null;
     if (source !== "firestore" && source !== "prisma") return null;
-    return { userId, role, source, username };
+    let username: string | undefined;
+    let totpVerified = false;
+    if (b === "t1") {
+      totpVerified = true;
+      username = a || undefined;
+    } else if (a === "t1") {
+      totpVerified = true;
+    } else if (a) {
+      username = a;
+    }
+    return { userId, role, source, username, totpVerified };
   } catch {
     return null;
   }

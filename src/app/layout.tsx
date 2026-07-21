@@ -12,13 +12,15 @@ const spaceGrotesk = Space_Grotesk({
 export const metadata: Metadata = {
   title: "Luxe Supply Co. — Wholesale Portal",
   description: "One-of-one luxury goods, wholesale.",
-  // Luxe brand mark from luxesupply.co Shopify CDN (FAVICON_-_COLOR.png).
-  // src/app/icon.png + apple-icon.png are also auto-discovered by the App Router.
+  // Brand mark for browser tabs + Apple Passwords / iOS home-screen icons.
+  // Explicit apple entry required — an icons.icon-only config suppresses App Router
+  // auto-discovery of src/app/apple-icon.png in the HTML <head>.
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },
       { url: "/favicon.png", type: "image/png", sizes: "256x256" },
     ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
   },
 };
 

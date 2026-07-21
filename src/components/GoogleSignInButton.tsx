@@ -30,7 +30,7 @@ export function GoogleSignInButton({
       {/* Plain <a>: full navigation into the OAuth redirect (no soft-nav). */}
       <a
         href={href}
-        className="flex h-11 w-full items-center justify-center gap-3 rounded-chip border border-border bg-surface text-[12.5px] font-semibold text-ink transition hover:border-accent hover:bg-ground"
+        className="pressable flex h-11 w-full items-center justify-center gap-3 rounded-chip border border-border bg-surface text-[12.5px] font-semibold text-ink hover:border-accent hover:bg-ground"
       >
         <GoogleGlyph />
         Sign in with Google

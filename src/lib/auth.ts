@@ -38,11 +38,11 @@ export {
 };
 
 /**
- * Which app area this request belongs to. Pages/Server Actions under
- * /wholesale, /wholesaleportal, /fulfillment get this from the `x-app-area`
- * header middleware injects. Route Handlers under /api/** never run through
- * middleware, so they fall back to "staff" — every getSession()-calling
- * route under /api/ today is staff-only (/api/staff/**).
+ * Which app area this request belongs to. Pages under /wholesale,
+ * /wholesaleportal, /fulfillment get this from the `x-app-area` header
+ * middleware injects. Route handlers under /api/** skip that middleware
+ * matcher — prefer getSessionForArea() / requireBuyerSession /
+ * requireStaffSession there instead of relying on this default.
  */
 async function currentArea(): Promise<AppArea> {
   const hdrs = await headers();
@@ -51,57 +51,67 @@ async function currentArea(): Promise<AppArea> {
   return "staff";
 }
 
-export async function getSession(): Promise<SessionUser | null> {
-  const store = await cookies();
-  const area = await currentArea();
-  const decoded = decodeSession(areaSessionFrom(store.get(SESSION_COOKIE)?.value, area));
-  if (!decoded) return null;
-
-  try {
-    if (decoded.source === "firestore") {
-      if (decoded.role === ROLE.BUYER) {
-        const buyer = await getBuyerById(decoded.userId);
-        if (!buyer || buyer.status === "disabled") return null;
-        return {
-          id: buyer.id,
-          name: buyer.displayName || buyer.username,
-          email: buyer.email,
-          role: ROLE.BUYER,
-          initials: initialsFromName(buyer.displayName || buyer.username || buyer.email),
-          accountId: buyer.id,
-          source: "firestore",
-          username: buyer.username,
-        };
-      }
-
-      const staff = await getStaffById(decoded.userId);
-      if (!staff || staff.status === "disabled") return null;
+async function resolveSessionUser(
+  decoded: NonNullable<ReturnType<typeof decodeSession>>,
+): Promise<SessionUser | null> {
+  if (decoded.source === "firestore") {
+    if (decoded.role === ROLE.BUYER) {
+      const buyer = await getBuyerById(decoded.userId);
+      if (!buyer || buyer.status === "disabled") return null;
       return {
-        id: staff.id,
-        name: staff.displayName,
-        email: staff.email,
-        role: staff.isAdmin ? ROLE.MANAGER : ROLE.REP,
-        initials: initialsFromName(staff.displayName || staff.email),
-        accountId: null,
+        id: buyer.id,
+        name: buyer.displayName || buyer.username,
+        email: buyer.email,
+        role: ROLE.BUYER,
+        initials: initialsFromName(buyer.displayName || buyer.username || buyer.email),
+        accountId: buyer.id,
         source: "firestore",
+        username: buyer.username,
       };
     }
 
-    const user = await prisma.user.findUnique({ where: { id: decoded.userId } });
-    if (!user) return null;
+    const staff = await getStaffById(decoded.userId);
+    if (!staff || staff.status === "disabled") return null;
     return {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role as Role,
-      initials: user.initials,
-      accountId: user.accountId,
-      source: "prisma",
+      id: staff.id,
+      name: staff.displayName,
+      email: staff.email,
+      role: staff.isAdmin ? ROLE.MANAGER : ROLE.REP,
+      initials: initialsFromName(staff.displayName || staff.email),
+      accountId: null,
+      source: "firestore",
+      totpEnabled: staff.totpEnabled,
+      totpVerified: !!decoded.totpVerified,
     };
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: decoded.userId } });
+  if (!user) return null;
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role as Role,
+    initials: user.initials,
+    accountId: user.accountId,
+    source: "prisma",
+  };
+}
+
+/** Read the packed `__session` slot for an explicit area (buyer/staff/fulfillment). */
+export async function getSessionForArea(area: AppArea): Promise<SessionUser | null> {
+  const store = await cookies();
+  const decoded = decodeSession(areaSessionFrom(store.get(SESSION_COOKIE)?.value, area));
+  if (!decoded) return null;
+  try {
+    return await resolveSessionUser(decoded);
   } catch (err) {
-    // Expired ADC / transient Firestore failures must not 500 every page that
-    // touches getSession() — treat as signed-out until credentials recover.
-    console.warn("[getSession] lookup failed:", err instanceof Error ? err.message : err);
+    console.warn("[getSessionForArea] lookup failed:", err instanceof Error ? err.message : err);
     return null;
   }
+}
+
+export async function getSession(): Promise<SessionUser | null> {
+  const area = await currentArea();
+  return getSessionForArea(area);
 }

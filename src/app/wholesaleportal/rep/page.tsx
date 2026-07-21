@@ -61,7 +61,7 @@ export default async function RepDashboard({
         <div className="flex-1" />
         <Link
           href="/wholesaleportal/rep/clients"
-          className="rounded-chip border border-border px-3 py-1.5 text-[11px] text-secondary hover:border-accent hover:text-ink"
+          className="pressable rounded-chip border border-border px-3 py-1.5 text-[11px] text-secondary hover:border-accent hover:text-ink"
         >
           View clients
         </Link>
@@ -69,7 +69,7 @@ export default async function RepDashboard({
         {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
         <a
           href="/wholesaleportal/rep/curation"
-          className="inline-flex h-10 items-center rounded-chip bg-accent px-4 text-[11.5px] font-semibold uppercase tracking-[0.1em] text-ink transition hover:opacity-90"
+          className="pressable inline-flex h-10 items-center rounded-chip bg-accent px-4 text-[11.5px] font-semibold uppercase tracking-[0.1em] text-ink hover:opacity-90"
         >
           + New order request
         </a>
@@ -149,7 +149,7 @@ export default async function RepDashboard({
                 <div className="text-right">
                   <a
                     href={href}
-                    className="inline-flex h-8 items-center rounded-chip bg-ink px-3 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ground transition hover:opacity-90"
+                    className="pressable inline-flex h-8 items-center rounded-chip bg-ink px-3 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ground hover:opacity-90"
                   >
                     Open
                   </a>

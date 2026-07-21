@@ -3,6 +3,7 @@ import { requireStaffSession } from "@/lib/staff-api-auth";
 import { getQuoteById, curationItemsFromQuoteItems, linkQuoteToCurationShare } from "@/lib/firestore/quotes";
 import { createCurationShare } from "@/lib/firestore/curation";
 import { buyerStorefrontOrigin, staffPortalOrigin } from "@/lib/notify";
+import { featureDisabledResponse } from "@/lib/feature-gates";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,8 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   if (!session) {
     return NextResponse.json({ error: "Staff session required." }, { status: 401 });
   }
+  const disabled = await featureDisabledResponse("curation");
+  if (disabled) return disabled;
 
   const { id } = await params;
   const quote = await getQuoteById(id);

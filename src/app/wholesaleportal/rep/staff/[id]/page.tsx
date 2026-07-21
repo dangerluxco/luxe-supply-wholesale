@@ -135,7 +135,7 @@ export default async function StaffDetailPage({
 
   return (
     <div className="px-10 pb-12 pt-8">
-      <Link href="/wholesaleportal/rep/staff" className="text-[12px] text-muted transition hover:text-ink">
+      <Link href="/wholesaleportal/rep/settings/people" className="text-[12px] text-muted transition hover:text-ink">
         ‹ Back to staff
       </Link>
 

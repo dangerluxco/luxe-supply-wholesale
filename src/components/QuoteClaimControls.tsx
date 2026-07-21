@@ -94,10 +94,11 @@ export function QuoteClaimControls({
         <button
           type="button"
           disabled={pending}
+          aria-busy={pending || undefined}
           className={btnPrimary}
           onClick={() => run(`/api/staff/quotes/${quoteId}/claim`)}
         >
-          {pending ? "…" : "Claim"}
+          {pending ? "Claiming…" : "Claim"}
         </button>
       ) : null}
 
@@ -105,10 +106,11 @@ export function QuoteClaimControls({
         <button
           type="button"
           disabled={pending}
+          aria-busy={pending || undefined}
           className={btn}
           onClick={() => run(`/api/staff/quotes/${quoteId}/release`)}
         >
-          {pending ? "…" : "Release"}
+          {pending ? "Releasing…" : "Release"}
         </button>
       ) : null}
 
@@ -116,10 +118,11 @@ export function QuoteClaimControls({
         <button
           type="button"
           disabled={pending}
+          aria-busy={pending || undefined}
           className={btnPrimary}
           onClick={() => run(`/api/staff/quotes/${quoteId}/claim`)}
         >
-          {pending ? "…" : "Take over"}
+          {pending ? "Taking over…" : "Take over"}
         </button>
       ) : null}
     </>

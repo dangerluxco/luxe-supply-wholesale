@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireStaffSession } from "@/lib/staff-api-auth";
 import { updateBuyerAccountDetails, type BuyerAccountDetailsInput } from "@/lib/firestore/buyers";
+import { logAudit } from "@/lib/firestore/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,12 @@ export async function POST(
 
   try {
     const buyer = await updateBuyerAccountDetails(buyerId.trim(), body);
+    await logAudit({
+      actor: session,
+      action: "buyer.account.update",
+      entity: "buyer",
+      entityId: buyer.id,
+    });
     return NextResponse.json({ ok: true, buyer, message: "Account details updated." });
   } catch (err) {
     return NextResponse.json(

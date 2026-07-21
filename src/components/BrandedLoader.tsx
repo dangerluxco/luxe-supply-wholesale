@@ -5,7 +5,7 @@
  * Suspense fallbacks. Server-component safe: markup + Tailwind only.
  */
 export function BrandedLoader({
-  label = "Loading",
+  label,
   tone = "ink",
   fullScreen = false,
 }: {
@@ -16,9 +16,11 @@ export function BrandedLoader({
   return (
     <div
       className={
-        "flex flex-col items-center justify-center gap-3 " +
+        "flex flex-col items-center justify-center " +
         (fullScreen ? "min-h-screen" : "min-h-[55vh]")
       }
+      role="status"
+      aria-label={label || "Loading"}
     >
       <span
         className={
@@ -28,9 +30,11 @@ export function BrandedLoader({
       >
         LUXE SUPPLY<span className="text-accent">*</span>
       </span>
-      <span className="micro-badge text-[10px] uppercase tracking-[0.18em] text-muted">
-        {label}
-      </span>
+      {label ? (
+        <span className="micro-badge mt-3 text-[10px] uppercase tracking-[0.18em] text-muted">
+          {label}
+        </span>
+      ) : null}
     </div>
   );
 }

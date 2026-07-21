@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { requireStaffSession } from "@/lib/staff-api-auth";
 import { createCurationShare } from "@/lib/firestore/curation";
+import { getBuyerById } from "@/lib/firestore/buyers";
 import { buyerStorefrontOrigin } from "@/lib/notify";
+import { featureDisabledResponse } from "@/lib/feature-gates";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +19,7 @@ type Body = {
     imageUrls?: string[];
   }>;
   clientName?: string;
+  linkedBuyerId?: string | null;
   invoiceDate?: string;
   note?: string;
   expiresHours?: number;
@@ -27,16 +30,35 @@ export async function POST(request: Request) {
   if (!session) {
     return NextResponse.json({ error: "Staff session required." }, { status: 401 });
   }
+  const disabled = await featureDisabledResponse("curation");
+  if (disabled) return disabled;
 
   const body = (await request.json().catch(() => ({}))) as Body;
   if (!Array.isArray(body.items) || !body.items.length) {
     return NextResponse.json({ error: "Add at least one priced item." }, { status: 400 });
   }
 
+  const linkedBuyerId = String(body.linkedBuyerId || "").trim();
+  let clientName = String(body.clientName || "").trim();
+
+  if (linkedBuyerId) {
+    const buyer = await getBuyerById(linkedBuyerId);
+    if (!buyer || buyer.status === "disabled") {
+      return NextResponse.json({ error: "Selected client was not found." }, { status: 400 });
+    }
+    clientName = buyer.displayName || buyer.username || buyer.email || clientName;
+  } else if (!clientName) {
+    return NextResponse.json(
+      { error: "Choose an existing client or enter a potential client name." },
+      { status: 400 },
+    );
+  }
+
   try {
     const share = await createCurationShare({
       items: body.items,
-      clientName: body.clientName,
+      clientName,
+      linkedBuyerId: linkedBuyerId || null,
       invoiceDate: body.invoiceDate,
       note: body.note,
       expiresHours: body.expiresHours,

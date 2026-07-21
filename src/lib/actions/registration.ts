@@ -10,6 +10,7 @@ import {
   markRegistrationApproved,
   rejectRegistrationRequest,
 } from "@/lib/firestore/registrationRequests";
+import { consumeInviteCode, validateInviteCode } from "@/lib/firestore/inviteCodes";
 import { notifyStaffOfRegistrationRequest } from "@/lib/notify";
 
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
@@ -75,6 +76,7 @@ export async function submitBuyerRegistration(
     const state = String(formData.get("state") || "").trim();
     const postalCode = String(formData.get("postalCode") || "").trim();
     const businessTaxId = String(formData.get("businessTaxId") || "").trim();
+    const inviteCodeRaw = String(formData.get("inviteCode") || "").trim();
 
     if (!firstName || !lastName) throw new Error("First and last name are required.");
     if (!email) throw new Error("Email address is required.");
@@ -83,6 +85,9 @@ export async function submitBuyerRegistration(
       throw new Error("Full mailing address is required.");
     }
     if (!businessTaxId) throw new Error("Business Tax ID number is required.");
+
+    const inviteCheck = await validateInviteCode(inviteCodeRaw);
+    if (!inviteCheck.ok) throw new Error(inviteCheck.reason);
 
     const application = await createRegistrationRequest({
       firstName,
@@ -97,11 +102,19 @@ export async function submitBuyerRegistration(
       country: String(formData.get("country") || "US").trim() || "US",
       businessTaxId,
       company: String(formData.get("company") || "").trim(),
+      inviteCodeId: inviteCheck.code.id,
+      inviteCode: inviteCheck.code.code,
       idFront,
       idBack,
       businessRegistration,
       resaleCertificate,
     });
+
+    try {
+      await consumeInviteCode(inviteCheck.code.id);
+    } catch (err) {
+      console.warn("[submitBuyerRegistration] invite consume failed:", err);
+    }
 
     try {
       await notifyStaffOfRegistrationRequest({

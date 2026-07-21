@@ -14,6 +14,10 @@ export type StaffRecord = {
   role: "admin" | "staff";
   status: string;
   organizationId: string | null;
+  totpEnabled: boolean;
+  totpSecretEnc: string | null;
+  totpRecoveryHashes: string[];
+  sessionVersion: number;
 };
 
 export type StaffListItem = StaffRecord & {
@@ -64,6 +68,9 @@ function verifyPortalPassword(password: string, salt: unknown, expectedHash: unk
 
 function serializeStaff(id: string, d: Record<string, unknown>): StaffRecord {
   const isAdmin = staffIsAdmin(d);
+  const recovery = Array.isArray(d.totpRecoveryHashes)
+    ? d.totpRecoveryHashes.map((h) => String(h)).filter(Boolean)
+    : [];
   return {
     id,
     email: String(d.email || ""),
@@ -72,6 +79,10 @@ function serializeStaff(id: string, d: Record<string, unknown>): StaffRecord {
     role: isAdmin ? "admin" : "staff",
     status: String(d.status || "active"),
     organizationId: d.organizationId ? String(d.organizationId) : null,
+    totpEnabled: !!d.totpEnabled,
+    totpSecretEnc: d.totpSecretEnc ? String(d.totpSecretEnc) : null,
+    totpRecoveryHashes: recovery,
+    sessionVersion: Number.isFinite(Number(d.sessionVersion)) ? Number(d.sessionVersion) : 0,
   };
 }
 
@@ -362,6 +373,7 @@ export async function resetStaffPassword(
     passwordSalt: salt,
     passwordHash: hash,
     mustChangePassword: true,
+    sessionVersion: (Number(prev.sessionVersion) || 0) + 1,
     updatedAt: new Date(),
     updatedBy: opts.updatedBy,
   });
@@ -410,6 +422,58 @@ export async function markStaffEmailSent(staffId: string): Promise<void> {
   } catch {
     /* ignore */
   }
+}
+
+/** Persist TOTP enrollment (secret + recovery hashes). Caller verifies a code first. */
+export async function enableStaffTotp(
+  staffId: string,
+  opts: { secretEnc: string; recoveryHashes: string[] },
+): Promise<StaffRecord> {
+  const id = String(staffId || "").trim();
+  if (!id) throw new Error("Staff id is required.");
+  const ref = getDb().collection("salesPortalStaff").doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) throw new Error("Staff user not found.");
+  const prev = snap.data() || {};
+  await ref.update({
+    totpEnabled: true,
+    totpSecretEnc: opts.secretEnc,
+    totpRecoveryHashes: opts.recoveryHashes,
+    sessionVersion: (Number(prev.sessionVersion) || 0) + 1,
+    updatedAt: new Date(),
+  });
+  const saved = await ref.get();
+  return serializeStaff(saved.id, saved.data() || {});
+}
+
+export async function replaceStaffRecoveryHashes(
+  staffId: string,
+  hashes: string[],
+): Promise<void> {
+  const id = String(staffId || "").trim();
+  if (!id) return;
+  await getDb().collection("salesPortalStaff").doc(id).update({
+    totpRecoveryHashes: hashes,
+    updatedAt: new Date(),
+  });
+}
+
+export async function disableStaffTotp(staffId: string): Promise<StaffRecord> {
+  const id = String(staffId || "").trim();
+  if (!id) throw new Error("Staff id is required.");
+  const ref = getDb().collection("salesPortalStaff").doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) throw new Error("Staff user not found.");
+  const prev = snap.data() || {};
+  await ref.update({
+    totpEnabled: false,
+    totpSecretEnc: null,
+    totpRecoveryHashes: [],
+    sessionVersion: (Number(prev.sessionVersion) || 0) + 1,
+    updatedAt: new Date(),
+  });
+  const saved = await ref.get();
+  return serializeStaff(saved.id, saved.data() || {});
 }
 
 /** Active staff emails for this portal — used to notify staff of new invoice requests. */

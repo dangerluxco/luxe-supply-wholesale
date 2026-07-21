@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { getSession, decodeSession, areaSessionFrom, SESSION_COOKIE } from "@/lib/auth";
 import { BuyerTopbar } from "@/components/BuyerTopbar";
+import { CartBadgeProvider } from "@/components/CartBadgeProvider";
 import { StorefrontAvailabilityProvider } from "@/components/StorefrontAvailability";
 import { ROLE } from "@/lib/constants";
 import { getBuyerCart } from "@/lib/firestore/buyers";
@@ -31,10 +32,12 @@ export default async function WholesaleLayout({ children }: { children: React.Re
   if (!decoded || decoded.role !== ROLE.BUYER) {
     return (
       <StorefrontAvailabilityProvider>
-        <div className="min-h-screen bg-ground">
-          <BuyerTopbar user={null} cartCount={0} index={index} />
-          {children}
-        </div>
+        <CartBadgeProvider cartCount={0} cartTotal={0}>
+          <div className="min-h-screen bg-ground">
+            <BuyerTopbar user={null} index={index} />
+            {children}
+          </div>
+        </CartBadgeProvider>
       </StorefrontAvailabilityProvider>
     );
   }
@@ -43,10 +46,12 @@ export default async function WholesaleLayout({ children }: { children: React.Re
   if (!session || session.role !== ROLE.BUYER) {
     return (
       <StorefrontAvailabilityProvider>
-        <div className="min-h-screen bg-ground">
-          <BuyerTopbar user={null} cartCount={0} index={index} />
-          {children}
-        </div>
+        <CartBadgeProvider cartCount={0} cartTotal={0}>
+          <div className="min-h-screen bg-ground">
+            <BuyerTopbar user={null} index={index} />
+            {children}
+          </div>
+        </CartBadgeProvider>
       </StorefrontAvailabilityProvider>
     );
   }
@@ -70,16 +75,16 @@ export default async function WholesaleLayout({ children }: { children: React.Re
 
   return (
     <StorefrontAvailabilityProvider>
-      <div className="min-h-screen bg-ground">
-        <BuyerTopbar
-          user={{ name: session.name, initials: session.initials }}
-          cartCount={cartCount}
-          cartTotal={cartTotal}
-          wishlistCount={wishlistCount}
-          index={index}
-        />
-        {children}
-      </div>
+      <CartBadgeProvider cartCount={cartCount} cartTotal={cartTotal}>
+        <div className="min-h-screen bg-ground">
+          <BuyerTopbar
+            user={{ name: session.name, initials: session.initials }}
+            wishlistCount={wishlistCount}
+            index={index}
+          />
+          {children}
+        </div>
+      </CartBadgeProvider>
     </StorefrontAvailabilityProvider>
   );
 }

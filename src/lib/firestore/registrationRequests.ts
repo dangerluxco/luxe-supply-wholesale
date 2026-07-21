@@ -33,6 +33,8 @@ export type BuyerRegistrationRequest = {
   reviewNote: string;
   buyerId: string | null;
   temporaryPassword: string | null;
+  inviteCodeId: string | null;
+  inviteCode: string | null;
   createdAt: string | null;
   updatedAt: string | null;
 };
@@ -74,6 +76,8 @@ function serialize(id: string, d: Record<string, unknown>): BuyerRegistrationReq
     reviewNote: String(d.reviewNote || ""),
     buyerId: d.buyerId ? String(d.buyerId) : null,
     temporaryPassword: d.temporaryPassword ? String(d.temporaryPassword) : null,
+    inviteCodeId: d.inviteCodeId ? String(d.inviteCodeId) : null,
+    inviteCode: d.inviteCode ? String(d.inviteCode) : null,
     createdAt: toIso(d.createdAt),
     updatedAt: toIso(d.updatedAt),
   };
@@ -176,6 +180,8 @@ export type CreateRegistrationInput = {
   country?: string;
   businessTaxId: string;
   company?: string;
+  inviteCodeId?: string;
+  inviteCode?: string;
   idFront: File;
   idBack: File;
   businessRegistration: File;
@@ -243,6 +249,8 @@ export async function createRegistrationRequest(
     country: String(input.country || "US").trim().slice(0, 40) || "US",
     businessTaxId: String(input.businessTaxId || "").trim().slice(0, 40),
     company: String(input.company || "").trim().slice(0, 160),
+    inviteCodeId: input.inviteCodeId ? String(input.inviteCodeId) : null,
+    inviteCode: input.inviteCode ? String(input.inviteCode).trim().toUpperCase() : null,
     documents: {
       idFrontUrl,
       idBackUrl,

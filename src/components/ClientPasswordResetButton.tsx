@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { PressableButton } from "@/components/PressableButton";
 
 /** Staff: generate + email a new buyer temp password (soft-nav safe fetch API). */
 export function ClientPasswordResetButton({
@@ -22,9 +23,10 @@ export function ClientPasswordResetButton({
 
   return (
     <div className="space-y-3">
-      <button
-        type="button"
-        disabled={disabled || pending}
+      <PressableButton
+        pending={pending}
+        pendingLabel="Generating…"
+        disabled={disabled}
         title={
           disabled
             ? "Re-enable the account before resetting password"
@@ -57,10 +59,10 @@ export function ClientPasswordResetButton({
             });
           });
         }}
-        className="h-9 rounded-chip border border-border px-3 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-secondary transition hover:border-accent hover:text-ink disabled:opacity-60"
+        className="h-9 rounded-chip border border-border px-3 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-secondary hover:border-accent hover:text-ink disabled:opacity-60"
       >
-        {pending ? "Generating…" : "Generate new password"}
-      </button>
+        Generate new password
+      </PressableButton>
       {error ? <p className="text-[12px] text-danger">{error}</p> : null}
       {ok ? (
         <div className="rounded-chip border border-border bg-ground px-3 py-2 text-[12px] text-secondary">

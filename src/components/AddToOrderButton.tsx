@@ -3,6 +3,8 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { money } from "@/lib/format";
+import { useCartBadge } from "@/components/CartBadgeProvider";
+import { PressableButton } from "@/components/PressableButton";
 
 export function AddToOrderButton({
   sku,
@@ -16,6 +18,7 @@ export function AddToOrderButton({
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<string | null>(null);
   const router = useRouter();
+  const { setCartBadge } = useCartBadge();
 
   if (disabled) {
     return (
@@ -27,8 +30,9 @@ export function AddToOrderButton({
 
   return (
     <div className="flex flex-col gap-2">
-      <button
-        disabled={pending}
+      <PressableButton
+        pending={pending}
+        pendingLabel="Placing hold…"
         onClick={() =>
           start(async () => {
             const res = await fetch("/api/buyer/cart/add", {
@@ -37,19 +41,26 @@ export function AddToOrderButton({
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ skus: [sku] }),
             });
-            const data = (await res.json().catch(() => ({}))) as { error?: string };
+            const data = (await res.json().catch(() => ({}))) as {
+              error?: string;
+              cartCount?: number;
+              cartTotal?: number;
+            };
             if (!res.ok || data.error) {
               setMsg(data.error || "Could not add to cart.");
               return;
+            }
+            if (typeof data.cartCount === "number") {
+              setCartBadge({ cartCount: data.cartCount, cartTotal: data.cartTotal ?? 0 });
             }
             setMsg(null);
             router.push("/wholesale/cart");
           })
         }
-        className="flex h-[50px] items-center justify-center rounded-chip bg-ink text-[12.5px] font-semibold uppercase tracking-[0.14em] text-ground transition hover:opacity-90 disabled:opacity-60"
+        className="flex h-[50px] w-full items-center justify-center rounded-chip bg-ink text-[12.5px] font-semibold uppercase tracking-[0.14em] text-ground disabled:opacity-60"
       >
-        {pending ? "Placing hold…" : `Add to order — ${money(price)}`}
-      </button>
+        {`Add to order — ${money(price)}`}
+      </PressableButton>
       {msg ? <span className="text-[12px] text-danger">{msg}</span> : null}
     </div>
   );

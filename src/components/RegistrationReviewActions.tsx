@@ -11,9 +11,11 @@ export function RegistrationReviewActions({ applicationId }: { applicationId: st
     temporaryPassword: string;
   } | null>(null);
   const [pending, startTransition] = useTransition();
+  const [action, setAction] = useState<"approve" | "reject" | null>(null);
 
   function onApprove() {
     setError(null);
+    setAction("approve");
     startTransition(async () => {
       const res = await fetch(
         `/api/staff/applications/${encodeURIComponent(applicationId)}/approve`,
@@ -48,6 +50,7 @@ export function RegistrationReviewActions({ applicationId }: { applicationId: st
 
   function onReject() {
     setError(null);
+    setAction("reject");
     startTransition(async () => {
       const res = await fetch(
         `/api/staff/applications/${encodeURIComponent(applicationId)}/reject`,
@@ -108,18 +111,20 @@ export function RegistrationReviewActions({ applicationId }: { applicationId: st
         <button
           type="button"
           disabled={pending}
+          aria-busy={action === "approve" || undefined}
           onClick={onApprove}
           className="h-10 rounded-chip bg-ink px-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-ground disabled:opacity-60"
         >
-          {pending ? "Working…" : "Approve & create login"}
+          {action === "approve" ? "Working…" : "Approve & create login"}
         </button>
         <button
           type="button"
           disabled={pending}
+          aria-busy={action === "reject" || undefined}
           onClick={onReject}
           className="h-10 rounded-chip border border-danger/40 px-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-danger disabled:opacity-60"
         >
-          Reject
+          {action === "reject" ? "Rejecting…" : "Reject"}
         </button>
       </div>
       ) : null}
