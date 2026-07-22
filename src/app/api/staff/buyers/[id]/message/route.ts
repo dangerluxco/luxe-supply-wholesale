@@ -1,3 +1,4 @@
+import { logAudit } from "@/lib/firestore/audit";
 import { NextResponse } from "next/server";
 import { requireStaffSession } from "@/lib/staff-api-auth";
 import { getBuyerById } from "@/lib/firestore/buyers";
@@ -63,6 +64,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           { status: 502 },
         );
       }
+      await logAudit({
+        actor: session,
+        action: "buyer.messaged",
+        entity: "buyer",
+        entityId: buyer.id,
+        payload: { subject },
+      });
       return NextResponse.json({ ok: true, sent: true });
     }
 

@@ -1,3 +1,4 @@
+import { logAudit } from "@/lib/firestore/audit";
 import { NextResponse } from "next/server";
 import { requireStaffSession } from "@/lib/staff-api-auth";
 import { archiveSuggestedLot } from "@/lib/firestore/suggestedLots";
@@ -20,6 +21,7 @@ export async function POST(
 
   try {
     await archiveSuggestedLot(lotId.trim(), session.email);
+    await logAudit({ actor: session, action: "bundle.archived", entity: "bundle", entityId: lotId.trim() });
     return NextResponse.json({ ok: true });
   } catch (err) {
     return NextResponse.json(

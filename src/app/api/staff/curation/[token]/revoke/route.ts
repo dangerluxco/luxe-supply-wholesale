@@ -1,3 +1,4 @@
+import { logAudit } from "@/lib/firestore/audit";
 import { NextResponse } from "next/server";
 import { requireStaffSession } from "@/lib/staff-api-auth";
 import { revokeCurationShare } from "@/lib/firestore/curation";
@@ -13,6 +14,7 @@ export async function POST(_request: Request, ctx: { params: Promise<{ token: st
   const { token } = await ctx.params;
   try {
     const result = await revokeCurationShare(token);
+    await logAudit({ actor: session, action: "curation.revoked", entity: "curation", entityId: token });
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
     return NextResponse.json(

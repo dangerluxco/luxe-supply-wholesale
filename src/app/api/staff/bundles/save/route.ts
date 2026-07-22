@@ -1,3 +1,4 @@
+import { logAudit } from "@/lib/firestore/audit";
 import { NextResponse } from "next/server";
 import { requireStaffSession } from "@/lib/staff-api-auth";
 import {
@@ -111,6 +112,13 @@ export async function POST(request: Request) {
       staffEmail: session.email,
     });
 
+    await logAudit({
+      actor: session,
+      action: "bundle.saved",
+      entity: "bundle",
+      entityId: saved?.id || lotId || "",
+      payload: { title, itemCount: items.length },
+    });
     return NextResponse.json({
       ok: true,
       redirectTo: "/wholesaleportal/rep/bundles",

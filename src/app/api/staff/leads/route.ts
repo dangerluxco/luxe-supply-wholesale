@@ -1,3 +1,4 @@
+import { logAudit } from "@/lib/firestore/audit";
 import { NextResponse } from "next/server";
 import { requireStaffSession } from "@/lib/staff-api-auth";
 import { createLead, listLeads, autoRouteLead, type LeadStatus } from "@/lib/firestore/leads";
@@ -95,6 +96,13 @@ export async function POST(request: Request) {
       notes: body.notes || "",
       createdByEmail: session.email,
       createdByName: session.name,
+    });
+    await logAudit({
+      actor: session,
+      action: "lead.created",
+      entity: "lead",
+      entityId: lead.id,
+      payload: { company: lead.company },
     });
     return NextResponse.json({ ok: true, lead });
   } catch (err) {

@@ -1,3 +1,4 @@
+import { logAudit } from "@/lib/firestore/audit";
 import { NextResponse } from "next/server";
 import { requireStaffSession } from "@/lib/staff-api-auth";
 import { getLeadById, markLeadConverted } from "@/lib/firestore/leads";
@@ -44,6 +45,13 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
       { email: session.email, name: session.name },
     );
 
+    await logAudit({
+      actor: session,
+      action: "lead.converted",
+      entity: "lead",
+      entityId: id,
+      payload: { buyerUsername: buyer.username },
+    });
     return NextResponse.json({
       ok: true,
       lead: updated,

@@ -1,4 +1,5 @@
 import { addQuoteActivity } from "@/lib/firestore/quoteActivities";
+import { logAudit } from "@/lib/firestore/audit";
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { ROLE } from "@/lib/constants";
@@ -35,6 +36,7 @@ export async function POST(
       staffEmail: session.email,
       staffName: session.name || session.email,
     }).catch(() => {});
+    await logAudit({ actor: session, action: "quote.release", entity: "quote", entityId: quoteId });
     return NextResponse.json({ ok: true });
   } catch (err) {
     return NextResponse.json(

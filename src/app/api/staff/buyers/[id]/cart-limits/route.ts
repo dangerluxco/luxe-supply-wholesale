@@ -1,3 +1,4 @@
+import { logAudit } from "@/lib/firestore/audit";
 import { NextResponse } from "next/server";
 import { requireStaffSession } from "@/lib/staff-api-auth";
 import { updateBuyerCartLimits } from "@/lib/firestore/buyers";
@@ -27,6 +28,13 @@ export async function POST(
     const buyer = await updateBuyerCartLimits(buyerId.trim(), {
       maxCartItems: Number(body.maxCartItems || 0),
       maxCartValue: Number(body.maxCartValue || 0),
+    });
+    await logAudit({
+      actor: session,
+      action: "buyer.cart_limits",
+      entity: "buyer",
+      entityId: buyerId.trim(),
+      payload: { maxCartItems: buyer.maxCartItems, maxCartValue: buyer.maxCartValue },
     });
     return NextResponse.json({
       ok: true,

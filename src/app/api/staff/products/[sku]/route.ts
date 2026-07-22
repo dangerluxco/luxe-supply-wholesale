@@ -1,3 +1,4 @@
+import { logAudit } from "@/lib/firestore/audit";
 import { NextResponse } from "next/server";
 import { requireStaffSession } from "@/lib/staff-api-auth";
 import { getProductDetailView, saveProductDetails } from "@/lib/firestore/productDetails";
@@ -101,6 +102,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ sku: strin
     if (!product) {
       return NextResponse.json({ error: "SKU not found." }, { status: 404 });
     }
+    await logAudit({ actor: session, action: "catalog.product_saved", entity: "product", entityId: sku });
     return NextResponse.json({ ok: true, product });
   } catch (err) {
     return NextResponse.json(

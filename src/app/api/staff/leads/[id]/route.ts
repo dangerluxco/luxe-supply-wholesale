@@ -1,3 +1,4 @@
+import { logAudit } from "@/lib/firestore/audit";
 import { NextResponse } from "next/server";
 import { requireStaffSession } from "@/lib/staff-api-auth";
 import {
@@ -98,6 +99,13 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
       lead = await updateLead(id, fieldUpdates);
     }
 
+    await logAudit({
+      actor: session,
+      action: "lead.updated",
+      entity: "lead",
+      entityId: id,
+      payload: { fields: Object.keys(fieldUpdates) },
+    });
     return NextResponse.json({ ok: true, lead });
   } catch (err) {
     return NextResponse.json(

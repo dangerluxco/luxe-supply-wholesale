@@ -1,3 +1,4 @@
+import { logAudit } from "@/lib/firestore/audit";
 import { NextResponse } from "next/server";
 import { requireStaffSession } from "@/lib/staff-api-auth";
 import { createCurationShare } from "@/lib/firestore/curation";
@@ -64,6 +65,13 @@ export async function POST(request: Request) {
       expiresHours: body.expiresHours,
       createdByEmail: session.email,
       createdByDisplayName: session.name,
+    });
+    await logAudit({
+      actor: session,
+      action: "curation.created",
+      entity: "curation",
+      entityId: share.token,
+      payload: { clientName, itemCount: body.items?.length || 0 },
     });
     const origin = buyerStorefrontOrigin();
     return NextResponse.json({

@@ -1,4 +1,5 @@
 import { addQuoteActivity } from "@/lib/firestore/quoteActivities";
+import { logAudit } from "@/lib/firestore/audit";
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { QUOTE_STATUSES, ROLE } from "@/lib/constants";
@@ -53,6 +54,13 @@ export async function POST(
       staffEmail: session.email,
       staffName: session.name || session.email,
     }).catch(() => {});
+    await logAudit({
+      actor: session,
+      action: "quote.status",
+      entity: "quote",
+      entityId: quoteId,
+      payload: { status: next },
+    });
 
     if (next === "quoted") {
       try {
