@@ -4,10 +4,8 @@ import { getSession } from "@/lib/auth";
 import { ROLE } from "@/lib/constants";
 import { listQuotes } from "@/lib/firestore/quotes";
 import { EmptyState } from "@/components/EmptyState";
-import { QuoteStatusSelect } from "@/components/QuoteStatusSelect";
-import { QuoteClaimControls } from "@/components/QuoteClaimControls";
+import { QuotesTable } from "@/components/QuotesTable";
 import { InfoTip } from "@/components/InfoTip";
-import { money } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -65,14 +63,12 @@ export default async function RepDashboard({
         >
           View clients
         </Link>
-        {/* Plain <a> (not next/link): staff console uses hard navigation everywhere to avoid a Next 15 soft-nav webpack bug. */}
-        {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-        <a
+        <Link
           href="/wholesaleportal/rep/curation"
           className="pressable inline-flex h-10 items-center rounded-chip bg-accent px-4 text-[11.5px] font-semibold uppercase tracking-[0.1em] text-ink hover:opacity-90"
         >
           + New order request
-        </a>
+        </Link>
       </div>
 
       <div className="mb-6 flex flex-wrap gap-2">
@@ -97,67 +93,22 @@ export default async function RepDashboard({
           hint="Buyer storefront order-request submissions land here from Firestore."
         />
       ) : (
-        <div className="overflow-hidden rounded-card border border-border bg-surface">
-          <div className="grid grid-cols-[1fr_0.85fr_52px_72px_60px_110px_minmax(230px,1.3fr)_72px] border-b border-border px-5 py-3 font-mono text-[10px] uppercase tracking-[0.12em] text-muted">
-            <span>Customer</span>
-            <span>Company / buyer</span>
-            <span className="text-center">Items</span>
-            <span className="text-right">Total</span>
-            <span className="text-center">Waiting</span>
-            <span>Status</span>
-            <span>Assigned</span>
-            <span className="text-right"> </span>
-          </div>
-          {quotes.map((q) => {
-            const name = q.customerName || q.buyerDisplayName || q.customerEmail || "—";
-            const href = `/wholesaleportal/rep/quotes/${q.id}`;
-            return (
-              <div
-                key={q.id}
-                className="grid grid-cols-[1fr_0.85fr_52px_72px_60px_110px_minmax(230px,1.3fr)_72px] items-center border-b border-border/60 px-5 py-3.5 text-[12.5px] text-[#3A3934] transition last:border-b-0 hover:bg-ground/70"
-              >
-                <div className="min-w-0">
-                  <div className="truncate font-semibold text-ink">{name}</div>
-                  <div className="truncate font-mono text-[11px] text-muted">
-                    {q.customerEmail || "—"}
-                  </div>
-                </div>
-                <div className="min-w-0">
-                  <div className="truncate">{q.customerCompany || "—"}</div>
-                  <div className="font-mono text-[11px] text-muted">
-                    {q.portalUsername ? `@${q.portalUsername}` : "guest"}
-                  </div>
-                </div>
-                <div className="text-center font-mono">{q.itemCount}</div>
-                <div className="text-right font-mono">
-                  {q.cartTotal != null
-                    ? money(Math.round(q.cartTotal + (q.shipping || 0)))
-                    : "—"}
-                </div>
-                <div className="text-center font-mono text-muted">{elapsed(q.createdAt)}</div>
-                <QuoteStatusSelect
-                  quoteId={q.id}
-                  status={q.status}
-                />
-                <QuoteClaimControls
-                  quoteId={q.id}
-                  claimedByEmail={q.claimedByEmail}
-                  claimedByName={q.claimedByName}
-                  currentStaffEmail={session.email}
-                  compact
-                />
-                <div className="text-right">
-                  <a
-                    href={href}
-                    className="pressable inline-flex h-8 items-center rounded-chip bg-ink px-3 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ground hover:opacity-90"
-                  >
-                    Open
-                  </a>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <QuotesTable
+          currentStaffEmail={session.email}
+          rows={quotes.map((q) => ({
+            id: q.id,
+            name: q.customerName || q.buyerDisplayName || q.customerEmail || "—",
+            email: q.customerEmail || "",
+            company: q.customerCompany || "",
+            username: q.portalUsername || "",
+            itemCount: q.itemCount,
+            total: q.cartTotal != null ? q.cartTotal + (q.shipping || 0) : null,
+            waiting: elapsed(q.createdAt),
+            status: q.status,
+            claimedByEmail: q.claimedByEmail,
+            claimedByName: q.claimedByName,
+          }))}
+        />
       )}
     </div>
   );
