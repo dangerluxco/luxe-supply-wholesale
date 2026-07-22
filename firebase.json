@@ -59,6 +59,20 @@
           }
         },
         {
+          "source": "/fulfillment",
+          "run": {
+            "serviceId": "luxe-wholesale-portal",
+            "region": "us-central1"
+          }
+        },
+        {
+          "source": "/fulfillment/**",
+          "run": {
+            "serviceId": "luxe-wholesale-portal",
+            "region": "us-central1"
+          }
+        },
+        {
           "source": "/_next/**",
           "run": {
             "serviceId": "luxe-wholesale-portal",
@@ -205,6 +219,20 @@
         },
         {
           "source": "/curation/**",
+          "run": {
+            "serviceId": "luxe-wholesale-portal",
+            "region": "us-central1"
+          }
+        },
+        {
+          "source": "/fulfillment",
+          "run": {
+            "serviceId": "luxe-wholesale-portal",
+            "region": "us-central1"
+          }
+        },
+        {
+          "source": "/fulfillment/**",
           "run": {
             "serviceId": "luxe-wholesale-portal",
             "region": "us-central1"
