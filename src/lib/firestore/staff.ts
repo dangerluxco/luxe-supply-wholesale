@@ -18,6 +18,8 @@ export type StaffRecord = {
   totpSecretEnc: string | null;
   totpRecoveryHashes: string[];
   sessionVersion: number;
+  /** Encrypted Google Calendar refresh token (AES-GCM, same key as TOTP). */
+  calendarRefreshTokenEnc: string | null;
 };
 
 export type StaffListItem = StaffRecord & {
@@ -83,7 +85,21 @@ function serializeStaff(id: string, d: Record<string, unknown>): StaffRecord {
     totpSecretEnc: d.totpSecretEnc ? String(d.totpSecretEnc) : null,
     totpRecoveryHashes: recovery,
     sessionVersion: Number.isFinite(Number(d.sessionVersion)) ? Number(d.sessionVersion) : 0,
+    calendarRefreshTokenEnc: d.calendarRefreshTokenEnc ? String(d.calendarRefreshTokenEnc) : null,
   };
+}
+
+/** Store (or clear with null) a staffer's encrypted Calendar refresh token. */
+export async function setStaffCalendarToken(
+  staffId: string,
+  refreshTokenEnc: string | null,
+): Promise<void> {
+  const id = String(staffId || "").trim();
+  if (!id) throw new Error("Staff id is required.");
+  await getDb().collection("salesPortalStaff").doc(id).update({
+    calendarRefreshTokenEnc: refreshTokenEnc,
+    updatedAt: new Date(),
+  });
 }
 
 export async function findStaffByEmail(emailRaw: string): Promise<StaffRecord | null> {

@@ -1,3 +1,5 @@
+// NOTE: keep this module client-safe (it's imported by BookCallEventModal).
+// The server-only Calendar API create lives in googleCalendarServer.ts.
 const DEFAULT_CALL_DURATION_MINUTES = 30;
 
 function pad2(n: number): string {
@@ -34,8 +36,8 @@ export function toDatetimeLocalValue(d: Date): string {
 
 /**
  * Builds a Google Calendar "quick add event" URL — guests via `add=`.
- * Full Calendar API create isn't wired yet (staff OAuth is sign-in only:
- * openid/email/profile, online access). Template URL is the live path.
+ * Fallback path for staff who haven't connected their calendar (the live
+ * path is createCalendarEvent via /api/staff/calendar/create-event).
  */
 export function buildGoogleCalendarUrl(opts: {
   title: string;

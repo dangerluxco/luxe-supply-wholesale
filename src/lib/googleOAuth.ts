@@ -45,6 +45,9 @@ export type GoogleOAuthState = {
   next: string;
   remember: boolean;
   nonce: string;
+  /** "calendar" = incremental-consent round-trip that stores a Calendar refresh token
+   *  for the signed-in staffer instead of creating a session. */
+  purpose?: "calendar";
 };
 
 function stateSigningKey(): string {
@@ -58,6 +61,7 @@ function stateSigningKey(): string {
 }
 
 export function signGoogleOAuthState(payload: Omit<GoogleOAuthState, "nonce">): string {
+  // (purpose rides along in the signed body automatically)
   const full: GoogleOAuthState = {
     ...payload,
     nonce: randomBytes(16).toString("hex"),
@@ -85,6 +89,7 @@ export function verifyGoogleOAuthState(raw: string): GoogleOAuthState {
     next: String(parsed.next || ""),
     remember: !!parsed.remember,
     nonce: String(parsed.nonce || ""),
+    purpose: parsed.purpose === "calendar" ? "calendar" : undefined,
   };
 }
 
@@ -92,19 +97,28 @@ export function buildGoogleAuthorizeUrl(opts: {
   redirectUri: string;
   state: string;
   hostedDomain?: string;
+  /** Extra scopes beyond openid/email/profile (e.g. calendar.events). */
+  extraScopes?: string[];
+  /** "offline" + prompt=consent makes Google return a refresh token. */
+  accessType?: "online" | "offline";
+  prompt?: string;
+  /** Pre-select the account (skip the picker) for incremental consent. */
+  loginHint?: string;
 }): string {
   const clientId = googleOAuthClientId();
   if (!clientId) throw new Error("Google sign-in is not configured (missing GOOGLE_OAUTH_CLIENT_ID).");
 
+  const scope = ["openid", "email", "profile", ...(opts.extraScopes || [])].join(" ");
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: opts.redirectUri,
     response_type: "code",
-    scope: "openid email profile",
+    scope,
     state: opts.state,
-    access_type: "online",
-    prompt: "select_account",
+    access_type: opts.accessType || "online",
+    prompt: opts.prompt || "select_account",
   });
+  if (opts.loginHint) params.set("login_hint", opts.loginHint);
   if (opts.hostedDomain) params.set("hd", opts.hostedDomain);
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 }
@@ -141,6 +155,36 @@ export async function exchangeGoogleAuthCode(opts: {
     email,
     name: String(payload?.name || "").trim(),
     emailVerified: true,
+  };
+}
+
+/**
+ * Code exchange that also returns the refresh token (calendar connect flow).
+ * Same verification as exchangeGoogleAuthCode; refresh_token is only present
+ * when the authorize URL used access_type=offline & prompt=consent.
+ */
+export async function exchangeGoogleAuthCodeForTokens(opts: {
+  code: string;
+  redirectUri: string;
+}): Promise<{ user: VerifiedGoogleUser; refreshToken: string | null }> {
+  const clientId = googleOAuthClientId();
+  const clientSecret = googleOAuthClientSecret();
+  if (!clientId || !clientSecret) throw new Error("Google sign-in is not configured.");
+  if (!opts.code || opts.code.length > 2048) throw new Error("Invalid Google authorization code.");
+
+  const client = new OAuth2Client(clientId, clientSecret, opts.redirectUri);
+  const { tokens } = await client.getToken(opts.code);
+  if (!tokens.id_token) throw new Error("Google did not return an ID token.");
+
+  const ticket = await client.verifyIdToken({ idToken: tokens.id_token, audience: clientId });
+  const payload = ticket.getPayload();
+  const email = String(payload?.email || "").trim().toLowerCase();
+  if (!email) throw new Error("Google account has no email.");
+  if (payload?.email_verified !== true) throw new Error("Google account email is not verified.");
+
+  return {
+    user: { email, name: String(payload?.name || "").trim(), emailVerified: true },
+    refreshToken: tokens.refresh_token ? String(tokens.refresh_token) : null,
   };
 }
 

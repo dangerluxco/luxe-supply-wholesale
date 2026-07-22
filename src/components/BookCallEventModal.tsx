@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { PressableButton } from "@/components/PressableButton";
 import {
   buildGoogleCalendarUrl,
@@ -40,9 +41,10 @@ export function bookCallDraftFromApi(opts: {
 }
 
 /**
- * Eelo-inspired in-portal event editor: date/time, title, description, attendees,
- * optional notes — then open a prefilled Google Calendar template (API create
- * needs Calendar scopes + offline tokens; not enabled on staff OAuth yet).
+ * In-portal event editor: date/time, title, description, attendees, notes.
+ * Primary path creates a REAL Calendar event via /api/staff/calendar/create-event
+ * (invites emailed to all guests). Staff without a connected calendar get a
+ * one-click connect flow, with the pre-filled template URL as a manual fallback.
  */
 export function BookCallEventModal({
   draft,
@@ -59,23 +61,79 @@ export function BookCallEventModal({
   onCancel: () => void;
   onConfirm: (calendarUrl: string) => void;
 }) {
-  function confirm() {
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [needsConnect, setNeedsConnect] = useState(false);
+  const [created, setCreated] = useState<string | null>(null);
+
+  function eventPayload() {
     const start = new Date(draft.startLocal);
-    if (Number.isNaN(start.getTime())) return;
+    if (Number.isNaN(start.getTime())) return null;
     const guestEmails = draft.attendees
       .split(/[,;\s]+/)
       .map((e) => e.trim().toLowerCase())
       .filter(Boolean);
     const notes = draft.notes.trim();
     const details = notes ? `${draft.details.trim()}\n\nNotes:\n${notes}` : draft.details.trim();
-    const calendarUrl = buildGoogleCalendarUrl({
-      title: draft.title.trim() || "Call",
-      details,
-      guestEmails,
-      start,
-      durationMinutes: draft.durationMinutes,
-    });
-    onConfirm(calendarUrl);
+    return { start, guestEmails, details, title: draft.title.trim() || "Call" };
+  }
+
+  async function createEvent() {
+    const p = eventPayload();
+    if (!p) return;
+    setCreating(true);
+    setCreateError(null);
+    setNeedsConnect(false);
+    try {
+      const res = await fetch("/api/staff/calendar/create-event", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: p.title,
+          details: p.details,
+          startIso: p.start.toISOString(),
+          durationMinutes: draft.durationMinutes,
+          guestEmails: p.guestEmails,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        needsConnect?: boolean;
+        htmlLink?: string;
+      };
+      if (data.needsConnect) {
+        setNeedsConnect(true);
+        return;
+      }
+      if (!res.ok || data.error) {
+        setCreateError(data.error || "Could not create the event.");
+        return;
+      }
+      setCreated(data.htmlLink || "");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  function openTemplate() {
+    const p = eventPayload();
+    if (!p) return;
+    onConfirm(
+      buildGoogleCalendarUrl({
+        title: p.title,
+        details: p.details,
+        guestEmails: p.guestEmails,
+        start: p.start,
+        durationMinutes: draft.durationMinutes,
+      }),
+    );
+  }
+
+  function connectCalendar() {
+    const next =
+      typeof window !== "undefined" ? window.location.pathname + window.location.search : "/wholesaleportal/rep";
+    window.location.href = `/api/staff/calendar/connect?next=${encodeURIComponent(next)}`;
   }
 
   return (
@@ -96,9 +154,51 @@ export function BookCallEventModal({
 
         <div className="space-y-4 px-6 py-5">
           <p className="text-[12.5px] text-secondary">
-            Set the event details here, then open Google Calendar with everything pre-filled.
-            Adjust the invite there if you need a Meet link or more guests.
+            Set the event details, then create the invite — it lands on your Google Calendar
+            and emails every attendee automatically.
           </p>
+
+          {created != null ? (
+            <div className="rounded-chip border border-accent/50 bg-accent/10 px-4 py-3 text-[12.5px] text-ink">
+              Event created — invites are on their way to all attendees.{" "}
+              {created ? (
+                <a
+                  href={created}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-semibold text-accent underline"
+                >
+                  Open in Calendar →
+                </a>
+              ) : null}
+            </div>
+          ) : null}
+
+          {needsConnect ? (
+            <div className="rounded-chip border border-accent/50 bg-accent/10 px-4 py-3 text-[12.5px]">
+              <div className="mb-2 text-ink">
+                Connect your Google Calendar once and future calls book with one click. You&apos;ll
+                see a Google screen saying the app is unverified — click{" "}
+                <span className="font-semibold">Advanced → Continue</span> (one time only).
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={connectCalendar}
+                  className="h-8 rounded-chip bg-ink px-3 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ground hover:opacity-90"
+                >
+                  Connect Google Calendar
+                </button>
+                <button
+                  type="button"
+                  onClick={openTemplate}
+                  className="h-8 rounded-chip border border-border px-3 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-secondary hover:border-accent hover:text-ink"
+                >
+                  Use pre-filled Calendar instead
+                </button>
+              </div>
+            </div>
+          ) : null}
 
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -189,26 +289,39 @@ export function BookCallEventModal({
             />
           </div>
 
-          {error ? <p className="text-[12px] text-danger">{error}</p> : null}
+          {error || createError ? (
+            <p className="text-[12px] text-danger">{error || createError}</p>
+          ) : null}
         </div>
 
         <div className="flex items-center justify-end gap-2 border-t border-border px-6 py-4">
           <PressableButton
             onClick={onCancel}
-            disabled={pending}
+            disabled={pending || creating}
             className="inline-flex h-9 items-center rounded-chip border border-border px-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink hover:border-accent disabled:opacity-60"
           >
-            Cancel
+            {created != null ? "Done" : "Cancel"}
           </PressableButton>
-          <PressableButton
-            pending={pending}
-            pendingLabel="Opening…"
-            onClick={confirm}
-            disabled={!draft.title.trim() || !draft.startLocal}
-            className="inline-flex h-9 items-center rounded-chip bg-ink px-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-ground disabled:opacity-60"
-          >
-            Open in Calendar
-          </PressableButton>
+          {created == null ? (
+            <>
+              <PressableButton
+                onClick={openTemplate}
+                disabled={pending || creating || !draft.title.trim() || !draft.startLocal}
+                className="inline-flex h-9 items-center rounded-chip border border-border px-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-secondary hover:border-accent hover:text-ink disabled:opacity-60"
+              >
+                Open in Calendar
+              </PressableButton>
+              <PressableButton
+                pending={creating}
+                pendingLabel="Creating…"
+                onClick={createEvent}
+                disabled={pending || !draft.title.trim() || !draft.startLocal}
+                className="inline-flex h-9 items-center rounded-chip bg-ink px-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-ground disabled:opacity-60"
+              >
+                Create event + send invites
+              </PressableButton>
+            </>
+          ) : null}
         </div>
       </div>
     </div>

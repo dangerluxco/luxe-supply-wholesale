@@ -9,8 +9,18 @@ import {
   sessionCookieOptions,
   withAreaSession,
 } from "@/lib/auth-session";
-import { exchangeGoogleAuthCode, verifyGoogleOAuthState } from "@/lib/googleOAuth";
-import { authenticateStaffByOAuthEmail, staffToAppRole } from "@/lib/firestore/staff";
+import {
+  exchangeGoogleAuthCode,
+  exchangeGoogleAuthCodeForTokens,
+  verifyGoogleOAuthState,
+} from "@/lib/googleOAuth";
+import {
+  authenticateStaffByOAuthEmail,
+  setStaffCalendarToken,
+  staffToAppRole,
+} from "@/lib/firestore/staff";
+import { getSessionForArea } from "@/lib/auth";
+import { encryptTotpSecret } from "@/lib/totp";
 import { authenticateBuyerByOAuthEmail } from "@/lib/firestore/buyers";
 import { ROLE } from "@/lib/constants";
 import { staffPostLoginPath } from "@/lib/staff-totp-gate";
@@ -48,6 +58,35 @@ export async function GET(request: Request) {
     area = state.area;
 
     const redirectUri = `${origin}/api/auth/callback/google`;
+
+    // Calendar connect round-trip: store the refresh token for the already
+    // signed-in staffer — no session changes. Google account must match the
+    // staff login email so one rep can't attach another's calendar.
+    if (state.purpose === "calendar") {
+      const session = await getSessionForArea("staff");
+      if (!session || session.role === ROLE.BUYER || session.source !== "firestore") {
+        return signInErrorRedirect(origin, "staff", "Sign in to the portal first, then connect your calendar.");
+      }
+      const { user, refreshToken } = await exchangeGoogleAuthCodeForTokens({ code, redirectUri });
+      const back = new URL(state.next || "/wholesaleportal/rep", origin);
+      if (user.email !== String(session.email || "").toLowerCase()) {
+        back.searchParams.set(
+          "calendarError",
+          `Pick the same Google account you sign in with (${session.email}).`,
+        );
+        return NextResponse.redirect(back);
+      }
+      if (!refreshToken) {
+        back.searchParams.set("calendarError", "Google didn't grant offline access. Try connecting again.");
+        return NextResponse.redirect(back);
+      }
+      await setStaffCalendarToken(session.id, encryptTotpSecret(refreshToken));
+      back.searchParams.set("calendarConnected", "1");
+      const res = NextResponse.redirect(back);
+      res.headers.set("Cache-Control", "no-store");
+      return res;
+    }
+
     const verified = await exchangeGoogleAuthCode({ code, redirectUri });
 
     const cookieOpts = sessionCookieOptions(state.remember ? SESSION_REMEMBER_MAX_AGE : undefined);
