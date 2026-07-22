@@ -14,7 +14,17 @@ const PRESETS: { value: DateRangePreset; label: string }[] = [
   { value: "custom", label: "Custom" },
 ];
 
-type SortField = "name" | "sales" | "invoices" | "aov" | "conversionPct" | "calls";
+type SortField =
+  | "name"
+  | "sales"
+  | "paidSales"
+  | "pendingSales"
+  | "marginDollars"
+  | "units"
+  | "invoices"
+  | "aov"
+  | "conversionPct"
+  | "calls";
 
 function fmtPct(v: number | null): string {
   return v == null ? "—" : `${v}%`;
@@ -28,6 +38,7 @@ export function PerformanceDashboard({
   rows,
   team,
   dailySales,
+  dailyMargin = [],
   preset,
   from,
   to,
@@ -36,6 +47,7 @@ export function PerformanceDashboard({
   rows: StaffPerformanceRow[];
   team: TeamSummary;
   dailySales: { date: string; total: number }[];
+  dailyMargin?: { date: string; total: number }[];
   preset: DateRangePreset;
   from: string;
   to: string;
@@ -81,11 +93,29 @@ export function PerformanceDashboard({
   }
 
   function exportCsv() {
-    const header = ["Name", "Email", "Sales", "Invoices", "AOV", "Conversion %", "Calls"];
+    const header = [
+      "Name",
+      "Email",
+      "Sales",
+      "Paid sales",
+      "Pending sales",
+      "Margin $",
+      "Margin %",
+      "Units",
+      "Invoices",
+      "AOV",
+      "Conversion %",
+      "Calls",
+    ];
     const body = sortedRows.map((r) => [
       r.name,
       r.email,
       Math.round(r.sales),
+      Math.round(r.paidSales),
+      Math.round(r.pendingSales),
+      Math.round(r.marginDollars),
+      r.marginPct ?? "",
+      r.units,
       r.invoices,
       r.aov != null ? Math.round(r.aov) : "",
       r.conversionPct ?? "",
@@ -167,8 +197,31 @@ export function PerformanceDashboard({
       {/* Team summary */}
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div className="rounded-card border border-border bg-surface p-4">
-          <div className="micro-badge text-[10px] tracking-[0.14em] text-muted">TOTAL SALES</div>
-          <div className="mt-1 text-[22px] font-semibold text-ink">{money(Math.round(team.totalSales))}</div>
+          <div className="micro-badge text-[10px] tracking-[0.14em] text-muted">TOTAL SALES (PAID)</div>
+          <div className="mt-1 text-[22px] font-semibold text-ink">
+            {money(Math.round(team.totalPaidSales))}
+          </div>
+          <div className="mt-0.5 text-[11px] text-muted">{money(Math.round(team.totalSales))} invoiced</div>
+        </div>
+        <div className="rounded-card border border-border bg-surface p-4">
+          <div className="micro-badge text-[10px] tracking-[0.14em] text-muted">PENDING SALES</div>
+          <div className="mt-1 text-[22px] font-semibold text-ink">
+            {money(Math.round(team.totalPendingSales))}
+          </div>
+          <div className="mt-0.5 text-[11px] text-muted">unpaid invoices</div>
+        </div>
+        <div className="rounded-card border border-border bg-surface p-4">
+          <div className="micro-badge text-[10px] tracking-[0.14em] text-muted">GROSS MARGIN</div>
+          <div className="mt-1 text-[22px] font-semibold text-ink">
+            {money(Math.round(team.totalMarginDollars))}
+          </div>
+          <div className="mt-0.5 text-[11px] text-muted">
+            {team.totalMarginPct != null ? `${team.totalMarginPct}% of costed sales` : "no cost data in range"}
+          </div>
+        </div>
+        <div className="rounded-card border border-border bg-surface p-4">
+          <div className="micro-badge text-[10px] tracking-[0.14em] text-muted">UNITS SOLD</div>
+          <div className="mt-1 text-[22px] font-semibold text-ink">{team.totalUnits}</div>
         </div>
         <div className="rounded-card border border-border bg-surface p-4">
           <div className="micro-badge text-[10px] tracking-[0.14em] text-muted">TOTAL INVOICES</div>
@@ -215,7 +268,19 @@ export function PerformanceDashboard({
         </div>
 
         <div className="rounded-card border border-border bg-surface p-5">
-          <div className="micro-badge mb-4 text-[10px] tracking-[0.14em] text-accent">SALES OVER TIME</div>
+          <div className="mb-4 flex items-center justify-between">
+            <div className="micro-badge text-[10px] tracking-[0.14em] text-accent">
+              SALES &amp; MARGIN OVER TIME
+            </div>
+            <div className="flex items-center gap-3 text-[10px] text-muted">
+              <span className="flex items-center gap-1">
+                <span className="h-0.5 w-4 bg-[#B08D3E]" /> Sales
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="h-0.5 w-4 bg-[#4E9A6A]" /> Margin
+              </span>
+            </div>
+          </div>
           {dailySales.length === 0 || maxDaily <= 0 ? (
             <p className="text-[12px] text-muted">No invoices in this range.</p>
           ) : (
@@ -232,6 +297,20 @@ export function PerformanceDashboard({
                   })
                   .join(" ")}
               />
+              {dailyMargin.length > 0 && dailyMargin.some((d) => d.total !== 0) ? (
+                <polyline
+                  fill="none"
+                  stroke="#4E9A6A"
+                  strokeWidth="2"
+                  points={dailyMargin
+                    .map((d, i) => {
+                      const x = dailyMargin.length > 1 ? (i / (dailyMargin.length - 1)) * 300 : 0;
+                      const y = 96 - (Math.max(0, d.total) / maxDaily) * 92;
+                      return `${x},${y}`;
+                    })
+                    .join(" ")}
+                />
+              ) : null}
             </svg>
           )}
           <div className="mt-2 flex justify-between text-[10px] text-muted">
@@ -248,13 +327,22 @@ export function PerformanceDashboard({
         </div>
       ) : (
         <div className="overflow-x-auto rounded-card border border-border bg-surface">
-          <div className="min-w-[640px]">
-            <div className="grid grid-cols-[1.3fr_100px_90px_100px_110px_80px] items-center border-b border-border px-5 py-3 font-mono text-[10px] uppercase tracking-[0.12em] text-muted">
+          <div className="min-w-[880px]">
+            <div className="grid grid-cols-[1.2fr_95px_95px_110px_60px_75px_90px_95px_60px] items-center gap-x-2 border-b border-border px-5 py-3 font-mono text-[10px] uppercase tracking-[0.12em] text-muted">
               <button type="button" onClick={() => toggleSort("name")} className="flex items-center text-left hover:text-ink">
                 Name {sortIndicator("name")}
               </button>
-              <button type="button" onClick={() => toggleSort("sales")} className="flex items-center justify-end hover:text-ink">
-                Sales {sortIndicator("sales")}
+              <button type="button" onClick={() => toggleSort("paidSales")} className="flex items-center justify-end hover:text-ink">
+                Paid {sortIndicator("paidSales")}
+              </button>
+              <button type="button" onClick={() => toggleSort("pendingSales")} className="flex items-center justify-end hover:text-ink">
+                Pending {sortIndicator("pendingSales")}
+              </button>
+              <button type="button" onClick={() => toggleSort("marginDollars")} className="flex items-center justify-end hover:text-ink">
+                Margin {sortIndicator("marginDollars")}
+              </button>
+              <button type="button" onClick={() => toggleSort("units")} className="flex items-center justify-end hover:text-ink">
+                Units {sortIndicator("units")}
               </button>
               <button type="button" onClick={() => toggleSort("invoices")} className="flex items-center justify-end hover:text-ink">
                 Invoices {sortIndicator("invoices")}
@@ -263,7 +351,7 @@ export function PerformanceDashboard({
                 AOV {sortIndicator("aov")}
               </button>
               <button type="button" onClick={() => toggleSort("conversionPct")} className="flex items-center justify-end hover:text-ink">
-                Conversion {sortIndicator("conversionPct")}
+                Conv. {sortIndicator("conversionPct")}
               </button>
               <button type="button" onClick={() => toggleSort("calls")} className="flex items-center justify-end hover:text-ink">
                 Calls {sortIndicator("calls")}
@@ -272,7 +360,7 @@ export function PerformanceDashboard({
             {sortedRows.map((r) => (
               <div
                 key={r.email}
-                className="grid grid-cols-[1.3fr_100px_90px_100px_110px_80px] items-center border-b border-border/60 px-5 py-3.5 text-[12.5px] text-[#3A3934] last:border-b-0"
+                className="grid grid-cols-[1.2fr_95px_95px_110px_60px_75px_90px_95px_60px] items-center gap-x-2 border-b border-border/60 px-5 py-3.5 text-[12.5px] text-[#3A3934] last:border-b-0"
               >
                 <div className="min-w-0">
                   {staffIdByEmail?.[r.email] ? (
@@ -287,7 +375,17 @@ export function PerformanceDashboard({
                   )}
                   <div className="truncate font-mono text-[10.5px] text-muted">{r.email}</div>
                 </div>
-                <div className="text-right font-mono font-semibold text-ink">{money(Math.round(r.sales))}</div>
+                <div className="text-right font-mono font-semibold text-ink">
+                  {money(Math.round(r.paidSales))}
+                </div>
+                <div className="text-right font-mono">{money(Math.round(r.pendingSales))}</div>
+                <div className="text-right font-mono">
+                  {money(Math.round(r.marginDollars))}
+                  <span className="ml-1 text-[10px] text-muted">
+                    {r.marginPct != null ? `${r.marginPct}%` : "—"}
+                  </span>
+                </div>
+                <div className="text-right font-mono">{r.units}</div>
                 <div className="text-right font-mono">{r.invoices}</div>
                 <div className="text-right font-mono">{fmtMoneyOrDash(r.aov)}</div>
                 <div className="text-right font-mono">{fmtPct(r.conversionPct)}</div>

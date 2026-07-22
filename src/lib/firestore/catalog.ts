@@ -1332,6 +1332,36 @@ export async function findSimilarCatalogItems(
 }
 
 /** Mark inventory SKUs as sold so they drop from the wholesale storefront. */
+/**
+ * Bulk inventory cost basis by SKU (IIQItemDetails.cost), chunked 'in' queries.
+ * Used with productOverrides.costOverride (which wins) for margin reporting.
+ */
+export async function loadInventoryCostsBySkus(skusRaw: string[]): Promise<Map<string, number>> {
+  const unique = [...new Set(skusRaw.map((s) => String(s || "").trim()).filter(Boolean))];
+  const out = new Map<string, number>();
+  if (!unique.length) return out;
+  const db = getDb();
+  for (let i = 0; i < unique.length; i += 10) {
+    const chunk = unique.slice(i, i + 10);
+    try {
+      const snap = await db
+        .collection("IIQItemDetails")
+        .where("uploadDirectory", "==", UPLOAD_DIRECTORY)
+        .where("sku", "in", chunk)
+        .get();
+      for (const doc of snap.docs) {
+        const d = doc.data() || {};
+        const sku = String(d.sku || "");
+        const cost = Number(d.cost);
+        if (sku && Number.isFinite(cost) && cost > 0 && !out.has(sku)) out.set(sku, cost);
+      }
+    } catch {
+      // Skip chunk on query failure — margin just shows as unknown for those SKUs.
+    }
+  }
+  return out;
+}
+
 export async function markSkusSold(skus: string[]): Promise<{ updated: number }> {
   const unique = [...new Set(skus.map((s) => String(s || "").trim()).filter(Boolean))];
   if (!unique.length) return { updated: 0 };

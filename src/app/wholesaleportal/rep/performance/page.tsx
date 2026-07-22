@@ -9,10 +9,13 @@ import {
   computeStaffPerformance,
   computeTeamSummary,
   computeDailySales,
+  computeDailyMargin,
   resolveDateRange,
   type DateRangePreset,
   type StaffPerformanceRow,
 } from "@/lib/performance";
+import { loadProductOverridesBySku } from "@/lib/firestore/productOverrides";
+import { loadInventoryCostsBySkus } from "@/lib/firestore/catalog";
 import { PerformanceDashboard } from "@/components/PerformanceDashboard";
 import { requirePortalFeature } from "@/lib/require-feature";
 
@@ -43,6 +46,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
 
   let rows: StaffPerformanceRow[] = [];
   let dailySales: { date: string; total: number }[] = [];
+  let dailyMargin: { date: string; total: number }[] = [];
   let staffIdByEmail: Record<string, string> = {};
   let loadError: string | null = null;
 
@@ -55,11 +59,48 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
     ]);
     const quoteList = quotesResult.quotes;
 
-    const invoiceInput = invoiceList.map((i) => ({
-      createdBy: i.createdBy || "",
-      total: i.total || 0,
-      createdAt: i.createdAt,
-    }));
+    // Cost basis for margin: staff cost override wins, else IIQ inventory cost.
+    // Only in-range invoices' SKUs are fetched to bound the chunked queries.
+    const inRangeInvoices = invoiceList.filter((i) => {
+      if (!i.createdAt) return false;
+      const t = new Date(i.createdAt).getTime();
+      return Number.isFinite(t) && t >= from.getTime() && t <= to.getTime();
+    });
+    const skus = [...new Set(inRangeInvoices.flatMap((i) => i.items.map((it) => it.sku)))];
+    const [overrides, inventoryCosts] = await Promise.all([
+      loadProductOverridesBySku(skus).catch(() => new Map()),
+      loadInventoryCostsBySkus(skus).catch(() => new Map<string, number>()),
+    ]);
+    const costFor = (sku: string): number | null => {
+      const o = overrides.get(sku);
+      if (o?.costOverride != null && o.costOverride > 0) return o.costOverride;
+      const inv = inventoryCosts.get(sku);
+      return inv != null && inv > 0 ? inv : null;
+    };
+
+    const invoiceInput = invoiceList.map((i) => {
+      let units = 0;
+      let margin: number | null = null;
+      let marginKnownSales = 0;
+      for (const it of i.items) {
+        const qty = Math.max(1, Number(it.quantity) || 1);
+        units += qty;
+        const cost = costFor(it.sku);
+        if (cost != null) {
+          margin = (margin ?? 0) + (it.price - cost) * qty;
+          marginKnownSales += it.price * qty;
+        }
+      }
+      return {
+        createdBy: i.createdBy || "",
+        total: i.total || 0,
+        createdAt: i.createdAt,
+        status: i.status,
+        units,
+        margin,
+        marginKnownSales,
+      };
+    });
 
     rows = computeStaffPerformance({
       staff: staffList.map((s) => ({ email: s.email, name: s.displayName || s.email })),
@@ -74,6 +115,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
       to,
     });
     dailySales = computeDailySales(invoiceInput, from, to);
+    dailyMargin = computeDailyMargin(invoiceInput, from, to);
     staffIdByEmail = Object.fromEntries(
       staffList
         .map((s) => [s.email.trim().toLowerCase(), s.id] as const)
@@ -105,6 +147,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
         rows={rows}
         team={team}
         dailySales={dailySales}
+        dailyMargin={dailyMargin}
         preset={preset}
         from={from.toISOString()}
         to={to.toISOString()}
