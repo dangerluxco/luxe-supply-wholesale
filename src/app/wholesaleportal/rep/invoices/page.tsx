@@ -29,6 +29,13 @@ export default async function RepInvoicesPage() {
         <span className="text-[12px] text-muted">
           Live from Firestore · {invoices.length} total
         </span>
+        <div className="flex-1" />
+        <a
+          href="/api/staff/export/invoices"
+          className="pressable rounded-chip border border-border px-3 py-1.5 text-[11px] text-secondary hover:border-accent hover:text-ink"
+        >
+          Export CSV
+        </a>
       </div>
 
       {outstanding > 0 ? (

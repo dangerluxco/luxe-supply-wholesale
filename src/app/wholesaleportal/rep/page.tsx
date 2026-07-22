@@ -57,6 +57,12 @@ export default async function RepDashboard({
           Live from Firestore · {openCount} open
         </span>
         <div className="flex-1" />
+        <a
+          href="/api/staff/export/quotes"
+          className="pressable rounded-chip border border-border px-3 py-1.5 text-[11px] text-secondary hover:border-accent hover:text-ink"
+        >
+          Export CSV
+        </a>
         <Link
           href="/wholesaleportal/rep/clients"
           className="pressable rounded-chip border border-border px-3 py-1.5 text-[11px] text-secondary hover:border-accent hover:text-ink"

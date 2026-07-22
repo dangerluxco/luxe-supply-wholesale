@@ -52,6 +52,13 @@ export default async function ClientsPage({
         <span className="text-[12px] text-muted">
           Firestore `salesPortalBuyers` &amp; registration applications
         </span>
+        <div className="flex-1" />
+        <a
+          href="/api/staff/export/clients"
+          className="pressable rounded-chip border border-border px-3 py-1.5 text-[11px] text-secondary hover:border-accent hover:text-ink"
+        >
+          Export CSV
+        </a>
       </div>
 
       <div className="mb-6 flex flex-wrap gap-2">
