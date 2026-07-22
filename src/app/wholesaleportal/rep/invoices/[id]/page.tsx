@@ -132,11 +132,11 @@ export default async function StaffInvoiceDetailPage({
               </>
             )}
           </div>
-
-          <PackingNoteForm invoiceId={invoice.id} initialNote={invoice.packingNote} />
         </div>
 
         <div className="space-y-6">
+          <PackingNoteForm invoiceId={invoice.id} initialNote={invoice.packingNote} />
+
           <div className="rounded-card border border-border bg-surface p-5">
             <div className="mb-3 micro-badge text-[10px] tracking-[0.14em] text-accent">
               INVOICE STATUS
