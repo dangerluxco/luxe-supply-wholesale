@@ -5,6 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { money } from "@/lib/format";
 import { csvBody, isoDate } from "@/lib/csv";
 import type { StaffPerformanceRow, TeamSummary, DateRangePreset } from "@/lib/performance";
+import type { SalesGoals } from "@/lib/firestore/settings";
 
 const PRESETS: { value: DateRangePreset; label: string }[] = [
   { value: "today", label: "Today" },
@@ -39,6 +40,7 @@ export function PerformanceDashboard({
   team,
   dailySales,
   dailyMargin = [],
+  goals = null,
   preset,
   from,
   to,
@@ -48,6 +50,7 @@ export function PerformanceDashboard({
   team: TeamSummary;
   dailySales: { date: string; total: number }[];
   dailyMargin?: { date: string; total: number }[];
+  goals?: SalesGoals | null;
   preset: DateRangePreset;
   from: string;
   to: string;
@@ -236,6 +239,59 @@ export function PerformanceDashboard({
           <div className="mt-1 text-[22px] font-semibold text-ink">{team.totalCalls}</div>
         </div>
       </div>
+
+      {/* Goal progress — monthly targets on the month view, weekly (if set) on the week view */}
+      {(() => {
+        if (!goals) return null;
+        const targets =
+          preset === "month"
+            ? { label: "MONTHLY GOAL", revenue: goals.monthlyRevenue, gp: goals.monthlyGp }
+            : preset === "week" && (goals.weeklyRevenue || goals.weeklyGp)
+              ? { label: "WEEKLY GOAL", revenue: goals.weeklyRevenue || 0, gp: goals.weeklyGp || 0 }
+              : null;
+        if (!targets || (!targets.revenue && !targets.gp)) return null;
+        const bars = [
+          targets.revenue
+            ? { name: "Revenue", actual: team.totalSales, target: targets.revenue }
+            : null,
+          targets.gp
+            ? { name: "Gross profit", actual: team.totalMarginDollars, target: targets.gp }
+            : null,
+        ].filter(Boolean) as Array<{ name: string; actual: number; target: number }>;
+        return (
+          <div className="mb-6 rounded-card border border-border bg-surface p-5">
+            <div className="micro-badge mb-4 text-[10px] tracking-[0.14em] text-accent">
+              {targets.label}
+            </div>
+            <div className="space-y-3">
+              {bars.map((b) => {
+                const pct = Math.min(100, Math.round((b.actual / b.target) * 100));
+                const hit = b.actual >= b.target;
+                return (
+                  <div key={b.name}>
+                    <div className="mb-1 flex items-baseline justify-between text-[12px]">
+                      <span className="text-secondary">{b.name}</span>
+                      <span className="font-mono text-ink">
+                        {money(Math.round(b.actual))}{" "}
+                        <span className="text-muted">/ {money(b.target)}</span>
+                        <span className={"ml-2 font-semibold " + (hit ? "text-[#4E9A6A]" : "text-muted")}>
+                          {pct}%
+                        </span>
+                      </span>
+                    </div>
+                    <div className="h-2.5 overflow-hidden rounded-chip bg-ground">
+                      <div
+                        className={"h-full rounded-chip " + (hit ? "bg-[#4E9A6A]" : "bg-accent")}
+                        style={{ width: `${Math.max(1, pct)}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Charts */}
       <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">

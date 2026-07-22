@@ -16,6 +16,7 @@ import {
 } from "@/lib/performance";
 import { loadProductOverridesBySku } from "@/lib/firestore/productOverrides";
 import { loadInventoryCostsBySkus } from "@/lib/firestore/catalog";
+import { getSalesGoals } from "@/lib/firestore/settings";
 import { PerformanceDashboard } from "@/components/PerformanceDashboard";
 import { requirePortalFeature } from "@/lib/require-feature";
 
@@ -127,6 +128,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
   }
 
   const team = computeTeamSummary(rows);
+  const goals = await getSalesGoals().catch(() => null);
 
   return (
     <div className="px-10 pb-12 pt-8">
@@ -148,6 +150,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
         team={team}
         dailySales={dailySales}
         dailyMargin={dailyMargin}
+        goals={goals}
         preset={preset}
         from={from.toISOString()}
         to={to.toISOString()}

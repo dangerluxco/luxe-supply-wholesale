@@ -7,6 +7,7 @@ import {
   saveNotifyEmails,
   savePortalFeatures,
   saveQuoteSettings,
+  saveSalesGoals,
 } from "@/lib/firestore/settings";
 import { logAudit } from "@/lib/firestore/audit";
 
@@ -65,6 +66,18 @@ export async function POST(request: Request) {
         payload: { legalName: saved.legalName },
       });
       return NextResponse.json({ ok: true, message: "Invoicing settings saved." });
+    }
+
+    if (section === "goals") {
+      const saved = await saveSalesGoals((body.goals || {}) as Record<string, number | null>);
+      await logAudit({
+        actor: session,
+        action: "settings.goals.update",
+        entity: "Settings",
+        entityId: "goals",
+        payload: saved,
+      });
+      return NextResponse.json({ ok: true, message: "Sales goals saved." });
     }
 
     if (section === "features") {

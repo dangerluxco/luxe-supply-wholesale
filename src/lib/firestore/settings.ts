@@ -248,6 +248,53 @@ export async function getPortalFeatures(): Promise<PortalFeatures> {
 }
 
 /** Extra staff-notification recipients on top of active `salesPortalStaff` accounts. */
+/** Team sales goals shown on the performance screen. Meeting defaults: $500k sales / $100k GP monthly. */
+export type SalesGoals = {
+  monthlyRevenue: number;
+  monthlyGp: number;
+  weeklyRevenue: number | null;
+  weeklyGp: number | null;
+};
+
+const DEFAULT_SALES_GOALS: SalesGoals = {
+  monthlyRevenue: 500_000,
+  monthlyGp: 100_000,
+  weeklyRevenue: null,
+  weeklyGp: null,
+};
+
+export function normalizeSalesGoals(raw: unknown): SalesGoals {
+  const d = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const num = (v: unknown, fallback: number): number => {
+    const n = Number(v);
+    return Number.isFinite(n) && n >= 0 ? n : fallback;
+  };
+  const numOrNull = (v: unknown): number | null => {
+    if (v == null || v === "") return null;
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+  return {
+    monthlyRevenue: num(d.monthlyRevenue, DEFAULT_SALES_GOALS.monthlyRevenue),
+    monthlyGp: num(d.monthlyGp, DEFAULT_SALES_GOALS.monthlyGp),
+    weeklyRevenue: numOrNull(d.weeklyRevenue),
+    weeklyGp: numOrNull(d.weeklyGp),
+  };
+}
+
+export async function getSalesGoals(): Promise<SalesGoals> {
+  const org = await getLuxesupplyOrg();
+  return normalizeSalesGoals(salesPortalOf(org.data).salesGoals);
+}
+
+export async function saveSalesGoals(input: Partial<SalesGoals>): Promise<SalesGoals> {
+  const org = await getLuxesupplyOrg();
+  const current = normalizeSalesGoals(salesPortalOf(org.data).salesGoals);
+  const next = normalizeSalesGoals({ ...current, ...input });
+  await patchSalesPortal({ salesGoals: next });
+  return next;
+}
+
 export async function getNotifyEmails(): Promise<string[]> {
   const org = await getLuxesupplyOrg();
   const raw = salesPortalOf(org.data).notifyEmails;
