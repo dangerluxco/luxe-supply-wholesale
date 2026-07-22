@@ -8,6 +8,7 @@ import { ProductPdpGallery } from "@/components/ProductPdpGallery";
 import { money } from "@/lib/format";
 import { AddToOrderButton } from "@/components/AddToOrderButton";
 import { RequestPieceCallButton } from "@/components/RequestPieceCallButton";
+import { BackButton } from "@/components/BackButton";
 import { HoldAlertButton } from "@/components/HoldAlertButton";
 import { LiveBundledSkuGuard } from "@/components/StorefrontAvailability";
 import { getHoldAlertForBuyerSku } from "@/lib/firestore/holdAlerts";
@@ -55,12 +56,16 @@ export default async function ProductPage({
   return (
     <div className="px-8 pb-16 pt-6">
       <LiveBundledSkuGuard sku={product.sku} />
-      <div className="mb-6 font-mono text-[11px] uppercase tracking-[0.1em] text-muted">
-        <Link href="/wholesale" className="hover:text-ink">
-          Collection
-        </Link>
-        <span className="mx-2">/</span>
-        <span>{product.sku}</span>
+      <div className="mb-6 flex items-center gap-4 font-mono text-[11px] uppercase tracking-[0.1em] text-muted">
+        <BackButton fallbackHref="/wholesale" label="Back" />
+        <span className="text-border">|</span>
+        <span>
+          <Link href="/wholesale" className="hover:text-ink">
+            Collection
+          </Link>
+          <span className="mx-2">/</span>
+          <span>{product.sku}</span>
+        </span>
       </div>
 
       <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[minmax(0,440px)_minmax(0,1fr)] lg:gap-12">
