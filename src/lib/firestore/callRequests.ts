@@ -8,6 +8,8 @@ export type CallRequestItem = {
   id: string;
   sku: string;
   title: string;
+  /** Product hero image at request time (render-time catalog fallback for old docs). */
+  imageUrl: string | null;
   portalUsername: string;
   buyerDisplayName: string;
   buyerEmail: string;
@@ -28,6 +30,7 @@ function serialize(id: string, d: Record<string, unknown>): CallRequestItem {
     id,
     sku: String(d.sku || ""),
     title: String(d.title || d.sku || ""),
+    imageUrl: d.imageUrl ? String(d.imageUrl) : null,
     portalUsername: String(d.portalUsername || ""),
     buyerDisplayName: String(d.buyerDisplayName || d.portalUsername || ""),
     buyerEmail: String(d.buyerEmail || ""),
@@ -76,6 +79,7 @@ export async function addCallRequest(opts: {
   email?: string;
   sku: string;
   title?: string;
+  imageUrl?: string | null;
   preferredTimes?: string;
   note?: string;
 }): Promise<string> {
@@ -88,6 +92,7 @@ export async function addCallRequest(opts: {
     buyerEmail: opts.email || "",
     sku: String(opts.sku || "").trim(),
     title: opts.title || opts.sku,
+    imageUrl: opts.imageUrl || null,
     preferredTimes: String(opts.preferredTimes || "").trim().slice(0, 500),
     note: String(opts.note || "").trim().slice(0, 2000),
     status: "pending",

@@ -205,10 +205,23 @@ export function RepPipelineBoard({
                     onClick={() => setDetailRequest(r)}
                     className="cursor-pointer rounded-chip border border-border bg-surface px-2.5 py-2 text-[12px] transition hover:border-accent active:cursor-grabbing"
                   >
-                    <div className="truncate font-semibold text-ink">{r.buyerDisplayName}</div>
-                    <div className="mt-0.5 truncate text-[10.5px] text-muted">
-                      {r.title}
-                      {r.preferredTimes ? ` · prefers ${r.preferredTimes}` : ""}
+                    <div className="flex items-center gap-2">
+                      {r.imageUrl ? (
+                        <img
+                          src={r.imageUrl}
+                          alt=""
+                          className="h-9 w-9 shrink-0 rounded border border-border object-cover"
+                          loading="lazy"
+                          draggable={false}
+                        />
+                      ) : null}
+                      <div className="min-w-0">
+                        <div className="truncate font-semibold text-ink">{r.buyerDisplayName}</div>
+                        <div className="mt-0.5 truncate text-[10.5px] text-muted">
+                          {r.title}
+                          {r.preferredTimes ? ` · prefers ${r.preferredTimes}` : ""}
+                        </div>
+                      </div>
                     </div>
                     <select
                       value={r.assignedToEmail || ""}
@@ -425,7 +438,16 @@ export function RepPipelineBoard({
             <div className="micro-badge mb-1 text-[10px] tracking-[0.14em] text-accent">
               CALL REQUEST
             </div>
-            <div className="mb-4 text-[15px] font-semibold text-ink">{detailRequest.title}</div>
+            <div className="mb-4 flex items-center gap-3">
+              {detailRequest.imageUrl ? (
+                <img
+                  src={detailRequest.imageUrl}
+                  alt={detailRequest.title}
+                  className="h-16 w-16 shrink-0 rounded-chip border border-border object-cover"
+                />
+              ) : null}
+              <div className="text-[15px] font-semibold text-ink">{detailRequest.title}</div>
+            </div>
 
             <div className="space-y-2.5 text-[12.5px]">
               <div className="flex justify-between gap-3">

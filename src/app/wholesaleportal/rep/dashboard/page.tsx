@@ -5,11 +5,14 @@ import { listQuotes } from "@/lib/firestore/quotes";
 import { listInvoices } from "@/lib/firestore/invoices";
 import { listBuyers } from "@/lib/firestore/buyers";
 import { listRegistrationRequests } from "@/lib/firestore/registrationRequests";
-import { getCatalogSettingsState, listCatalogProducts } from "@/lib/firestore/catalog";
+import {
+  getCatalogSettingsState,
+  getCatalogProductsBySkus,
+  listCatalogProducts,
+} from "@/lib/firestore/catalog";
 import { computeRepDashboard } from "@/lib/repDashboard";
 import { RepPipelineBoard } from "@/components/RepPipelineBoard";
 import { NeedsAttentionPanel } from "@/components/NeedsAttentionPanel";
-import { CallRequestsPanel } from "@/components/CallRequestsPanel";
 import { listPendingCallRequests } from "@/lib/firestore/callRequests";
 import { money } from "@/lib/format";
 
@@ -101,6 +104,17 @@ export default async function StaffDashboardPage() {
     console.warn("[rep dashboard] Firestore unavailable:", err instanceof Error ? err.message : err);
   }
 
+  // Back-fill hero images for call requests created before imageUrl was stored.
+  const missingImageSkus = [...new Set(callRequests.filter((r) => !r.imageUrl).map((r) => r.sku))];
+  if (missingImageSkus.length) {
+    const products = await getCatalogProductsBySkus(missingImageSkus).catch(
+      () => new Map<string, never>(),
+    );
+    callRequests = callRequests.map((r) =>
+      r.imageUrl ? r : { ...r, imageUrl: products.get(r.sku)?.imageUrl || null },
+    );
+  }
+
   const { kpis, pipeline, pipelineTable, needsAttention } = computeRepDashboard({
     quotes: quotesResult.quotes,
     invoices,
@@ -147,10 +161,8 @@ export default async function StaffDashboardPage() {
         />
       </div>
 
-      <CallRequestsPanel requests={callRequests} />
-
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.6fr_1fr]">
-        <RepPipelineBoard columns={pipeline} table={pipelineTable} />
+        <RepPipelineBoard columns={pipeline} table={pipelineTable} callRequests={callRequests} />
         <NeedsAttentionPanel items={needsAttention} />
       </div>
     </div>
