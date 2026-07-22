@@ -5,6 +5,7 @@ import { getSession } from "@/lib/auth";
 import { ROLE } from "@/lib/constants";
 import { createInvoiceFromQuote } from "@/lib/firestore/invoices";
 import { sendInvoiceReadyEmail } from "@/lib/notify";
+import { addQuoteActivity } from "@/lib/firestore/quoteActivities";
 
 /**
  * Thin entry for GenerateInvoiceButton — isolated from invoices.ts soft-nav stubs.
@@ -20,6 +21,13 @@ export async function generateInvoiceFromQuote(quoteId: string) {
       return { error: "Staff session required." };
     }
     const invoice = await createInvoiceFromQuote(quoteId, session.email);
+    await addQuoteActivity({
+      quoteId,
+      type: "invoice_generated",
+      text: `Invoice ${invoice.invoiceNumber} generated (${invoice.itemCount} items)`,
+      staffEmail: session.email,
+      staffName: session.name || session.email,
+    }).catch(() => {});
     // Buyer "invoice ready" email — non-blocking, no-op until Resend is configured.
     try {
       await sendInvoiceReadyEmail({

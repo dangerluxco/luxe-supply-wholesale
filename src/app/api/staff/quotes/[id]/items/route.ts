@@ -1,3 +1,4 @@
+import { addQuoteActivity } from "@/lib/firestore/quoteActivities";
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { ROLE } from "@/lib/constants";
@@ -58,6 +59,13 @@ export async function POST(
       }
     }
 
+    await addQuoteActivity({
+      quoteId,
+      type: "items_edited",
+      text: `Line items updated (${body.items.length} item${body.items.length === 1 ? "" : "s"})`,
+      staffEmail: session.email,
+      staffName: session.name || session.email,
+    }).catch(() => {});
     return NextResponse.json({ ok: true, message: "Order request updated." });
   } catch (err) {
     return NextResponse.json(

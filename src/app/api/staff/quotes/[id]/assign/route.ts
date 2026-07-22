@@ -1,3 +1,4 @@
+import { addQuoteActivity } from "@/lib/firestore/quoteActivities";
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { ROLE } from "@/lib/constants";
@@ -37,6 +38,13 @@ export async function POST(
   }
 
   try {
+    await addQuoteActivity({
+      quoteId,
+      type: "claim",
+      text: `Assigned to ${staff.displayName || staff.email} by ${session.name || session.email}`,
+      staffEmail: session.email,
+      staffName: session.name || session.email,
+    }).catch(() => {});
     await claimQuote(quoteId, {
       email: staff.email,
       name: staff.displayName || staff.email,

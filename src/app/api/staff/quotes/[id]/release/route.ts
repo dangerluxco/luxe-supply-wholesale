@@ -1,3 +1,4 @@
+import { addQuoteActivity } from "@/lib/firestore/quoteActivities";
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { ROLE } from "@/lib/constants";
@@ -27,6 +28,13 @@ export async function POST(
 
   try {
     await releaseQuoteClaim(quoteId, session.email);
+    await addQuoteActivity({
+      quoteId,
+      type: "claim",
+      text: `Released by ${session.name || session.email}`,
+      staffEmail: session.email,
+      staffName: session.name || session.email,
+    }).catch(() => {});
     return NextResponse.json({ ok: true });
   } catch (err) {
     return NextResponse.json(

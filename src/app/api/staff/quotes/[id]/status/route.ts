@@ -1,3 +1,4 @@
+import { addQuoteActivity } from "@/lib/firestore/quoteActivities";
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { QUOTE_STATUSES, ROLE } from "@/lib/constants";
@@ -45,6 +46,13 @@ export async function POST(
 
   try {
     await updateQuoteStatus(quoteId, { status: next }, session.email);
+    await addQuoteActivity({
+      quoteId,
+      type: "status_change",
+      text: `Status changed to ${next.replace(/_/g, " ")}`,
+      staffEmail: session.email,
+      staffName: session.name || session.email,
+    }).catch(() => {});
 
     if (next === "quoted") {
       try {
