@@ -10,6 +10,7 @@ import {
   type QuoteItemInput,
 } from "@/lib/firestore/quotes";
 import { releaseQuoteHoldsForSkus } from "@/lib/firestore/holds";
+import { removeCurationItemsBySkus } from "@/lib/firestore/curation";
 
 export const dynamic = "force-dynamic";
 
@@ -57,6 +58,15 @@ export async function POST(
         await releaseQuoteHoldsForSkus(quoteId, removedSkus);
       } catch (err) {
         console.warn("[api items] hold release:", err);
+      }
+      // Keep the linked curation view in sync — pieces removed from the order
+      // shouldn't reappear when staff open the curation link on this page.
+      if (before.curationToken) {
+        try {
+          await removeCurationItemsBySkus(before.curationToken, removedSkus);
+        } catch (err) {
+          console.warn("[api items] curation sync:", err);
+        }
       }
     }
 

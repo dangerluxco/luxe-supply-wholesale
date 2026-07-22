@@ -600,6 +600,40 @@ export async function removeCurationItem(
   return { revision, itemCount: nextItems.length };
 }
 
+/**
+ * Bulk, tolerant removal — keeps a linked curation view in sync when staff
+ * remove line items from the order request. Missing SKUs and read-only shares
+ * are non-errors (the order edit must never fail on curation state).
+ */
+export async function removeCurationItemsBySkus(
+  token: string,
+  skus: string[],
+): Promise<{ removed: number }> {
+  const keys = new Set(skus.map((s) => takeText(s).toLowerCase()).filter(Boolean));
+  if (!keys.size) return { removed: 0 };
+  const found = await loadDoc(token);
+  if (!found) return { removed: 0 };
+  const { ref, data } = found;
+
+  const items = Array.isArray(data.items) ? (data.items as Record<string, unknown>[]) : [];
+  const nextItems = items.filter((it) => !keys.has(takeText(it.sku).toLowerCase()));
+  const removed = items.length - nextItems.length;
+  if (!removed) return { removed: 0 };
+
+  const heroSku =
+    data.heroSku && keys.has(takeText(data.heroSku).toLowerCase())
+      ? null
+      : ((data.heroSku as string | null) ?? null);
+  await ref.update({
+    items: nextItems,
+    itemCount: nextItems.length,
+    heroSku,
+    revision: (typeof data.revision === "number" ? data.revision : 0) + 1,
+    updatedAt: new Date(),
+  });
+  return { removed };
+}
+
 /** Staff-only: update client name / invoice date / note mid-session. */
 export async function updateCurationMeta(
   token: string,

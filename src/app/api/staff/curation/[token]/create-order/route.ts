@@ -13,8 +13,7 @@ export const dynamic = "force-dynamic";
 
 /**
  * Creates a brand-new order request from a curation session and links it.
- * - Live / pre-call: all priced items (same idea as Curate Order builder).
- * - After session end: approved items only.
+ * Approved items only (staff- or buyer-approved), live or ended.
  * Staff must confirm from the UI; never automatic.
  */
 export async function POST(request: Request, ctx: { params: Promise<{ token: string }> }) {
@@ -50,16 +49,12 @@ export async function POST(request: Request, ctx: { params: Promise<{ token: str
     await linkCurationShareToBuyer(token, buyerId);
   }
 
-  const approved = share.items.filter((it) => it.decision === "approve");
-  const priced = share.items.filter((it) => Number(it.price) > 0);
-  const source = share.sessionEnded ? approved : priced;
+  // Approved items only — live or ended. Staff can mark approvals in the
+  // manage view; buyer approvals flow in from the shared link.
+  const source = share.items.filter((it) => it.decision === "approve");
   if (!source.length) {
     return NextResponse.json(
-      {
-        error: share.sessionEnded
-          ? "No approved items to create an order from."
-          : "Add at least one priced item before creating an order request.",
-      },
+      { error: "No approved items yet — approve at least one piece (or have the buyer approve) first." },
       { status: 400 },
     );
   }

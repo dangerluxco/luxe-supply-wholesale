@@ -738,13 +738,12 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
   }
 
   const approvedCount = share.items.filter((it) => it.decision === "approve").length;
-  const pricedCount = share.items.filter((it) => Number(it.price) > 0).length;
   const canCreateOrderRequest =
     !share.quoteId &&
     !share.revoked &&
     (!!share.linkedBuyerId || !!orderBuyer) &&
     share.items.length > 0 &&
-    (share.sessionEnded ? approvedCount > 0 : pricedCount > 0);
+    approvedCount > 0;
 
   async function createOrderRequest() {
     setError(null);
@@ -752,18 +751,12 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
       setError("Pick a portal buyer above, then create the order request.");
       return;
     }
-    if (share.sessionEnded && approvedCount === 0) {
-      setError("No approved items to create an order from.");
-      return;
-    }
-    if (!share.sessionEnded && pricedCount === 0) {
-      setError("Add at least one priced item before creating an order request.");
+    if (approvedCount === 0) {
+      setError("Approve at least one item (or have the buyer approve) before creating an order request.");
       return;
     }
 
-    const itemLabel = share.sessionEnded
-      ? `${approvedCount} approved item${approvedCount === 1 ? "" : "s"}`
-      : `${pricedCount} priced item${pricedCount === 1 ? "" : "s"}`;
+    const itemLabel = `${approvedCount} approved item${approvedCount === 1 ? "" : "s"}`;
     if (
       !window.confirm(
         `Create an order request from the ${itemLabel} for ${share.clientName || "this client"}?`,
@@ -1025,9 +1018,7 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
             ORDER REQUEST
           </div>
           <p className="mt-1 text-[12.5px] text-secondary">
-            {share.sessionEnded
-              ? "Turn approved selections into an order request for the linked buyer."
-              : "Save this curation list as an order request for the linked buyer — same as Create order request on Curate Order."}
+            Turn the approved selections into an order request for the linked buyer.
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <button
@@ -1037,11 +1028,9 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
               title={
                 !share.linkedBuyerId && !orderBuyer
                   ? "Pick a portal buyer first."
-                  : share.sessionEnded && approvedCount === 0
+                  : approvedCount === 0
                     ? "Approve at least one item before creating an order request."
-                    : !share.sessionEnded && pricedCount === 0
-                      ? "Price at least one item above $0 first."
-                      : "Create an order request from this curation."
+                    : "Create an order request from the approved items."
               }
               className="h-11 rounded-chip bg-accent px-6 text-[11.5px] font-semibold uppercase tracking-[0.14em] text-ink disabled:opacity-60"
             >
@@ -1095,19 +1084,14 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
                   change
                 </button>
               </span>
-            ) : share.sessionEnded && approvedCount === 0 ? (
+            ) : approvedCount === 0 ? (
               <span className="text-[12px] text-muted">
-                Approve at least one item to create an order request.
-              </span>
-            ) : !canCreateOrderRequest ? (
-              <span className="text-[12px] text-muted">
-                Price at least one item above $0 to create an order request.
+                Approve at least one item (✓ on a card, or the buyer approves) to create an order
+                request.
               </span>
             ) : (
               <span className="text-[12px] text-secondary">
-                {share.sessionEnded
-                  ? `Creates from ${approvedCount} approved item${approvedCount === 1 ? "" : "s"}.`
-                  : `Creates from ${pricedCount} priced item${pricedCount === 1 ? "" : "s"}.`}
+                Creates from {approvedCount} approved item{approvedCount === 1 ? "" : "s"}.
               </span>
             )}
           </div>

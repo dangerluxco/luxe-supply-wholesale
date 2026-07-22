@@ -155,15 +155,6 @@ export function ProductCard({
           cost {staffCost != null ? money(Math.round(staffCost)) : "—"} · margin {formatMargin(margin)}
         </div>
       ) : null}
-      {inCart || heldByYou ? (
-        <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-[11px] text-[#3A3934]">
-          {inCart ? (
-            <MicroBadge tone="outline-gold">In cart</MicroBadge>
-          ) : (
-            <MicroBadge tone="outline-gold">Held for you</MicroBadge>
-          )}
-        </div>
-      ) : null}
     </>
   );
 
@@ -246,17 +237,22 @@ export function ProductCard({
             )}
           >
             <OneOfOneBadge className={canSelect || inCart ? "left-11" : undefined} />
+            {/* Single status badge — the button label carries the rest; no duplicate tags. */}
             {soldOut ? (
               <MicroBadge tone="outline-gray" className="absolute bottom-2.5 left-2.5">
                 SOLD
               </MicroBadge>
-            ) : onHold && !inCart ? (
-              <MicroBadge tone="solid-gold" className="absolute bottom-2.5 left-2.5">
-                HOLD · 24H
-              </MicroBadge>
             ) : inCart ? (
               <MicroBadge tone="solid-dark" className="absolute bottom-2.5 left-2.5">
                 IN CART
+              </MicroBadge>
+            ) : heldByYou ? (
+              <MicroBadge tone="solid-gold" className="absolute bottom-2.5 left-2.5">
+                HELD FOR YOU
+              </MicroBadge>
+            ) : onHold ? (
+              <MicroBadge tone="solid-gold" className="absolute bottom-2.5 left-2.5">
+                HOLD · 24H
               </MicroBadge>
             ) : null}
             {urls.length > 0 ? (

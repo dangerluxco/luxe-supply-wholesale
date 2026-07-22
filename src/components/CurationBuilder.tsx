@@ -455,7 +455,7 @@ export function CurationBuilder({
         </div>
         <p className="mt-1 text-[12.5px] text-secondary">
           {clientReady
-            ? "Paste the SKUs you want to walk this client through — one per line, comma, or space-separated. Up to 200 at a time."
+            ? "Paste SKUs one per line — or two spreadsheet columns (SKU + price) straight from Excel, same as the catalog import. Up to 200 at a time."
             : "Choose a client above first, then paste SKUs here."}
         </p>
         <textarea
@@ -463,7 +463,7 @@ export function CurationBuilder({
           onChange={(e) => setSkusText(e.target.value)}
           rows={4}
           disabled={!clientReady}
-          placeholder="SKU-001&#10;SKU-002&#10;SKU-003"
+          placeholder="SKU-001&#9;1250&#10;SKU-002&#9;980&#10;SKU-003"
           className="mt-3 w-full rounded-chip border border-border bg-ground px-3 py-2 font-mono text-[12.5px] text-ink outline-none focus:border-accent disabled:cursor-not-allowed disabled:opacity-60"
         />
         <div className="mt-3 flex flex-wrap items-center gap-3">
