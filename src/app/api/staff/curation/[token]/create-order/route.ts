@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { requireStaffSession } from "@/lib/staff-api-auth";
-import { getCurationShareForStaff, linkCurationShareToQuote } from "@/lib/firestore/curation";
+import {
+  getCurationShareForStaff,
+  linkCurationShareToBuyer,
+  linkCurationShareToQuote,
+} from "@/lib/firestore/curation";
 import { getBuyerById } from "@/lib/firestore/buyers";
 import { createStaffQuote, type QuoteItemInput } from "@/lib/firestore/quotes";
 import { staffPortalOrigin } from "@/lib/notify";
@@ -13,7 +17,7 @@ export const dynamic = "force-dynamic";
  * - After session end: approved items only.
  * Staff must confirm from the UI; never automatic.
  */
-export async function POST(_request: Request, ctx: { params: Promise<{ token: string }> }) {
+export async function POST(request: Request, ctx: { params: Promise<{ token: string }> }) {
   const session = await requireStaffSession();
   if (!session) {
     return NextResponse.json({ error: "Staff session required." }, { status: 401 });
@@ -25,15 +29,26 @@ export async function POST(_request: Request, ctx: { params: Promise<{ token: st
   if (share.quoteId) {
     return NextResponse.json({ error: "This session is already linked to an order request." }, { status: 400 });
   }
-  if (!share.linkedBuyerId) {
+
+  // Allow picking the buyer at conversion time (potential-client sessions):
+  // an explicit buyerId in the body links the share before creating the order.
+  const body = (await request.json().catch(() => ({}))) as { buyerId?: string };
+  let buyerId = share.linkedBuyerId;
+  if (!buyerId && body.buyerId) {
+    buyerId = String(body.buyerId).trim();
+  }
+  if (!buyerId) {
     return NextResponse.json(
-      { error: "No buyer is linked to this session — use \"Book call\" to pick one first." },
+      { error: "Pick a portal buyer for this order request first." },
       { status: 400 },
     );
   }
 
-  const buyer = await getBuyerById(share.linkedBuyerId);
+  const buyer = await getBuyerById(buyerId);
   if (!buyer) return NextResponse.json({ error: "Linked buyer not found." }, { status: 404 });
+  if (!share.linkedBuyerId) {
+    await linkCurationShareToBuyer(token, buyerId);
+  }
 
   const approved = share.items.filter((it) => it.decision === "approve");
   const priced = share.items.filter((it) => Number(it.price) > 0);

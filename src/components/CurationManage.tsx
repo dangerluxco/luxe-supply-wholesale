@@ -140,6 +140,34 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
   const [message, setMessage] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [extendHours, setExtendHours] = useState("168");
+  // Inline buyer picker for converting a potential-client session to an order.
+  const [orderBuyerQuery, setOrderBuyerQuery] = useState("");
+  const [orderBuyerResults, setOrderBuyerResults] = useState<
+    Array<{ id: string; displayName: string; username: string }>
+  >([]);
+  const [orderBuyer, setOrderBuyer] = useState<{ id: string; label: string } | null>(null);
+  const orderBuyerDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (share.linkedBuyerId || !orderBuyerQuery.trim() || orderBuyer) {
+      setOrderBuyerResults([]);
+      return;
+    }
+    if (orderBuyerDebounce.current) clearTimeout(orderBuyerDebounce.current);
+    orderBuyerDebounce.current = setTimeout(() => {
+      fetch(`/api/staff/buyers/search?q=${encodeURIComponent(orderBuyerQuery.trim())}`, {
+        credentials: "same-origin",
+      })
+        .then((res) => res.json())
+        .then((data: { buyers?: Array<{ id: string; displayName: string; username: string }> }) =>
+          setOrderBuyerResults(data.buyers || []),
+        )
+        .catch(() => setOrderBuyerResults([]));
+    }, 250);
+    return () => {
+      if (orderBuyerDebounce.current) clearTimeout(orderBuyerDebounce.current);
+    };
+  }, [orderBuyerQuery, orderBuyer, share.linkedBuyerId]);
   const editingSku = useRef<Set<string>>(new Set());
   const metaEditing = useRef(false);
 
@@ -714,14 +742,14 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
   const canCreateOrderRequest =
     !share.quoteId &&
     !share.revoked &&
-    !!share.linkedBuyerId &&
+    (!!share.linkedBuyerId || !!orderBuyer) &&
     share.items.length > 0 &&
     (share.sessionEnded ? approvedCount > 0 : pricedCount > 0);
 
   async function createOrderRequest() {
     setError(null);
-    if (!share.linkedBuyerId) {
-      setError("Link a portal buyer first (pick one under Client call), then create the order request.");
+    if (!share.linkedBuyerId && !orderBuyer) {
+      setError("Pick a portal buyer above, then create the order request.");
       return;
     }
     if (share.sessionEnded && approvedCount === 0) {
@@ -748,6 +776,8 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
       const res = await fetch(`/api/staff/curation/${share.token}/create-order`, {
         method: "POST",
         credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(orderBuyer ? { buyerId: orderBuyer.id } : {}),
       });
       const data = (await res.json().catch(() => ({}))) as {
         error?: string;
@@ -759,7 +789,11 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
         setError(data.error || "Could not create the order request.");
         return;
       }
-      setShare((prev) => ({ ...prev, quoteId: data.quoteId! }));
+      setShare((prev) => ({
+        ...prev,
+        quoteId: data.quoteId!,
+        linkedBuyerId: prev.linkedBuyerId || orderBuyer?.id || null,
+      }));
       setMessage(
         `Order request created with ${data.itemCount ?? 0} item${data.itemCount === 1 ? "" : "s"}.`,
       );
@@ -1001,8 +1035,8 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
               disabled={pending || !canCreateOrderRequest}
               onClick={createOrderRequest}
               title={
-                !share.linkedBuyerId
-                  ? "Link a portal buyer under Client call first."
+                !share.linkedBuyerId && !orderBuyer
+                  ? "Pick a portal buyer first."
                   : share.sessionEnded && approvedCount === 0
                     ? "Approve at least one item before creating an order request."
                     : !share.sessionEnded && pricedCount === 0
@@ -1013,10 +1047,53 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
             >
               {pending ? "Creating…" : "Create order request"}
             </button>
-            {!share.linkedBuyerId ? (
-              <span className="text-[12px] text-muted">
-                Link a portal buyer under Client call first (potential clients can&apos;t become
-                order requests yet).
+            {!share.linkedBuyerId && !orderBuyer ? (
+              <div className="relative min-w-[260px] flex-1">
+                <input
+                  value={orderBuyerQuery}
+                  onChange={(e) => {
+                    setOrderBuyerQuery(e.target.value);
+                    setOrderBuyer(null);
+                  }}
+                  placeholder="Pick the portal buyer for this order…"
+                  className="h-10 w-full rounded-chip border border-border bg-ground px-3 text-[12.5px] text-ink outline-none focus:border-accent"
+                />
+                {orderBuyerResults.length > 0 ? (
+                  <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-chip border border-border bg-surface shadow-lg">
+                    {orderBuyerResults.slice(0, 6).map((b) => (
+                      <button
+                        key={b.id}
+                        type="button"
+                        onClick={() => {
+                          setOrderBuyer({
+                            id: b.id,
+                            label: `${b.displayName || b.username} (@${b.username})`,
+                          });
+                          setOrderBuyerQuery(`${b.displayName || b.username} (@${b.username})`);
+                          setOrderBuyerResults([]);
+                        }}
+                        className="block w-full px-3 py-2 text-left text-[12.5px] text-ink hover:bg-ground"
+                      >
+                        {b.displayName || b.username}
+                        <span className="ml-1.5 font-mono text-[10.5px] text-muted">@{b.username}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : !share.linkedBuyerId && orderBuyer ? (
+              <span className="text-[12px] text-secondary">
+                Order for <span className="font-semibold text-ink">{orderBuyer.label}</span>{" "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOrderBuyer(null);
+                    setOrderBuyerQuery("");
+                  }}
+                  className="ml-1 text-muted underline hover:text-ink"
+                >
+                  change
+                </button>
               </span>
             ) : share.sessionEnded && approvedCount === 0 ? (
               <span className="text-[12px] text-muted">
