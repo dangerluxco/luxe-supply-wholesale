@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import type { Lead } from "@/lib/leads-shared";
+import { LEAD_SOURCES, type Lead } from "@/lib/leads-shared";
 
 const fieldClass =
   "h-10 w-full rounded-chip border border-border bg-ground px-3 text-[13px] text-ink outline-none focus:border-accent";
@@ -24,6 +24,8 @@ export function CreateLeadModal({
   const [phone, setPhone] = useState("");
   const [industry, setIndustry] = useState("");
   const [estAnnualSpend, setEstAnnualSpend] = useState("");
+  const [source, setSource] = useState("");
+  const [foundBy, setFoundBy] = useState("");
   const [assignedRepEmail, setAssignedRepEmail] = useState("");
   const [notes, setNotes] = useState("");
   const [pending, start] = useTransition();
@@ -48,6 +50,8 @@ export function CreateLeadModal({
           phone,
           industry,
           estAnnualSpend: estAnnualSpend || null,
+          source: source || "",
+          foundBy: foundBy || "",
           assignedRepEmail: assignedRepEmail || null,
           assignedRepName: rep?.displayName || null,
           notes,
@@ -106,7 +110,31 @@ export function CreateLeadModal({
               <input value={phone} onChange={(e) => setPhone(e.target.value)} className={fieldClass} />
             </label>
             <label className="flex flex-col gap-1.5">
-              <span className={labelClass}>EST. ANNUAL SPEND</span>
+              <span className={labelClass}>LEAD SOURCE</span>
+              <select
+                value={source}
+                onChange={(e) => setSource(e.target.value)}
+                className={fieldClass}
+              >
+                <option value="">Select a source…</option>
+                {LEAD_SOURCES.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1.5">
+              <span className={labelClass}>WHO FOUND IT</span>
+              <input
+                value={foundBy}
+                onChange={(e) => setFoundBy(e.target.value)}
+                placeholder="Name or initials"
+                className={fieldClass}
+              />
+            </label>
+            <label className="flex flex-col gap-1.5">
+              <span className={labelClass}>EST. ANNUAL SPEND (OPTIONAL)</span>
               <div className="flex items-center gap-1">
                 <span className="text-muted">$</span>
                 <input

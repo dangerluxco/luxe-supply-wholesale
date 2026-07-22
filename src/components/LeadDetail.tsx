@@ -271,7 +271,9 @@ export function LeadDetail({
           <h1 className="text-[24px] font-semibold text-ink">{lead.company}</h1>
           <span className="text-[12px] text-muted">
             {lead.contactName || "No contact name"}
-            {lead.industry ? ` · ${lead.industry}` : ""} · created {fullDate(lead.createdAt)}
+            {lead.industry ? ` · ${lead.industry}` : ""}
+            {lead.source ? ` · via ${lead.source}` : ""}
+            {lead.foundBy ? ` · found by ${lead.foundBy}` : ""} · created {fullDate(lead.createdAt)}
           </span>
         </div>
         <div className="rounded-card border border-border bg-surface px-4 py-3">

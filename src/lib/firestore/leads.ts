@@ -91,6 +91,8 @@ function serializeLead(id: string, d: Record<string, unknown>): Lead {
     email: takeText(d.email),
     phone: takeText(d.phone),
     industry: takeText(d.industry),
+    source: takeText(d.source),
+    foundBy: takeText(d.foundBy),
     estAnnualSpend:
       typeof d.estAnnualSpend === "number" && Number.isFinite(d.estAnnualSpend) ? d.estAnnualSpend : null,
     status: LEAD_STATUSES.includes(status) ? status : "new",
@@ -175,6 +177,8 @@ export async function createLead(opts: {
   email?: string;
   phone?: string;
   industry?: string;
+  source?: string;
+  foundBy?: string;
   estAnnualSpend?: number | null;
   assignedRepEmail?: string | null;
   assignedRepName?: string | null;
@@ -197,6 +201,8 @@ export async function createLead(opts: {
     email: takeText(opts.email),
     phone: takeText(opts.phone),
     industry: takeText(opts.industry),
+    source: takeText(opts.source),
+    foundBy: takeText(opts.foundBy),
     estAnnualSpend:
       opts.estAnnualSpend != null && Number.isFinite(opts.estAnnualSpend) ? opts.estAnnualSpend : null,
     status: "new" as LeadStatus,

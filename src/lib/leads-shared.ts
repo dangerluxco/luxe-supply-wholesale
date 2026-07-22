@@ -2,6 +2,17 @@
 // Node-only imports so "use client" components can import runtime values
 // without dragging the Admin SDK into the browser bundle.
 
+/** Lead source channels for the Create Lead dropdown. */
+export const LEAD_SOURCES = [
+  "LinkedIn",
+  "Cold call",
+  "Referral",
+  "Trade show",
+  "Instagram",
+  "Website",
+  "Other",
+] as const;
+
 export const LEAD_STATUSES = ["new", "contacted", "qualifying", "won", "lost"] as const;
 export type LeadStatus = (typeof LEAD_STATUSES)[number];
 
@@ -54,6 +65,10 @@ export type Lead = {
   email: string;
   phone: string;
   industry: string;
+  /** Lead source channel (LinkedIn, cold call, referral, …). */
+  source: string;
+  /** Who found/sourced this lead. */
+  foundBy: string;
   estAnnualSpend: number | null;
   status: LeadStatus;
   assignedRepEmail: string | null;

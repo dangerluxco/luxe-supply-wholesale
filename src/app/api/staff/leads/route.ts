@@ -39,6 +39,8 @@ type CreateBody = {
   email?: string;
   phone?: string;
   industry?: string;
+  source?: string;
+  foundBy?: string;
   estAnnualSpend?: number | string | null;
   assignedRepEmail?: string | null;
   assignedRepName?: string | null;
@@ -89,6 +91,8 @@ export async function POST(request: Request) {
       email: body.email || "",
       phone: body.phone || "",
       industry: body.industry || "",
+      source: body.source || "",
+      foundBy: body.foundBy || "",
       estAnnualSpend,
       assignedRepEmail,
       assignedRepName,
