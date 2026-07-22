@@ -346,6 +346,19 @@ type BoxShape = {
   labelService: string | null;
 };
 
+/** Shippers use a standard box + typical weight — remember the last values
+ *  entered at this station (localStorage) and prefill every new box with them,
+ *  across invoices. Changing them updates the remembered defaults. */
+const PARCEL_DEFAULTS_KEY = "luxe-packstation-parcel-defaults";
+
+function saveParcelDefaults(weight: string, dims: { l: string; w: string; h: string }) {
+  try {
+    localStorage.setItem(PARCEL_DEFAULTS_KEY, JSON.stringify({ weight, ...dims }));
+  } catch {
+    /* private mode etc. — defaults just won't stick */
+  }
+}
+
 function BoxShipping({
   box,
   disabled,
@@ -370,6 +383,26 @@ function BoxShipping({
   const [buyingRateId, setBuyingRateId] = useState<string | null>(null);
   const [manual, setManual] = useState(!shipEngineEnabled);
   const dirty = carrier !== (box.carrier || "UPS") || tracking !== box.trackingNumber;
+
+  // Prefill an untouched box from the station's remembered parcel defaults
+  // (after mount — localStorage isn't available during server render).
+  useEffect(() => {
+    if (box.weightOz || box.lengthIn || box.widthIn || box.heightIn) return;
+    try {
+      const raw = localStorage.getItem(PARCEL_DEFAULTS_KEY);
+      if (!raw) return;
+      const d = JSON.parse(raw) as { weight?: string; l?: string; w?: string; h?: string };
+      setWeight((cur) => cur || d.weight || "");
+      setDims((cur) => ({
+        l: cur.l || d.l || "",
+        w: cur.w || d.w || "",
+        h: cur.h || d.h || "",
+      }));
+    } catch {
+      /* corrupted defaults — ignore */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Label already purchased: show it — carrier/tracking are locked in.
   if (box.labelPdfUrl) {
@@ -437,6 +470,7 @@ function BoxShipping({
               onClick={async () => {
                 setLoadingRates(true);
                 setRates(null);
+                saveParcelDefaults(weight, dims);
                 try {
                   await api({
                     action: "parcel",

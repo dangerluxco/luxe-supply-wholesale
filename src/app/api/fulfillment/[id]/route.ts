@@ -97,6 +97,13 @@ export async function POST(
       const { record, invoice } = await getOrCreateFulfillment(invoiceId);
       const box = record.boxes.find((b) => b.id === body.boxId);
       if (!box) return NextResponse.json({ error: "Box not found." }, { status: 404 });
+      // Don't let money get spent on a label for an empty box — pack it first.
+      if (!Object.values(record.assignments).includes(box.id)) {
+        return NextResponse.json(
+          { error: `Box ${box.label} is empty — scan items into it before buying a label.` },
+          { status: 400 },
+        );
+      }
       if (!box.weightOz) {
         return NextResponse.json({ error: "Save the box weight first." }, { status: 400 });
       }
@@ -181,6 +188,15 @@ export async function POST(
       }
       const rateId = String(body.rateId || "").trim();
       if (!rateId) return NextResponse.json({ error: "Pick a rate first." }, { status: 400 });
+      const { record: current } = await getOrCreateFulfillment(invoiceId);
+      const target = current.boxes.find((b) => b.id === body.boxId);
+      if (!target) return NextResponse.json({ error: "Box not found." }, { status: 404 });
+      if (!Object.values(current.assignments).includes(target.id)) {
+        return NextResponse.json(
+          { error: `Box ${target.label} is empty — scan items into it before buying a label.` },
+          { status: 400 },
+        );
+      }
       const label = await purchaseLabelFromRate(rateId);
       const record = await attachLabelToBox(invoiceId, String(body.boxId || ""), label);
       await logAudit({
