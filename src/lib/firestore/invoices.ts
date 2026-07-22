@@ -49,6 +49,8 @@ export type PortalInvoice = {
   shipping: number;
   total: number;
   terms: string;
+  /** Multiline Bill To override snapshotted from the buyer account at generation. */
+  billTo: string;
   poNumber: string | null;
   status: string;
   payments: InvoicePayment[];
@@ -95,6 +97,7 @@ function serializeInvoice(id: string, d: Record<string, unknown>): PortalInvoice
     shipping: Number(d.shipping || 0),
     total: Number(d.total || 0),
     terms: String(d.terms || INVOICE_TERMS),
+    billTo: String(d.billTo || ""),
     poNumber: d.poNumber ? String(d.poNumber) : null,
     status: String(d.status || FIRESTORE_INVOICE_STATUS.SENT),
     ...(() => {
@@ -181,10 +184,12 @@ export async function createInvoiceFromQuote(
   // the invoice terms + due date; org-wide Net-30 is only the fallback for
   // guests or lookup failures.
   let terms: string = INVOICE_TERMS;
+  let billTo = "";
   if (quote.portalUsername) {
     try {
       const buyer = await findBuyerByIdentifier(quote.portalUsername);
       if (buyer?.paymentTerms) terms = buyer.paymentTerms;
+      if (buyer?.billTo) billTo = buyer.billTo;
     } catch (err) {
       console.warn("[invoices] buyer terms lookup failed:", err instanceof Error ? err.message : err);
     }
@@ -221,6 +226,7 @@ export async function createInvoiceFromQuote(
     shipping,
     total,
     terms,
+    billTo,
     poNumber: null,
     status: FIRESTORE_INVOICE_STATUS.SENT,
     fulfillmentStatus: FULFILLMENT_STATUS.UNFULFILLED,

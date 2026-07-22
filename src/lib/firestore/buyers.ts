@@ -37,6 +37,8 @@ export type PortalBuyer = {
   /** null = no limit configured yet. */
   creditLimit: number | null;
   resaleCertVerified: boolean;
+  /** Multiline Bill To override for invoices ("" = derive from name/company). */
+  billTo: string;
 
   // Shipping profile
   shippingAttn: string;
@@ -88,6 +90,7 @@ function serializeBuyer(id: string, d: Record<string, unknown>): PortalBuyer {
     preferredPayment: String(d.preferredPayment || ""),
     creditLimit,
     resaleCertVerified: !!d.resaleCertVerified,
+    billTo: String(d.billTo || ""),
 
     shippingAttn: String(d.shippingAttn || ""),
     shippingLine1: String(d.shippingLine1 || ""),
@@ -241,6 +244,8 @@ export type BuyerAccountDetailsInput = {
   preferredPayment?: string;
   creditLimit?: number | null;
   resaleCertVerified?: boolean;
+  /** Multiline Bill To override printed on invoices (name/company/address lines). */
+  billTo?: string;
   shippingAttn?: string;
   shippingLine1?: string;
   shippingLine2?: string;
@@ -281,6 +286,8 @@ export async function updateBuyerAccountDetails(
     const v = updates[key];
     if (v != null) payload[key] = String(v).trim().slice(0, 160);
   }
+  // Multiline Bill To keeps its newlines (each line prints on the invoice PDF).
+  if (updates.billTo != null) payload.billTo = String(updates.billTo).trim().slice(0, 600);
   if (updates.paymentTier !== undefined) {
     const tier = Number(updates.paymentTier);
     if (![1, 2, 3].includes(tier)) throw new Error("Payment tier must be 1, 2, or 3.");

@@ -1,6 +1,6 @@
 import { readFileSync } from "fs";
 import path from "path";
-import { PDFDocument, PDFFont, StandardFonts, rgb, degrees } from "pdf-lib";
+import { PDFDocument, PDFFont, PDFImage, StandardFonts, rgb, degrees } from "pdf-lib";
 import type { PortalInvoice } from "@/lib/firestore/invoices";
 import { DEFAULT_INVOICE_FOOTER } from "@/lib/firestore/settings";
 
@@ -182,14 +182,27 @@ export async function renderInvoicePdf(
   const metaColW = (PAGE_W - MARGIN - metaX) / 2;
 
   let billY = y - 16;
-  const billLines = [
-    { text: inv.customerCompany || inv.customerName || "—", font: helvBold, size: 11, color: INK },
-    ...(inv.customerCompany && inv.customerName
-      ? [{ text: inv.customerName, font: helv, size: 10, color: BODY }]
-      : []),
-    ...(inv.customerEmail ? [{ text: inv.customerEmail, font: helv, size: 9, color: MUTED }] : []),
-    ...(inv.customerPhone ? [{ text: inv.customerPhone, font: helv, size: 9, color: MUTED }] : []),
-  ];
+  // Staff-configured Bill To (client account) wins; else derive from customer info.
+  const billToOverride = String((inv as { billTo?: string }).billTo || "").trim();
+  const billLines = billToOverride
+    ? billToOverride
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .slice(0, 6)
+        .map((line, i) =>
+          i === 0
+            ? { text: line, font: helvBold, size: 11, color: INK }
+            : { text: line, font: helv, size: 9.5, color: BODY },
+        )
+    : [
+        { text: inv.customerCompany || inv.customerName || "—", font: helvBold, size: 11, color: INK },
+        ...(inv.customerCompany && inv.customerName
+          ? [{ text: inv.customerName, font: helv, size: 10, color: BODY }]
+          : []),
+        ...(inv.customerEmail ? [{ text: inv.customerEmail, font: helv, size: 9, color: MUTED }] : []),
+        ...(inv.customerPhone ? [{ text: inv.customerPhone, font: helv, size: 9, color: MUTED }] : []),
+      ];
   for (const l of billLines) {
     page.drawText(l.text, { x: MARGIN, y: billY, size: l.size, font: l.font, color: l.color });
     billY -= l.size + 5;
@@ -248,6 +261,33 @@ export async function renderInvoicePdf(
 
   drawTableHeader();
 
+  // Product thumbnails — best-effort fetch + embed (JPEG/PNG only; anything
+  // else, or a slow/failed fetch, silently falls back to a text-only row).
+  const thumbs = new Map<string, PDFImage>();
+  const thumbUrls = [
+    ...new Set(inv.items.map((i) => i.imageUrl).filter((u): u is string => !!u)),
+  ].slice(0, 60);
+  await Promise.all(
+    thumbUrls.map(async (url) => {
+      try {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 5000);
+        const res = await fetch(url, { signal: ctrl.signal });
+        clearTimeout(timer);
+        if (!res.ok) return;
+        const bytes = new Uint8Array(await res.arrayBuffer());
+        if (bytes.length < 8) return;
+        if (bytes[0] === 0xff && bytes[1] === 0xd8) thumbs.set(url, await doc.embedJpg(bytes));
+        else if (bytes[0] === 0x89 && bytes[1] === 0x50) thumbs.set(url, await doc.embedPng(bytes));
+      } catch {
+        // skip — invoice renders fine without the image
+      }
+    }),
+  );
+  const hasThumbs = thumbs.size > 0;
+  const THUMB = 26;
+  const titleX = hasThumbs ? MARGIN + THUMB + 8 : MARGIN;
+
   for (const item of inv.items) {
     if (y < 190) {
       page = doc.addPage([PAGE_W, PAGE_H]);
@@ -255,12 +295,26 @@ export async function renderInvoicePdf(
       drawTableHeader();
     }
     const title = item.quantity > 1 ? `${item.title}  × ${item.quantity}` : item.title;
-    const titleLines = wrapText(title || item.sku, helv, 9.5, colSkuX - MARGIN - 14);
-    const rowH = Math.max(titleLines.length * 12, 12);
+    const titleLines = wrapText(title || item.sku, helv, 9.5, colSkuX - titleX - 14);
+    const rowH = Math.max(titleLines.length * 12, hasThumbs ? THUMB + 2 : 12);
+
+    const thumb = item.imageUrl ? thumbs.get(item.imageUrl) : undefined;
+    if (thumb) {
+      // Scale to cover a square, anchored to the row's top line.
+      const scale = THUMB / Math.max(thumb.width, thumb.height);
+      const w = thumb.width * scale;
+      const h = thumb.height * scale;
+      page.drawImage(thumb, {
+        x: MARGIN + (THUMB - w) / 2,
+        y: y + 8 - THUMB + (THUMB - h) / 2,
+        width: w,
+        height: h,
+      });
+    }
 
     let ty = y;
     for (const line of titleLines) {
-      page.drawText(line, { x: MARGIN, y: ty, size: 9.5, font: helv, color: BODY });
+      page.drawText(line, { x: titleX, y: ty, size: 9.5, font: helv, color: BODY });
       ty -= 12;
     }
     page.drawText(item.sku, { x: colSkuX, y, size: 8.5, font: mono, color: MUTED });

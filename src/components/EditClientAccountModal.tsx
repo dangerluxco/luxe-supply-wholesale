@@ -29,6 +29,7 @@ export function EditClientAccountModal({
   const [preferredPayment, setPreferredPayment] = useState(buyer.preferredPayment);
   const [creditLimit, setCreditLimit] = useState(buyer.creditLimit != null ? String(buyer.creditLimit) : "");
   const [resaleCertVerified, setResaleCertVerified] = useState(buyer.resaleCertVerified);
+  const [billTo, setBillTo] = useState(buyer.billTo);
   const [shippingAttn, setShippingAttn] = useState(buyer.shippingAttn);
   const [shippingLine1, setShippingLine1] = useState(buyer.shippingLine1);
   const [shippingLine2, setShippingLine2] = useState(buyer.shippingLine2);
@@ -62,6 +63,7 @@ export function EditClientAccountModal({
           preferredPayment,
           creditLimit: trimmedLimit ? Number(trimmedLimit) : null,
           resaleCertVerified,
+          billTo,
           shippingAttn,
           shippingLine1,
           shippingLine2,
@@ -182,6 +184,19 @@ export function EditClientAccountModal({
                 Resale certificate verified
               </label>
             </div>
+          </div>
+
+          <div>
+            <div className="micro-badge mb-2 text-[10px] tracking-[0.14em] text-accent">
+              BILL TO (INVOICES)
+            </div>
+            <textarea
+              rows={3}
+              value={billTo}
+              onChange={(e) => setBillTo(e.target.value)}
+              placeholder={"Leave blank to use company / contact name.\nOne line per invoice line, e.g.\nAcme Resale LLC\n123 Fifth Ave, Suite 4\nNew York, NY 10010"}
+              className="w-full rounded-chip border border-border bg-ground px-3 py-2 font-mono text-[12px] text-ink outline-none focus:border-accent"
+            />
           </div>
 
           <div>
