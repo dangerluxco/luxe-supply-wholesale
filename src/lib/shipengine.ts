@@ -116,11 +116,30 @@ async function seFetch(path: string, body: unknown): Promise<Record<string, unkn
   return data;
 }
 
+/** Connected carrier ids — required by /rates (empty list quotes nothing). Cached per instance. */
+let carrierIdsCache: { ids: string[]; at: number } | null = null;
+async function connectedCarrierIds(): Promise<string[]> {
+  if (carrierIdsCache && Date.now() - carrierIdsCache.at < 10 * 60_000) return carrierIdsCache.ids;
+  const res = await fetch(`${BASE}/carriers`, { headers: headers() });
+  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!res.ok) throw new Error("Could not list ShipEngine carriers.");
+  const ids = (Array.isArray(data.carriers) ? (data.carriers as Array<Record<string, unknown>>) : [])
+    .filter((c) => !c.disabled_by_billing_plan)
+    .map((c) => String(c.carrier_id || ""))
+    .filter(Boolean);
+  carrierIdsCache = { ids, at: Date.now() };
+  return ids;
+}
+
 /** Rate-shop a box across all connected carriers. */
 export async function getRates(to: ShipTo, parcel: Parcel): Promise<RateQuote[]> {
   const ship_from = await shipFromAddress();
+  const carrier_ids = await connectedCarrierIds();
+  if (!carrier_ids.length) {
+    throw new Error("No carriers connected on the ShipEngine account yet.");
+  }
   const data = await seFetch("/rates", {
-    rate_options: { carrier_ids: [] },
+    rate_options: { carrier_ids },
     shipment: {
       ship_to: toApiAddress(to),
       ship_from,
@@ -143,7 +162,11 @@ export async function getRates(to: ShipTo, parcel: Parcel): Promise<RateQuote[]>
       };
     })
     .filter((r) => r.rateId)
-    .sort((a, b) => a.amount - b.amount);
+    .sort((a, b) => a.amount - b.amount)
+    // Carriers return package-type variants of the same service — keep the cheapest per service.
+    .filter(
+      (r, i, arr) => arr.findIndex((x) => x.serviceCode === r.serviceCode) === i,
+    );
 }
 
 export type PurchasedLabel = {
