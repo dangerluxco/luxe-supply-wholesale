@@ -22,6 +22,7 @@ export type HoldAlertItem = {
   buyerEmail: string;
   status: string;
   createdAt: string | null;
+  notifiedAt: string | null;
 };
 
 function serializeHoldAlert(id: string, d: Record<string, unknown>): HoldAlertItem {
@@ -35,7 +36,22 @@ function serializeHoldAlert(id: string, d: Record<string, unknown>): HoldAlertIt
     buyerEmail: String(d.buyerEmail || ""),
     status: String(d.status || "active"),
     createdAt: toIso(d.createdAt),
+    notifiedAt: toIso(d.notifiedAt),
   };
+}
+
+export async function getHoldAlertById(id: string): Promise<HoldAlertItem | null> {
+  const snap = await getDb().collection("salesPortalHoldAlerts").doc(id).get();
+  if (!snap.exists) return null;
+  return serializeHoldAlert(snap.id, snap.data() || {});
+}
+
+/** Stamp an alert as notified (keeps it active so the buyer row shows history). */
+export async function markHoldAlertNotified(id: string, notifiedBy: string): Promise<void> {
+  await getDb()
+    .collection("salesPortalHoldAlerts")
+    .doc(id)
+    .update({ notifiedAt: new Date(), notifiedBy, updatedAt: new Date() });
 }
 
 export async function addHoldAlert(opts: {
