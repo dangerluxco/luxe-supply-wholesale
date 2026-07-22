@@ -5,7 +5,6 @@ import { money, fullDate } from "@/lib/format";
 import { InvoiceBadge, FulfillmentBadge } from "@/components/badges";
 import { InvoiceMarkPaidButton } from "@/components/InvoiceMarkPaidButton";
 import { InvoicePaymentsPanel } from "@/components/InvoicePaymentsPanel";
-import { InvoiceFulfillmentForm } from "@/components/InvoiceFulfillmentForm";
 import { PackingNoteForm } from "@/components/PackingNoteForm";
 import { PortalItemLine } from "@/components/PortalItemLine";
 import { trackingUrlFor } from "@/lib/tracking";
@@ -126,11 +125,10 @@ export default async function StaffInvoiceDetailPage({
                 >
                   Open pack station →
                 </Link>
-                <p className="mb-3 text-[11px] text-muted">
-                  Scan pieces into boxes with per-box tracking — or quick-ship below with a single
-                  tracking number.
+                <p className="text-[11px] text-muted">
+                  Shipping happens in the pack station — pieces are scanned into boxes and every box
+                  gets tracking before the order can be marked shipped.
                 </p>
-                <InvoiceFulfillmentForm invoiceId={invoice.id} />
               </>
             )}
           </div>
