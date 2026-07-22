@@ -25,7 +25,7 @@ export function PackStation({
 }: {
   invoiceId: string;
   initialRecord: FulfillmentRecord;
-  itemMeta: Record<string, { title: string; imageUrl: string | null }>;
+  itemMeta: Record<string, { title: string; imageUrl: string | null; images?: string[] }>;
   /** When the ShipEngine key is configured: rate-shop + buy labels in-app. */
   shipEngineEnabled?: boolean;
 }) {
@@ -38,6 +38,7 @@ export function PackStation({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [addressModalOpen, setAddressModalOpen] = useState(false);
+  const [gallerySku, setGallerySku] = useState<string | null>(null);
   const scanRef = useRef<HTMLInputElement | null>(null);
 
   // Keep the scanner input focused — barcode guns type into whatever has focus.
@@ -110,6 +111,20 @@ export function PackStation({
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.2fr_1fr]">
+      {gallerySku ? (
+        <ItemGalleryModal
+          sku={gallerySku}
+          title={itemMeta[gallerySku]?.title || gallerySku}
+          images={
+            itemMeta[gallerySku]?.images?.length
+              ? itemMeta[gallerySku]!.images!
+              : itemMeta[gallerySku]?.imageUrl
+                ? [itemMeta[gallerySku]!.imageUrl!]
+                : []
+          }
+          onClose={() => setGallerySku(null)}
+        />
+      ) : null}
       {addressModalOpen ? (
         <ShipAddressModal
           onClose={() => setAddressModalOpen(false)}
@@ -196,9 +211,14 @@ export function PackStation({
               {unpacked.map((sku) => (
                 <div key={sku} className="flex items-center gap-2.5">
                   {itemMeta[sku]?.imageUrl ? (
-                    <span className="relative h-9 w-9 shrink-0 overflow-hidden rounded border border-white/15">
+                    <button
+                      type="button"
+                      onClick={() => setGallerySku(sku)}
+                      title="View all photos"
+                      className="relative h-9 w-9 shrink-0 overflow-hidden rounded border border-white/15 transition hover:border-accent"
+                    >
                       <Image src={itemMeta[sku]!.imageUrl!} alt="" fill sizes="36px" className="object-cover" />
-                    </span>
+                    </button>
                   ) : (
                     <span className="h-9 w-9 shrink-0 rounded border border-white/10 bg-white/5" />
                   )}
@@ -265,12 +285,15 @@ export function PackStation({
                 {items.length ? (
                   <div className="mb-3 flex flex-wrap gap-1.5">
                     {items.map((sku) => (
-                      <span
+                      <button
                         key={sku}
-                        className="rounded border border-white/15 bg-white/5 px-1.5 py-0.5 font-mono text-[10.5px] text-white/70"
+                        type="button"
+                        onClick={() => setGallerySku(sku)}
+                        title={itemMeta[sku]?.title || "View photos"}
+                        className="rounded border border-white/15 bg-white/5 px-1.5 py-0.5 font-mono text-[10.5px] text-white/70 transition hover:border-accent hover:text-white"
                       >
                         {sku}
-                      </span>
+                      </button>
                     ))}
                   </div>
                 ) : (
@@ -666,6 +689,119 @@ function ShipAddressModal({
             {saving ? "Saving…" : "Save address"}
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** Full-screen photo viewer so the packer can identify a piece — hero image
+ *  plus a carousel of every photo, like the storefront PDP. Arrows, thumbnail
+ *  strip, click-outside or ✕ to close. */
+function ItemGalleryModal({
+  sku,
+  title,
+  images,
+  onClose,
+}: {
+  sku: string;
+  title: string;
+  images: string[];
+  onClose: () => void;
+}) {
+  const [index, setIndex] = useState(0);
+  const count = images.length;
+  const current = images[Math.min(index, Math.max(0, count - 1))] || null;
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      if (e.key === "ArrowRight" && count > 1) setIndex((i) => (i + 1) % count);
+      if (e.key === "ArrowLeft" && count > 1) setIndex((i) => (i - 1 + count) % count);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [count, onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-6"
+      onClick={onClose}
+    >
+      <div
+        className="flex max-h-full w-full max-w-2xl flex-col rounded-card border border-white/15 bg-[#1c1c20] p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="truncate text-[14px] font-semibold text-white">{title}</div>
+            <div className="font-mono text-[11px] text-white/40">
+              {sku}
+              {count > 1 ? ` · photo ${Math.min(index + 1, count)} of ${count}` : ""}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="shrink-0 rounded-chip border border-white/20 px-3 py-1.5 text-[12px] text-white/70 hover:border-accent hover:text-white"
+          >
+            ✕ Close
+          </button>
+        </div>
+
+        <div className="relative aspect-square w-full overflow-hidden rounded-card bg-black/40">
+          {current ? (
+            <Image
+              src={current}
+              alt={title}
+              fill
+              sizes="(max-width: 768px) 100vw, 672px"
+              className="object-contain"
+              priority
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center text-[12.5px] text-white/40">
+              No photos on file for this piece.
+            </div>
+          )}
+          {count > 1 ? (
+            <>
+              <button
+                type="button"
+                aria-label="Previous photo"
+                onClick={() => setIndex((i) => (i - 1 + count) % count)}
+                className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/60 px-3 py-2 text-[18px] text-white/80 hover:bg-black/80 hover:text-white"
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                aria-label="Next photo"
+                onClick={() => setIndex((i) => (i + 1) % count)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/60 px-3 py-2 text-[18px] text-white/80 hover:bg-black/80 hover:text-white"
+              >
+                ›
+              </button>
+            </>
+          ) : null}
+        </div>
+
+        {count > 1 ? (
+          <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+            {images.map((url, i) => (
+              <button
+                key={`${url}-${i}`}
+                type="button"
+                onClick={() => setIndex(i)}
+                className={clsx(
+                  "relative h-16 w-16 shrink-0 overflow-hidden rounded border transition",
+                  i === index ? "border-accent" : "border-white/15 opacity-60 hover:opacity-100",
+                )}
+              >
+                <Image src={url} alt="" fill sizes="64px" className="object-cover" />
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
     </div>
   );

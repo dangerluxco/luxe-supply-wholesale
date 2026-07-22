@@ -51,6 +51,9 @@ export type PortalInvoice = {
   terms: string;
   /** Multiline Bill To override snapshotted from the buyer account at generation. */
   billTo: string;
+  /** Seller's note to the shipper for this order ("fit it all in one box",
+   *  "pack extra careful") — shown prominently on the pack station. */
+  packingNote: string;
   poNumber: string | null;
   status: string;
   payments: InvoicePayment[];
@@ -77,6 +80,7 @@ function serializeInvoice(id: string, d: Record<string, unknown>): PortalInvoice
     id,
     invoiceNumber: String(d.invoiceNumber || ""),
     quoteId: String(d.quoteId || ""),
+    packingNote: String(d.packingNote || ""),
     organizationId: String(d.organizationId || ""),
     portalUsername: String(d.portalUsername || ""),
     buyerDisplayName: String(d.buyerDisplayName || ""),
@@ -406,6 +410,24 @@ export async function markReminderSent(invoiceId: string): Promise<void> {
 }
 
 /** Minimal viable fulfillment: staff records carrier + tracking once the pieces ship. */
+/** Seller → shipper note for this order; shown on the pack station. */
+export async function setInvoicePackingNote(
+  invoiceId: string,
+  note: string,
+  updatedBy: string,
+): Promise<PortalInvoice> {
+  const ref = getDb().collection("salesPortalInvoices").doc(invoiceId);
+  const snap = await ref.get();
+  if (!snap.exists) throw new Error("Invoice not found.");
+  await ref.update({
+    packingNote: String(note || "").trim().slice(0, 1000),
+    updatedAt: new Date(),
+    updatedBy,
+  });
+  const saved = await ref.get();
+  return serializeInvoice(saved.id, saved.data() || {});
+}
+
 export async function markInvoiceShipped(
   invoiceId: string,
   opts: { carrier: string; trackingNumber?: string },

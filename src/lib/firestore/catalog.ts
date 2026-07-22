@@ -1225,6 +1225,20 @@ export type StaffProductBase = {
 };
 
 /** Staff-only: resolve a single SKU's raw inventory facts for the product edit page. */
+/** All photos per SKU straight from upload groups — no catalog/bundle gating,
+ *  so fulfillment can identify pieces even after they're sold or off-catalog. */
+export async function loadItemImagesBySkus(skusRaw: string[]): Promise<Map<string, string[]>> {
+  const skus = [...new Set(skusRaw.map((s) => String(s || "").trim()).filter(Boolean))];
+  const out = new Map<string, string[]>();
+  if (!skus.length) return out;
+  const uploadMap = await loadUploadGroupsBySku(skus);
+  for (const sku of skus) {
+    const group = uploadMap.get(sku);
+    if (group?.imageUrls?.length) out.set(sku, group.imageUrls);
+  }
+  return out;
+}
+
 export async function getStaffProductBaseBySku(skuRaw: string): Promise<StaffProductBase | null> {
   const sku = String(skuRaw || "").trim();
   if (!sku) return null;

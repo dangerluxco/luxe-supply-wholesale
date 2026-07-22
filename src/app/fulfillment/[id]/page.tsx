@@ -7,16 +7,18 @@ import { SHIPPING_OPTIONS } from "@/lib/constants";
 import { money } from "@/lib/format";
 import { PackStation } from "@/components/PackStation";
 import { shipEngineConfigured } from "@/lib/shipengine";
+import { loadItemImagesBySkus } from "@/lib/firestore/catalog";
 
 export const dynamic = "force-dynamic";
 
-/** Item meta (title/image) for each expected SKU, incl. lot members. */
+/** Item meta (title/photos) for each expected SKU, incl. lot members. All of a
+ *  piece's photos load so the packer can click into a full gallery to ID it. */
 async function buildItemMeta(
   invoiceQuoteId: string,
   items: Array<{ sku: string; title: string; imageUrl: string | null }>,
-): Promise<Record<string, { title: string; imageUrl: string | null }>> {
-  const meta: Record<string, { title: string; imageUrl: string | null }> = {};
-  for (const it of items) meta[it.sku] = { title: it.title, imageUrl: it.imageUrl };
+): Promise<Record<string, { title: string; imageUrl: string | null; images: string[] }>> {
+  const meta: Record<string, { title: string; imageUrl: string | null; images: string[] }> = {};
+  for (const it of items) meta[it.sku] = { title: it.title, imageUrl: it.imageUrl, images: [] };
   try {
     if (invoiceQuoteId) {
       const quote = await getQuoteById(invoiceQuoteId);
@@ -28,6 +30,7 @@ async function buildItemMeta(
             meta[sku] = {
               title: String(li.title || sku),
               imageUrl: li.imageUrl ? String(li.imageUrl) : null,
+              images: [],
             };
           }
         }
@@ -35,6 +38,17 @@ async function buildItemMeta(
     }
   } catch {
     // meta stays best-effort
+  }
+  try {
+    const imagesBySku = await loadItemImagesBySkus(Object.keys(meta));
+    for (const [sku, images] of imagesBySku) {
+      const m = meta[sku];
+      if (!m) continue;
+      m.images = images;
+      if (!m.imageUrl && images[0]) m.imageUrl = images[0];
+    }
+  } catch {
+    // gallery stays best-effort — single thumbnails still work
   }
   return meta;
 }
@@ -109,6 +123,11 @@ export default async function PackStationPage({ params }: { params: Promise<{ id
             SHIPPING NOTES
           </div>
           <div className="space-y-1 text-[12.5px] text-white/80">
+            {invoice.packingNote ? (
+              <div className="whitespace-pre-line rounded-chip border border-accent/50 bg-accent/10 px-2.5 py-2 text-[13px] font-semibold text-accent">
+                📦 {invoice.packingNote}
+              </div>
+            ) : null}
             {shipMethod ? <div>Method: {shipMethod}</div> : null}
             {buyer?.shippingSignatureRequired ? (
               <div className="font-semibold text-accent">⚠ Signature required on delivery</div>
@@ -119,7 +138,8 @@ export default async function PackStationPage({ params }: { params: Promise<{ id
                 {buyer.shippingInstructions}
               </div>
             ) : null}
-            {!shipMethod &&
+            {!invoice.packingNote &&
+            !shipMethod &&
             !buyer?.shippingSignatureRequired &&
             !buyer?.phone &&
             !buyer?.shippingInstructions ? (

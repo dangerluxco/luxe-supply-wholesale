@@ -6,6 +6,7 @@ import { InvoiceBadge, FulfillmentBadge } from "@/components/badges";
 import { InvoiceMarkPaidButton } from "@/components/InvoiceMarkPaidButton";
 import { InvoicePaymentsPanel } from "@/components/InvoicePaymentsPanel";
 import { InvoiceFulfillmentForm } from "@/components/InvoiceFulfillmentForm";
+import { PackingNoteForm } from "@/components/PackingNoteForm";
 import { PortalItemLine } from "@/components/PortalItemLine";
 import { trackingUrlFor } from "@/lib/tracking";
 
@@ -133,6 +134,8 @@ export default async function StaffInvoiceDetailPage({
               </>
             )}
           </div>
+
+          <PackingNoteForm invoiceId={invoice.id} initialNote={invoice.packingNote} />
         </div>
 
         <div className="space-y-6">
