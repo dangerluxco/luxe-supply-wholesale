@@ -6,6 +6,7 @@ import { findBuyerByIdentifier } from "@/lib/firestore/buyers";
 import { SHIPPING_OPTIONS } from "@/lib/constants";
 import { money } from "@/lib/format";
 import { PackStation } from "@/components/PackStation";
+import { shipEngineConfigured } from "@/lib/shipengine";
 
 export const dynamic = "force-dynamic";
 
@@ -128,7 +129,12 @@ export default async function PackStationPage({ params }: { params: Promise<{ id
         </div>
       </div>
 
-      <PackStation invoiceId={invoice.id} initialRecord={record} itemMeta={itemMeta} />
+      <PackStation
+        invoiceId={invoice.id}
+        initialRecord={record}
+        itemMeta={itemMeta}
+        shipEngineEnabled={shipEngineConfigured()}
+      />
     </div>
   );
 }
