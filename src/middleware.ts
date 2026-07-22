@@ -56,7 +56,8 @@ export function middleware(req: NextRequest) {
 
   let session = decodeSession(areaSessionFrom(req.cookies.get(SESSION_COOKIE)?.value, area));
   if (!session && isFulfillment) {
-    // Admin visibility: reps/managers may open /fulfillment on their staff session.
+    // Admin visibility: managers may open /fulfillment on their staff session
+    // (roleCanAccess below keeps reps out).
     session = decodeSession(areaSessionFrom(req.cookies.get(SESSION_COOKIE)?.value, "staff"));
   }
   if (!session) {

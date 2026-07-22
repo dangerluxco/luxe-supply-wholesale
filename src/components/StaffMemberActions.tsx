@@ -11,12 +11,12 @@ const btnClass =
  */
 export function StaffMemberActions({
   staffId,
-  isAdmin,
+  role,
   status,
   isSelf,
 }: {
   staffId: string;
-  isAdmin: boolean;
+  role: "admin" | "staff" | "fulfillment";
   status: string;
   isSelf: boolean;
 }) {
@@ -55,11 +55,12 @@ export function StaffMemberActions({
   return (
     <div className="flex flex-col items-end gap-1.5">
       <div className="flex flex-wrap justify-end gap-1.5">
-        <button
-          type="button"
+        <select
+          value={role}
           disabled={pending}
           className={btnClass}
-          onClick={() => {
+          onChange={(e) => {
+            const nextRole = e.target.value;
             setError(null);
             setMessage(null);
             setResetOk(null);
@@ -68,19 +69,22 @@ export function StaffMemberActions({
               try {
                 const data = await postJson(
                   `/api/staff/members/${encodeURIComponent(staffId)}/admin`,
-                  { isAdmin: !isAdmin },
+                  { role: nextRole },
                 );
                 setMessage(data.message || "Updated.");
                 router.refresh();
               } catch (err) {
-                setError(err instanceof Error ? err.message : "Could not update admin.");
+                setError(err instanceof Error ? err.message : "Could not update role.");
+              } finally {
                 setBusyAction(null);
               }
             });
           }}
         >
-          {isAdmin ? "Remove admin" : "Make admin"}
-        </button>
+          <option value="staff">Rep</option>
+          <option value="admin">Admin</option>
+          <option value="fulfillment">Fulfillment (PPAS)</option>
+        </select>
 
         <button
           type="button"

@@ -6,12 +6,16 @@ import { ROLE, type Role } from "@/lib/constants";
 
 const STAFF_STATUSES = new Set(["active", "disabled"]);
 
+/** "fulfillment" = PPAS (pick/pack/ship) — warehouse-only logins that land on
+ *  /fulfillment and never see the rep portal. */
+export type StaffRole = "admin" | "staff" | "fulfillment";
+
 export type StaffRecord = {
   id: string;
   email: string;
   displayName: string;
   isAdmin: boolean;
-  role: "admin" | "staff";
+  role: StaffRole;
   status: string;
   organizationId: string | null;
   totpEnabled: boolean;
@@ -39,6 +43,12 @@ function staffIsAdmin(data: Record<string, unknown>): boolean {
   if (data.isAdmin === true) return true;
   if (data.isAdmin === false) return false;
   return String(data.role || "").toLowerCase() === "admin";
+}
+
+function staffRoleOf(data: Record<string, unknown>): StaffRole {
+  if (staffIsAdmin(data)) return "admin";
+  if (String(data.role || "").toLowerCase() === "fulfillment") return "fulfillment";
+  return "staff";
 }
 
 function generateTempPassword(): string {
@@ -69,7 +79,7 @@ function verifyPortalPassword(password: string, salt: unknown, expectedHash: unk
 }
 
 function serializeStaff(id: string, d: Record<string, unknown>): StaffRecord {
-  const isAdmin = staffIsAdmin(d);
+  const role = staffRoleOf(d);
   const recovery = Array.isArray(d.totpRecoveryHashes)
     ? d.totpRecoveryHashes.map((h) => String(h)).filter(Boolean)
     : [];
@@ -77,8 +87,8 @@ function serializeStaff(id: string, d: Record<string, unknown>): StaffRecord {
     id,
     email: String(d.email || ""),
     displayName: String(d.displayName || d.email || ""),
-    isAdmin,
-    role: isAdmin ? "admin" : "staff",
+    isAdmin: role === "admin",
+    role,
     status: String(d.status || "active"),
     organizationId: d.organizationId ? String(d.organizationId) : null,
     totpEnabled: !!d.totpEnabled,
@@ -199,7 +209,9 @@ export async function authenticateStaffByOAuthEmail(
 }
 
 export function staffToAppRole(staff: StaffRecord): Role {
-  return staff.isAdmin ? ROLE.MANAGER : ROLE.REP;
+  if (staff.isAdmin) return ROLE.MANAGER;
+  if (staff.role === "fulfillment") return ROLE.FULFILLMENT;
+  return ROLE.REP;
 }
 
 export function initialsFromName(name: string): string {
@@ -253,6 +265,8 @@ export async function createStaff(opts: {
   displayName?: string;
   password?: string;
   isAdmin?: boolean;
+  /** "staff" (rep), "admin", or "fulfillment" (PPAS). Wins over isAdmin. */
+  role?: StaffRole;
   invitedBy: string;
 }): Promise<{ staff: StaffRecord; temporaryPassword: string }> {
   const email = normalizeStaffEmail(opts.email);
@@ -264,7 +278,13 @@ export async function createStaff(opts: {
   const password = String(opts.password || "").trim() || generateTempPassword();
   if (password.length < 8) throw new Error("Password must be at least 8 characters.");
 
-  const isAdmin = opts.isAdmin === true;
+  const role: StaffRole =
+    opts.role && ["admin", "staff", "fulfillment"].includes(opts.role)
+      ? opts.role
+      : opts.isAdmin === true
+        ? "admin"
+        : "staff";
+  const isAdmin = role === "admin";
   const { salt, hash } = hashPortalPassword(password);
   const org = await getLuxesupplyOrg();
   const now = new Date();
@@ -281,7 +301,7 @@ export async function createStaff(opts: {
     username: email,
     displayName,
     isAdmin,
-    role: isAdmin ? "admin" : "staff",
+    role,
     status: "active",
     passwordSalt: salt,
     passwordHash: hash,
@@ -306,6 +326,8 @@ export async function updateStaff(
   updates: {
     displayName?: string;
     isAdmin?: boolean;
+    /** "staff" (rep), "admin", or "fulfillment" (PPAS). Wins over isAdmin. */
+    role?: StaffRole;
     status?: string;
     updatedBy: string;
   },
@@ -336,12 +358,17 @@ export async function updateStaff(
       "";
   }
 
-  let nextIsAdmin = staffIsAdmin(prev);
-  if (updates.isAdmin !== undefined) {
-    nextIsAdmin = updates.isAdmin === true;
-    payload.isAdmin = nextIsAdmin;
-    payload.role = nextIsAdmin ? "admin" : "staff";
+  let nextRole = staffRoleOf(prev);
+  if (updates.role !== undefined && ["admin", "staff", "fulfillment"].includes(updates.role)) {
+    nextRole = updates.role;
+  } else if (updates.isAdmin !== undefined) {
+    nextRole = updates.isAdmin === true ? "admin" : "staff";
   }
+  if (nextRole !== staffRoleOf(prev)) {
+    payload.role = nextRole;
+    payload.isAdmin = nextRole === "admin";
+  }
+  const nextIsAdmin = nextRole === "admin";
 
   let nextStatus = String(prev.status || "active");
   if (updates.status !== undefined) {
@@ -492,13 +519,14 @@ export async function disableStaffTotp(staffId: string): Promise<StaffRecord> {
   return serializeStaff(saved.id, saved.data() || {});
 }
 
-/** Active staff emails for this portal — used to notify staff of new invoice requests. */
+/** Active staff emails for this portal — used to notify staff of new invoice
+ * requests. PPAS (warehouse) logins are excluded from sales notifications. */
 export async function listActiveStaffEmails(): Promise<string[]> {
   const staff = await listStaff();
   return [
     ...new Set(
       staff
-        .filter((s) => s.status !== "disabled" && s.email)
+        .filter((s) => s.status !== "disabled" && s.email && s.role !== "fulfillment")
         .map((s) => s.email.trim().toLowerCase()),
     ),
   ];

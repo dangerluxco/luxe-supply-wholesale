@@ -149,9 +149,11 @@ async function logActivity(opts: {
  * to no assignment if there are no active staff to route to. */
 export async function autoRouteLead(
   estAnnualSpend: number | null,
-  staff: { email: string; displayName: string; role: "admin" | "staff" }[],
+  allStaff: { email: string; displayName: string; role: "admin" | "staff" | "fulfillment" }[],
   openLeads: Lead[],
 ): Promise<{ repEmail: string; repName: string; reason: string } | null> {
+  // PPAS (warehouse) logins never work leads.
+  const staff = allStaff.filter((s) => s.role !== "fulfillment");
   if (!staff.length) return null;
   const loadByEmail = new Map<string, number>();
   for (const l of openLeads) {

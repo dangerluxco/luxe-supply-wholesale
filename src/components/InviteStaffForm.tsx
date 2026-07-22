@@ -35,7 +35,7 @@ export function InviteStaffForm() {
               email: String(fd.get("email") || ""),
               displayName: String(fd.get("displayName") || ""),
               password: String(fd.get("password") || ""),
-              isAdmin: fd.get("isAdmin") === "on",
+              role: String(fd.get("role") || "staff"),
               sendEmail: fd.get("sendEmail") === "on",
             }),
           });
@@ -75,11 +75,15 @@ export function InviteStaffForm() {
           <span className={labelClass}>TEMP PASSWORD</span>
           <input name="password" placeholder="auto-generated" className={fieldClass} />
         </label>
+        <label className="flex flex-col gap-1.5">
+          <span className={labelClass}>ROLE</span>
+          <select name="role" defaultValue="staff" className={fieldClass}>
+            <option value="staff">Rep</option>
+            <option value="admin">Admin</option>
+            <option value="fulfillment">Fulfillment (PPAS)</option>
+          </select>
+        </label>
         <div className="flex flex-col justify-end gap-2 pb-1">
-          <label className="flex items-center gap-2 text-[12.5px] text-ink">
-            <input name="isAdmin" type="checkbox" className="accent-accent" />
-            Make admin
-          </label>
           <label className="flex items-center gap-2 text-[12.5px] text-ink">
             <input name="sendEmail" type="checkbox" defaultChecked className="accent-accent" />
             Send invite email

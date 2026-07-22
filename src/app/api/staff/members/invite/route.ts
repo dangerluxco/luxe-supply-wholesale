@@ -18,16 +18,21 @@ export async function POST(request: Request) {
     displayName?: string;
     password?: string;
     isAdmin?: boolean;
+    role?: string;
     sendEmail?: boolean;
   };
 
   try {
     const sendEmailWanted = body.sendEmail !== false;
+    const role = ["admin", "staff", "fulfillment"].includes(String(body.role || ""))
+      ? (body.role as "admin" | "staff" | "fulfillment")
+      : undefined;
     const { staff, temporaryPassword } = await createStaff({
       email: String(body.email || ""),
       displayName: String(body.displayName || ""),
       password: String(body.password || ""),
       isAdmin: !!body.isAdmin,
+      role,
       invitedBy: session.email,
     });
 
@@ -52,7 +57,7 @@ export async function POST(request: Request) {
       action: "staff.invite",
       entity: "staff",
       entityId: staff.id,
-      payload: { email: staff.email, isAdmin: staff.isAdmin },
+      payload: { email: staff.email, isAdmin: staff.isAdmin, role: staff.role },
     });
 
     let message = `Staff ${staff.displayName} created.`;

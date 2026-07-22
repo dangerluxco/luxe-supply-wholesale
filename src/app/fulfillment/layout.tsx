@@ -7,8 +7,8 @@ import { listInvoices } from "@/lib/firestore/invoices";
 import { FulfillmentSidebar, type SidebarShipment } from "@/components/FulfillmentSidebar";
 
 /**
- * Dark warehouse console shell. Access: dedicated FULFILLMENT logins (their
- * own cookie slot) or any rep/manager on their staff session (admin view).
+ * Dark warehouse console shell. Access: dedicated PPAS logins (FULFILLMENT
+ * role, own cookie slot) or an admin on their staff session — reps stay out.
  */
 export default async function FulfillmentLayout({ children }: { children: React.ReactNode }) {
   const ful = await getSessionForArea("fulfillment");
@@ -16,7 +16,7 @@ export default async function FulfillmentLayout({ children }: { children: React.
   const session =
     ful?.role === ROLE.FULFILLMENT
       ? ful
-      : staff && (staff.role === ROLE.REP || staff.role === ROLE.MANAGER)
+      : staff && staff.role === ROLE.MANAGER
         ? staff
         : null;
   if (!session) redirect("/wholesaleportal/sign-in?next=/fulfillment");

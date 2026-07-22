@@ -18,7 +18,8 @@ export async function GET() {
 
   const staff = await listStaff();
   const active = staff
-    .filter((s) => s.status !== "disabled")
+    // PPAS (warehouse) logins don't work order requests — keep them out of "Assign to".
+    .filter((s) => s.status !== "disabled" && s.role !== "fulfillment")
     .map((s) => ({ email: s.email, displayName: s.displayName || s.email }))
     .sort((a, b) => a.displayName.localeCompare(b.displayName));
 

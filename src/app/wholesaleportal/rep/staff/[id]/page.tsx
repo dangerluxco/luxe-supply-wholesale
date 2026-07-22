@@ -156,7 +156,7 @@ export default async function StaffDetailPage({
           </div>
           <div className="mt-2.5 flex flex-wrap gap-1.5">
             <MicroBadge tone={staff.isAdmin ? "solid-gold" : "outline-gold"}>
-              {staff.isAdmin ? "MANAGER" : "REP"}
+              {staff.isAdmin ? "MANAGER" : staff.role === "fulfillment" ? "PPAS" : "REP"}
             </MicroBadge>
             <MicroBadge tone={staff.status === "active" ? "solid-green" : "outline-gray"}>
               {staff.status.toUpperCase()}

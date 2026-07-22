@@ -87,7 +87,9 @@ export default async function InvoiceDetail({ params }: { params: Promise<{ numb
                 <Meta k="Balance due" v={money(inv.balance)} />
               </>
             ) : null}
-            {inv.fulfillmentStatus === "SHIPPED" ? (
+            {/* Per-box tracking renders in the SHIPMENT section below — the
+                summary rows here only fill in when that detail is missing. */}
+            {inv.fulfillmentStatus === "SHIPPED" && shipmentBoxes.length === 0 ? (
               <>
                 <Meta k="Carrier" v={inv.carrier || "—"} />
                 {trackingUrlFor(inv.carrier, inv.trackingNumber) ? (

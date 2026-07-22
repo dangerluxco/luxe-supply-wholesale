@@ -51,7 +51,7 @@ export default async function SettingsPeoplePage() {
                 </a>
                 <span className="truncate">{s.email || "—"}</span>
                 <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">
-                  {s.isAdmin ? "Admin" : "Staff"}
+                  {s.role === "admin" ? "Admin" : s.role === "fulfillment" ? "PPAS" : "Rep"}
                 </span>
                 <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">
                   {s.status}
@@ -61,7 +61,7 @@ export default async function SettingsPeoplePage() {
                 </span>
                 <StaffMemberActions
                   staffId={s.id}
-                  isAdmin={s.isAdmin}
+                  role={s.role}
                   status={s.status}
                   isSelf={isSelf}
                 />

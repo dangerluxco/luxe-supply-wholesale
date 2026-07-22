@@ -216,8 +216,8 @@ export function roleCanAccess(role: string, pathname: string): boolean {
     return role === ROLE.REP || role === ROLE.MANAGER;
   }
   if (pathname.startsWith("/fulfillment")) {
-    // Warehouse logins plus admin visibility for reps/managers.
-    return role === ROLE.FULFILLMENT || role === ROLE.REP || role === ROLE.MANAGER;
+    // Warehouse logins (PPAS) plus admin visibility — reps stay out.
+    return role === ROLE.FULFILLMENT || role === ROLE.MANAGER;
   }
   return true;
 }

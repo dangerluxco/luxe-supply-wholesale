@@ -20,12 +20,18 @@ export async function POST(
     return NextResponse.json({ error: "Missing staff id." }, { status: 400 });
   }
 
-  const body = (await request.json().catch(() => ({}))) as { isAdmin?: boolean };
-  const isAdmin = !!body.isAdmin;
+  const body = (await request.json().catch(() => ({}))) as {
+    isAdmin?: boolean;
+    role?: string;
+  };
+  const role = ["admin", "staff", "fulfillment"].includes(String(body.role || ""))
+    ? (body.role as "admin" | "staff" | "fulfillment")
+    : undefined;
 
   try {
     const staff = await updateStaff(staffId.trim(), {
-      isAdmin,
+      isAdmin: role === undefined ? !!body.isAdmin : undefined,
+      role,
       updatedBy: session.email,
     });
     await logAudit({
@@ -33,12 +39,19 @@ export async function POST(
       action: "staff.admin",
       entity: "staff",
       entityId: staff.id,
-      payload: { isAdmin: staff.isAdmin },
+      payload: { isAdmin: staff.isAdmin, role: staff.role },
     });
+    const label =
+      staff.role === "admin"
+        ? "Marked as admin."
+        : staff.role === "fulfillment"
+          ? "Set to Fulfillment (PPAS)."
+          : "Set to rep.";
     return NextResponse.json({
       ok: true,
-      message: staff.isAdmin ? "Marked as admin." : "Admin removed.",
+      message: label,
       isAdmin: staff.isAdmin,
+      role: staff.role,
     });
   } catch (err) {
     return NextResponse.json(
