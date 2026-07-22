@@ -40,6 +40,9 @@ export function GenerateInvoiceButton({
               return;
             }
             if (data.invoiceId) {
+              // Bust the client route cache first — otherwise the Contacted list
+              // keeps showing this request (now status=quoted) for up to 30s.
+              router.refresh();
               router.push(`/wholesaleportal/rep/invoices/${data.invoiceId}`);
             }
           });

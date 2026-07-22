@@ -15,7 +15,7 @@ import { RequestCallButton } from "@/components/RequestCallButton";
 import { OpenCurationViewButton } from "@/components/OpenCurationViewButton";
 import { InfoTip } from "@/components/InfoTip";
 import { fullDate, money } from "@/lib/format";
-import { buyerStorefrontOrigin, staffPortalOrigin } from "@/lib/notify";
+import { buyerStorefrontOrigin } from "@/lib/notify";
 
 export const dynamic = "force-dynamic";
 
@@ -45,7 +45,7 @@ export default async function StaffQuoteDetailPage({
     ? `${buyerStorefrontOrigin()}/curation/${quote.curationToken}`
     : null;
   const initialSellerCurationUrl = quote.curationToken
-    ? `${staffPortalOrigin()}/wholesaleportal/rep/curation/${quote.curationToken}`
+    ? `/wholesaleportal/rep/curation/${quote.curationToken}`
     : null;
 
   return (

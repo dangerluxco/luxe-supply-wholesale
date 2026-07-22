@@ -58,7 +58,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({
       ok: true,
       curationUrl: `${buyerStorefrontOrigin()}/curation/${token}`,
-      sellerCurationUrl: `${staffPortalOrigin()}/wholesaleportal/rep/curation/${token}`,
+      sellerCurationUrl: `/wholesaleportal/rep/curation/${token}`,
     });
   } catch (err) {
     return NextResponse.json(

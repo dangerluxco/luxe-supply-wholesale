@@ -22,7 +22,9 @@ const STAFF_ORIGIN =
   process.env.STAFF_ORIGIN ||
   (process.env.PUBLIC_HOST
     ? `${schemeFor(process.env.PUBLIC_HOST)}://${process.env.PUBLIC_HOST}`
-    : "https://wholesaleportal.luxesupply.co");
+    : // The domain staff actually use today. Switch via STAFF_ORIGIN env once
+      // rep.luxesupply.co / admin.luxesupply.co DNS is live.
+      "https://luxe-wholesale-portal.web.app");
 
 export function buyerStorefrontOrigin(): string {
   return BUYER_ORIGIN.replace(/\/$/, "");

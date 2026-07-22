@@ -95,7 +95,7 @@ export async function POST(
       ok: true,
       calendarUrl,
       curationUrl,
-      sellerCurationUrl,
+      sellerCurationUrl: `/wholesaleportal/rep/curation/${share.token}`,
       event: {
         title,
         details,

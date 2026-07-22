@@ -11,6 +11,17 @@ import {
 
 type BookCallResult = { curationUrl: string; sellerCurationUrl: string };
 
+/** In-app links must stay on the current domain — absolute STAFF_ORIGIN URLs
+ *  (meant for emails/calendar) would drop the rep onto a domain without their
+ *  session cookie. Buyer-facing links stay absolute (different site by design). */
+function toAppPath(url: string): string {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return url;
+  }
+}
+
 /**
  * Spins up a fresh curation link from this order request's items, then opens an
  * in-portal event editor (date/time, title, description, attendees, notes).
@@ -83,7 +94,7 @@ export function BookCallButton({
         <div className="mt-2 space-y-1.5 text-[11px] text-muted">
           <p>
             <a
-              href={result.sellerCurationUrl}
+              href={toAppPath(result.sellerCurationUrl)}
               target="_blank"
               rel="noopener noreferrer"
               className="font-semibold text-accent underline-offset-2 hover:underline"

@@ -291,9 +291,9 @@ export function CurationBuilder({
           return;
         }
         setSessionQuoteId(data.quoteId);
-        router.push(
-          data.quoteUrl || `/wholesaleportal/rep/quotes/${data.quoteId}`,
-        );
+        // Always navigate relative — data.quoteUrl is an absolute STAFF_ORIGIN link
+        // meant for emails, and a misconfigured origin would leave the app.
+        router.push(`/wholesaleportal/rep/quotes/${data.quoteId}`);
       } finally {
         setOrderBusy(false);
       }

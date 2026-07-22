@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { ROLE } from "@/lib/constants";
 import { createInvoiceFromQuote } from "@/lib/firestore/invoices";
+import { addQuoteActivity } from "@/lib/firestore/quoteActivities";
+import { logAudit } from "@/lib/firestore/audit";
+import { sendInvoiceReadyEmail } from "@/lib/notify";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +29,35 @@ export async function POST(
 
   try {
     const invoice = await createInvoiceFromQuote(quoteId, session.email);
+    await addQuoteActivity({
+      quoteId,
+      type: "invoice_generated",
+      text: `Invoice ${invoice.invoiceNumber} generated (${invoice.itemCount} items)`,
+      staffEmail: session.email,
+      staffName: session.name || session.email,
+    }).catch(() => {});
+    await logAudit({
+      actor: session,
+      action: "invoice.generated",
+      entity: "invoice",
+      entityId: invoice.id,
+      payload: { invoiceNumber: invoice.invoiceNumber, quoteId },
+    });
+    // Buyer "invoice ready" email — non-blocking, no-op until Resend is configured.
+    try {
+      if (invoice.customerEmail) {
+        await sendInvoiceReadyEmail({
+          invoiceNumber: invoice.invoiceNumber,
+          customerName: invoice.customerName,
+          customerEmail: invoice.customerEmail,
+          total: invoice.total,
+          dueDate: invoice.dueDate,
+          terms: invoice.terms,
+        });
+      }
+    } catch (err) {
+      console.warn("[generate-invoice] buyer email failed:", err instanceof Error ? err.message : err);
+    }
     return NextResponse.json({ ok: true, invoiceId: invoice.id });
   } catch (err) {
     return NextResponse.json(

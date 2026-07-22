@@ -85,7 +85,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ token: str
       ok: true,
       calendarUrl,
       curationUrl,
-      sellerCurationUrl,
+      sellerCurationUrl: `/wholesaleportal/rep/curation/${token}`,
       event: {
         title,
         details,
