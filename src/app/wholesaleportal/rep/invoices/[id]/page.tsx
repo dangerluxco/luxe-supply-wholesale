@@ -6,6 +6,7 @@ import { InvoiceBadge, FulfillmentBadge } from "@/components/badges";
 import { InvoiceMarkPaidButton } from "@/components/InvoiceMarkPaidButton";
 import { InvoiceFulfillmentForm } from "@/components/InvoiceFulfillmentForm";
 import { PortalItemLine } from "@/components/PortalItemLine";
+import { trackingUrlFor } from "@/lib/tracking";
 
 export const dynamic = "force-dynamic";
 
@@ -98,7 +99,21 @@ export default async function StaffInvoiceDetailPage({
             {invoice.fulfillmentStatus === "SHIPPED" ? (
               <div className="space-y-2 text-[12.5px]">
                 <Row label="Carrier" value={invoice.carrier || "—"} />
-                <Row label="Tracking" value={invoice.trackingNumber || "—"} />
+                {trackingUrlFor(invoice.carrier, invoice.trackingNumber) ? (
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted">Tracking</span>
+                    <a
+                      href={trackingUrlFor(invoice.carrier, invoice.trackingNumber)!}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-right font-mono text-accent underline"
+                    >
+                      {invoice.trackingNumber}
+                    </a>
+                  </div>
+                ) : (
+                  <Row label="Tracking" value={invoice.trackingNumber || "—"} />
+                )}
                 <Row label="Shipped" value={fullDate(invoice.shippedAt)} />
               </div>
             ) : (

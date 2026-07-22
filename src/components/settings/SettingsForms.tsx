@@ -423,7 +423,7 @@ export function NotificationsSettingsForm({ initialEmails }: { initialEmails: st
       </label>
       <p className="text-[11px] text-muted">
         Active staff accounts are always notified on new order requests. Extra recipients need{" "}
-        <code className="font-mono">SENDGRID_API_KEY</code>.
+        <code className="font-mono">RESEND_API_KEY</code>.
       </p>
       {error ? <p className="text-[12px] text-danger">{error}</p> : null}
       {message ? <p className="text-[12px] text-[#4E9A6A]">{message}</p> : null}

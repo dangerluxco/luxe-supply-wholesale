@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 /**
  * "Request a call": emails the buyer asking for a few times that work (reply-to
  * the rep). Supports `{ preview: true }` for the draft modal, and optional
- * `subject` / `body` overrides. Without SENDGRID_API_KEY, falls back to mailto.
+ * `subject` / `body` overrides. Without RESEND_API_KEY, falls back to mailto.
  */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await requireStaffSession();

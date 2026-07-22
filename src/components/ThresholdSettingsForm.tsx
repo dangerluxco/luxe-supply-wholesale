@@ -100,7 +100,7 @@ export function ThresholdSettingsForm({
       <p className="text-[11px] text-muted">
         Active staff accounts are always notified when a buyer submits an order request. Add
         extra recipients here if needed. Sending requires{" "}
-        <code className="font-mono">SENDGRID_API_KEY</code> to be configured on the server.
+        <code className="font-mono">RESEND_API_KEY</code> to be configured on the server.
       </p>
 
       <div className="border-t border-border pt-5">

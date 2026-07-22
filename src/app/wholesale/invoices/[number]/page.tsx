@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { ROLE } from "@/lib/constants";
 import { getInvoiceByNumber, displayInvoiceStatus } from "@/lib/firestore/invoices";
 import { money, fullDate } from "@/lib/format";
+import { trackingUrlFor } from "@/lib/tracking";
 import { InvoiceBadge, FulfillmentBadge } from "@/components/badges";
 import { Logo } from "@/components/Logo";
 
@@ -75,7 +76,21 @@ export default async function InvoiceDetail({ params }: { params: Promise<{ numb
             {inv.fulfillmentStatus === "SHIPPED" ? (
               <>
                 <Meta k="Carrier" v={inv.carrier || "—"} />
-                <Meta k="Tracking" v={inv.trackingNumber || "—"} />
+                {trackingUrlFor(inv.carrier, inv.trackingNumber) ? (
+                  <div>
+                    <div className="micro-badge text-[9px] tracking-[0.12em] text-muted">Tracking</div>
+                    <a
+                      href={trackingUrlFor(inv.carrier, inv.trackingNumber)!}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-0.5 block font-mono text-[12px] text-accent underline"
+                    >
+                      {inv.trackingNumber}
+                    </a>
+                  </div>
+                ) : (
+                  <Meta k="Tracking" v={inv.trackingNumber || "—"} />
+                )}
               </>
             ) : null}
           </div>

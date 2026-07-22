@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { requireStaffSession } from "@/lib/staff-api-auth";
 import { markInvoiceShipped } from "@/lib/firestore/invoices";
 import { logAudit } from "@/lib/firestore/audit";
+import { sendShippedEmail } from "@/lib/notify";
+import { trackingUrlFor } from "@/lib/tracking";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +32,11 @@ export async function POST(
   }
 
   try {
-    await markInvoiceShipped(invoiceId.trim(), { carrier, trackingNumber }, session.email);
+    const invoice = await markInvoiceShipped(
+      invoiceId.trim(),
+      { carrier, trackingNumber },
+      session.email,
+    );
     await logAudit({
       actor: session,
       action: "invoice.shipped",
@@ -38,6 +44,21 @@ export async function POST(
       entityId: invoiceId.trim(),
       payload: { carrier, trackingNumber },
     });
+    // Buyer shipped email with tracking link — non-blocking.
+    try {
+      if (invoice?.customerEmail) {
+        await sendShippedEmail({
+          invoiceNumber: invoice.invoiceNumber,
+          customerName: invoice.customerName,
+          customerEmail: invoice.customerEmail,
+          carrier,
+          trackingNumber,
+          trackingUrl: trackingUrlFor(carrier, trackingNumber),
+        });
+      }
+    } catch (err) {
+      console.warn("[invoice shipped] email failed:", err instanceof Error ? err.message : err);
+    }
     return NextResponse.json({ ok: true, message: "Marked shipped." });
   } catch (err) {
     return NextResponse.json(

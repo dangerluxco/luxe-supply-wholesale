@@ -403,7 +403,7 @@ export async function sendPasswordResetLinkEmail(opts: {
 }): Promise<boolean> {
   if (!isEmailConfigured()) {
     // No SendGrid key locally — log the link so the flow is still testable in dev.
-    console.log(`[password-reset] SENDGRID_API_KEY not set. Reset link for ${opts.email}: ${opts.resetUrl}`);
+    console.log(`[password-reset] RESEND_API_KEY not set. Reset link for ${opts.email}: ${opts.resetUrl}`);
   }
   const portalLabel = opts.isStaff ? "wholesale portal staff console" : "wholesale storefront";
   const html = `<!DOCTYPE html>
@@ -417,6 +417,175 @@ export async function sendPasswordResetLinkEmail(opts: {
   return sendEmail({
     to: [opts.email],
     subject: "Reset your LuxeSupply password",
+    html,
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* Buyer lifecycle emails — all non-blocking; no-ops until Resend key. */
+/* ------------------------------------------------------------------ */
+
+const BRAND_HEADER = `<p style="font-size:15px;font-weight:600;letter-spacing:0.06em;">LUXE SUPPLY<span style="color:#B08D3E;">*</span></p>`;
+
+function emailShell(inner: string): string {
+  return `<!DOCTYPE html>
+<html><body style="font-family:Segoe UI,Roboto,Helvetica,sans-serif;line-height:1.6;color:#333;max-width:640px;">
+  ${BRAND_HEADER}
+  ${inner}
+</body></html>`;
+}
+
+/** Buyer confirmation right after they submit an order request. */
+export async function sendOrderRequestConfirmationEmail(opts: {
+  quoteId: string;
+  customerName: string;
+  customerEmail: string;
+  itemCount: number;
+  orderTotal: number;
+}): Promise<boolean> {
+  const firstName = (opts.customerName || "").trim().split(/\s+/)[0] || "there";
+  const orderUrl = `${buyerStorefrontOrigin()}/wholesale/orders/${opts.quoteId}`;
+  const html = emailShell(`
+  <p>Hi ${escapeHtml(firstName)},</p>
+  <p>We received your <strong>order request</strong> — <strong>${opts.itemCount} item${
+    opts.itemCount === 1 ? "" : "s"
+  }</strong> · ${escapeHtml(money(Math.round(opts.orderTotal)))}. Our team will review it and follow up shortly, usually within one business day.</p>
+  <p><a href="${orderUrl}" style="display:inline-block;padding:10px 20px;background:#16161a;color:#fff;text-decoration:none;border-radius:4px;">View your order request</a></p>
+  <p style="color:#666;font-size:13px;">Each piece is one-of-one, so items in your request are soft-held while we review. Request ID: ${escapeHtml(opts.quoteId)}</p>`);
+  return sendEmail({
+    to: [opts.customerEmail],
+    subject: "We received your order request — Luxe Supply Co.",
+    html,
+  });
+}
+
+/** Buyer notification when a formal invoice is generated from their request. */
+export async function sendInvoiceReadyEmail(opts: {
+  invoiceNumber: string;
+  customerName: string;
+  customerEmail: string;
+  total: number;
+  dueDate: string | null;
+  terms: string;
+}): Promise<boolean> {
+  const firstName = (opts.customerName || "").trim().split(/\s+/)[0] || "there";
+  const invoiceUrl = `${buyerStorefrontOrigin()}/wholesale/invoices/${encodeURIComponent(opts.invoiceNumber)}`;
+  const due = opts.dueDate
+    ? new Date(opts.dueDate).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
+    : null;
+  const html = emailShell(`
+  <p>Hi ${escapeHtml(firstName)},</p>
+  <p>Your invoice <strong>${escapeHtml(opts.invoiceNumber)}</strong> is ready — total ${escapeHtml(
+    money(Math.round(opts.total)),
+  )}${due ? `, due <strong>${escapeHtml(due)}</strong>` : ""} (${escapeHtml(opts.terms)}).</p>
+  <p><a href="${invoiceUrl}" style="display:inline-block;padding:10px 20px;background:#16161a;color:#fff;text-decoration:none;border-radius:4px;">View invoice</a></p>
+  <p style="color:#666;font-size:13px;">Wire instructions are on the downloadable PDF invoice. Reply to this email with any questions.</p>`);
+  return sendEmail({
+    to: [opts.customerEmail],
+    subject: `Invoice ${opts.invoiceNumber} — Luxe Supply Co.`,
+    html,
+  });
+}
+
+/** Buyer receipt when staff mark their invoice paid. */
+export async function sendPaymentReceiptEmail(opts: {
+  invoiceNumber: string;
+  customerName: string;
+  customerEmail: string;
+  total: number;
+}): Promise<boolean> {
+  const firstName = (opts.customerName || "").trim().split(/\s+/)[0] || "there";
+  const invoiceUrl = `${buyerStorefrontOrigin()}/wholesale/invoices/${encodeURIComponent(opts.invoiceNumber)}`;
+  const html = emailShell(`
+  <p>Hi ${escapeHtml(firstName)},</p>
+  <p>We've received your payment for invoice <strong>${escapeHtml(opts.invoiceNumber)}</strong> (${escapeHtml(
+    money(Math.round(opts.total)),
+  )}). Thank you!</p>
+  <p>We'll follow up with shipping details as soon as your pieces are on their way.</p>
+  <p><a href="${invoiceUrl}" style="display:inline-block;padding:10px 20px;background:#16161a;color:#fff;text-decoration:none;border-radius:4px;">View invoice</a></p>`);
+  return sendEmail({
+    to: [opts.customerEmail],
+    subject: `Payment received — invoice ${opts.invoiceNumber}`,
+    html,
+  });
+}
+
+/** Buyer notification when their order ships, with a tracking link when known. */
+export async function sendShippedEmail(opts: {
+  invoiceNumber: string;
+  customerName: string;
+  customerEmail: string;
+  carrier: string;
+  trackingNumber: string;
+  trackingUrl: string | null;
+}): Promise<boolean> {
+  const firstName = (opts.customerName || "").trim().split(/\s+/)[0] || "there";
+  const invoiceUrl = `${buyerStorefrontOrigin()}/wholesale/invoices/${encodeURIComponent(opts.invoiceNumber)}`;
+  const trackingBit = opts.trackingNumber
+    ? opts.trackingUrl
+      ? `<p><strong>Tracking:</strong> <a href="${opts.trackingUrl}">${escapeHtml(opts.trackingNumber)}</a> (${escapeHtml(opts.carrier)})</p>`
+      : `<p><strong>Tracking:</strong> ${escapeHtml(opts.trackingNumber)} (${escapeHtml(opts.carrier)})</p>`
+    : `<p><strong>Carrier:</strong> ${escapeHtml(opts.carrier)}</p>`;
+  const html = emailShell(`
+  <p>Hi ${escapeHtml(firstName)},</p>
+  <p>Great news — your order (invoice <strong>${escapeHtml(opts.invoiceNumber)}</strong>) has <strong>shipped</strong>.</p>
+  ${trackingBit}
+  <p><a href="${invoiceUrl}" style="display:inline-block;padding:10px 20px;background:#16161a;color:#fff;text-decoration:none;border-radius:4px;">View invoice &amp; shipment</a></p>`);
+  return sendEmail({
+    to: [opts.customerEmail],
+    subject: `Your order has shipped — invoice ${opts.invoiceNumber}`,
+    html,
+  });
+}
+
+/** Buyer alert when a piece they were waiting on becomes available again. */
+export async function sendBackInStockEmail(opts: {
+  customerName: string;
+  customerEmail: string;
+  sku: string;
+  title: string;
+  brand?: string;
+}): Promise<boolean> {
+  const firstName = (opts.customerName || "").trim().split(/\s+/)[0] || "there";
+  const productUrl = `${buyerStorefrontOrigin()}/wholesale/product/${encodeURIComponent(opts.sku)}`;
+  const html = emailShell(`
+  <p>Hi ${escapeHtml(firstName)},</p>
+  <p><strong>${escapeHtml(opts.title)}</strong>${
+    opts.brand ? ` by ${escapeHtml(opts.brand)}` : ""
+  } is <strong>available again</strong>. It's one-of-one — when it's gone, it's gone.</p>
+  <p><a href="${productUrl}" style="display:inline-block;padding:10px 20px;background:#16161a;color:#fff;text-decoration:none;border-radius:4px;">View the piece</a></p>
+  <p style="color:#666;font-size:13px;">You asked us to let you know when this piece freed up. SKU: ${escapeHtml(opts.sku)}</p>`);
+  return sendEmail({
+    to: [opts.customerEmail],
+    subject: `Available again: ${opts.title} — Luxe Supply Co.`,
+    html,
+  });
+}
+
+/** Overdue invoice reminder (sent by the daily cron). */
+export async function sendOverdueReminderEmail(opts: {
+  invoiceNumber: string;
+  customerName: string;
+  customerEmail: string;
+  total: number;
+  balance: number;
+  dueDate: string | null;
+  daysOverdue: number;
+}): Promise<boolean> {
+  const firstName = (opts.customerName || "").trim().split(/\s+/)[0] || "there";
+  const invoiceUrl = `${buyerStorefrontOrigin()}/wholesale/invoices/${encodeURIComponent(opts.invoiceNumber)}`;
+  const html = emailShell(`
+  <p>Hi ${escapeHtml(firstName)},</p>
+  <p>A friendly reminder that invoice <strong>${escapeHtml(opts.invoiceNumber)}</strong> is now <strong>${
+    opts.daysOverdue
+  } day${opts.daysOverdue === 1 ? "" : "s"} past due</strong> — outstanding balance ${escapeHtml(
+    money(Math.round(opts.balance)),
+  )}.</p>
+  <p><a href="${invoiceUrl}" style="display:inline-block;padding:10px 20px;background:#16161a;color:#fff;text-decoration:none;border-radius:4px;">View invoice</a></p>
+  <p style="color:#666;font-size:13px;">Wire instructions are on the PDF invoice. If payment is already on its way, please disregard — or reply and let us know.</p>`);
+  return sendEmail({
+    to: [opts.customerEmail],
+    subject: `Reminder: invoice ${opts.invoiceNumber} is past due`,
     html,
   });
 }

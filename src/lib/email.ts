@@ -1,7 +1,8 @@
-// Minimal SendGrid REST client (no SDK dependency) — same provider as the legacy
-// Cloud Functions (functions/salesPortal.js uses @sendgrid/mail with SENDGRID_API_KEY).
-// Requires env var SENDGRID_API_KEY; optional SENDGRID_FROM_EMAIL (default info@luxesupply.co).
-// If unset, sendEmail() is a no-op that returns false — callers must not block on it.
+// Minimal Resend REST client (no SDK dependency). Requires env var RESEND_API_KEY;
+// optional RESEND_FROM_EMAIL (default: Luxe Supply Co. <orders@wholesale.luxesupply.co>,
+// the Resend-verified sending subdomain). If unset, sendEmail() is a no-op that
+// returns false — callers must not block on it, so the app works before Resend
+// is configured and every email flow lights up the moment the key is set.
 
 export function escapeHtml(s: unknown): string {
   return String(s == null ? "" : s)
@@ -12,7 +13,7 @@ export function escapeHtml(s: unknown): string {
 }
 
 export function isEmailConfigured(): boolean {
-  return !!process.env.SENDGRID_API_KEY;
+  return !!process.env.RESEND_API_KEY;
 }
 
 export async function sendEmail(opts: {
@@ -22,35 +23,38 @@ export async function sendEmail(opts: {
   replyTo?: string;
   from?: string;
 }): Promise<boolean> {
-  const apiKey = process.env.SENDGRID_API_KEY;
+  const apiKey = process.env.RESEND_API_KEY;
   const to = [...new Set(opts.to.map((e) => e.trim().toLowerCase()).filter(Boolean))];
   if (!apiKey || !to.length) return false;
 
-  const from = opts.from || process.env.SENDGRID_FROM_EMAIL || "info@luxesupply.co";
+  const from =
+    opts.from ||
+    process.env.RESEND_FROM_EMAIL ||
+    "Luxe Supply Co. <orders@wholesale.luxesupply.co>";
 
   try {
-    const res = await fetch("https://api.sendgrid.com/v3/mail/send", {
+    const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        personalizations: [{ to: to.map((email) => ({ email })) }],
-        from: { email: from },
-        ...(opts.replyTo ? { reply_to: { email: opts.replyTo } } : {}),
+        from,
+        to,
         subject: opts.subject,
-        content: [{ type: "text/html", value: opts.html }],
+        html: opts.html,
+        ...(opts.replyTo ? { reply_to: opts.replyTo } : {}),
       }),
     });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      console.error("[email] SendGrid send failed:", res.status, text.slice(0, 500));
+      console.error("[email] Resend send failed:", res.status, text.slice(0, 500));
       return false;
     }
     return true;
   } catch (err) {
-    console.error("[email] SendGrid send error:", err instanceof Error ? err.message : err);
+    console.error("[email] Resend send error:", err instanceof Error ? err.message : err);
     return false;
   }
 }

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/auth";
 import { ROLE } from "@/lib/constants";
 import { createInvoiceFromQuote } from "@/lib/firestore/invoices";
+import { sendInvoiceReadyEmail } from "@/lib/notify";
 
 /**
  * Thin entry for GenerateInvoiceButton — isolated from invoices.ts soft-nav stubs.
@@ -19,6 +20,19 @@ export async function generateInvoiceFromQuote(quoteId: string) {
       return { error: "Staff session required." };
     }
     const invoice = await createInvoiceFromQuote(quoteId, session.email);
+    // Buyer "invoice ready" email — non-blocking, no-op until Resend is configured.
+    try {
+      await sendInvoiceReadyEmail({
+        invoiceNumber: invoice.invoiceNumber,
+        customerName: invoice.customerName,
+        customerEmail: invoice.customerEmail,
+        total: invoice.total,
+        dueDate: invoice.dueDate,
+        terms: invoice.terms,
+      });
+    } catch (err) {
+      console.warn("[generate-invoice] buyer email failed:", err instanceof Error ? err.message : err);
+    }
     revalidatePath(`/wholesaleportal/rep/quotes/${quoteId}`);
     revalidatePath("/wholesaleportal/rep/invoices");
     revalidatePath("/wholesaleportal/rep");

@@ -12,7 +12,7 @@ import {
 import { convertCartHoldsToQuote, syncCartHolds } from "@/lib/firestore/holds";
 import { getQuoteThresholds, evaluateQuoteThresholds } from "@/lib/firestore/settings";
 import { getDb } from "@/lib/firestore/admin";
-import { notifyStaffOfInvoiceRequest } from "@/lib/notify";
+import { notifyStaffOfInvoiceRequest, sendOrderRequestConfirmationEmail } from "@/lib/notify";
 import { resolveShippingOption } from "@/lib/constants";
 import { addSkusToCartForBuyer } from "@/lib/cart/addSkusToCart";
 
@@ -135,6 +135,22 @@ export async function submitInvoiceRequest(opts?: {
   } catch (err) {
     console.error(
       "[submitInvoiceRequest] staff email notify failed:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+
+  // Buyer confirmation email — same non-blocking contract as the staff notify.
+  try {
+    await sendOrderRequestConfirmationEmail({
+      quoteId: id,
+      customerName: buyer.displayName || buyer.username,
+      customerEmail: buyer.email,
+      itemCount,
+      orderTotal: cartTotal + shipping.price,
+    });
+  } catch (err) {
+    console.warn(
+      "[submitInvoiceRequest] buyer confirmation email failed:",
       err instanceof Error ? err.message : err,
     );
   }
