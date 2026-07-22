@@ -5,8 +5,10 @@ import { useRouter } from "next/navigation";
 import { clsx } from "@/lib/clsx";
 import { money } from "@/lib/format";
 import type { PipelineColumn, PipelineTableRow } from "@/lib/repDashboard";
+import type { CallRequestItem } from "@/lib/firestore/callRequests";
 
 const STATUS_COLOR: Record<string, string> = {
+  call_request: "#8E6FAD",
   open: "#4E9A6A",
   contacted: "#B08D3E",
   quoted: "#3A7CA5",
@@ -24,16 +26,38 @@ const DRAGGABLE = new Set(["open", "contacted"]);
 export function RepPipelineBoard({
   columns,
   table,
+  callRequests = [],
 }: {
   columns: PipelineColumn[];
   table: PipelineTableRow[];
+  /** Pending buyer call/viewing requests — shown as the pipeline's initial phase. */
+  callRequests?: CallRequestItem[];
 }) {
   const router = useRouter();
   const [view, setView] = useState<"board" | "table">("board");
   const [cols, setCols] = useState(columns);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busyCallId, setBusyCallId] = useState<string | null>(null);
   const [, start] = useTransition();
+
+  function markCallHandled(id: string) {
+    setError(null);
+    setBusyCallId(id);
+    start(async () => {
+      const res = await fetch(`/api/staff/call-requests/${id}/handled`, {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      setBusyCallId(null);
+      if (!res.ok || data.error) {
+        setError(data.error || "Could not update the call request.");
+        return;
+      }
+      router.refresh();
+    });
+  }
 
   // Resync when the server re-renders the dashboard (e.g. after router.refresh()).
   useEffect(() => {
@@ -93,6 +117,7 @@ export function RepPipelineBoard({
         <div>
           <div className="text-[14px] font-semibold text-ink">Order request pipeline</div>
           <div className="mt-0.5 text-[11.5px] text-muted">
+            {callRequests.length > 0 ? `${callRequests.length} call request${callRequests.length === 1 ? "" : "s"} · ` : ""}
             {openCount} open · {invoicedCount} invoiced
             {view === "board" ? (
               <span className="text-muted/70"> · drag between Open and Contacted to update</span>
@@ -123,7 +148,65 @@ export function RepPipelineBoard({
       ) : null}
 
       {view === "board" ? (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div
+          className={clsx(
+            "grid grid-cols-1 gap-3 sm:grid-cols-2",
+            callRequests.length > 0 ? "lg:grid-cols-5" : "lg:grid-cols-4",
+          )}
+        >
+          {callRequests.length > 0 ? (
+            <div className="rounded-chip border border-border/70 bg-ground/40 p-3">
+              <div className="mb-2 flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.1em] text-muted">
+                <span className="flex items-center gap-1.5">
+                  <span
+                    className="h-1.5 w-1.5 rounded-full"
+                    style={{ background: STATUS_COLOR.call_request }}
+                  />
+                  Call request
+                </span>
+                <span>{callRequests.length}</span>
+              </div>
+              <div className="space-y-2">
+                {callRequests.slice(0, 6).map((r) => (
+                  <div
+                    key={r.id}
+                    className="rounded-chip border border-border bg-surface px-2.5 py-2 text-[12px]"
+                  >
+                    <div className="truncate font-semibold text-ink">{r.buyerDisplayName}</div>
+                    <div className="mt-0.5 truncate text-[10.5px] text-muted">
+                      {r.title}
+                      {r.preferredTimes ? ` · prefers ${r.preferredTimes}` : ""}
+                    </div>
+                    <div className="mt-1.5 flex items-center gap-2">
+                      {r.buyerEmail ? (
+                        <a
+                          href={`mailto:${r.buyerEmail}?subject=${encodeURIComponent(
+                            `Call about ${r.title} — Luxe Supply Co.`,
+                          )}`}
+                          className="text-[10px] font-semibold uppercase tracking-[0.08em] text-accent hover:underline"
+                        >
+                          Email
+                        </a>
+                      ) : null}
+                      <button
+                        type="button"
+                        disabled={busyCallId === r.id}
+                        onClick={() => markCallHandled(r.id)}
+                        className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted transition hover:text-ink disabled:opacity-50"
+                      >
+                        {busyCallId === r.id ? "Saving…" : "✓ Handled"}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {callRequests.length > 6 ? (
+                  <div className="text-center text-[10.5px] text-muted">
+                    +{callRequests.length - 6} more
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
           {cols.map((col) => {
             const droppable = DRAGGABLE.has(col.key);
             return (
