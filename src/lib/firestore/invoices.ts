@@ -23,6 +23,15 @@ export type InvoiceLineItem = {
   imageUrl: string | null;
 };
 
+export type InvoicePayment = {
+  amount: number;
+  method: string;
+  reference: string;
+  note: string;
+  receivedAt: string | null;
+  recordedBy: string;
+};
+
 export type PortalInvoice = {
   id: string;
   invoiceNumber: string;
@@ -42,6 +51,11 @@ export type PortalInvoice = {
   terms: string;
   poNumber: string | null;
   status: string;
+  payments: InvoicePayment[];
+  /** Sum of recorded payments. */
+  amountPaid: number;
+  /** total - amountPaid, floored at 0; 0 when status is PAID regardless. */
+  balance: number;
   fulfillmentStatus: FulfillmentStatus;
   carrier: string | null;
   trackingNumber: string | null;
@@ -49,6 +63,7 @@ export type PortalInvoice = {
   issuedAt: string | null;
   dueDate: string | null;
   paidAt: string | null;
+  lastReminderAt: string | null;
   createdAt: string | null;
   updatedAt: string | null;
   createdBy: string;
@@ -82,6 +97,22 @@ function serializeInvoice(id: string, d: Record<string, unknown>): PortalInvoice
     terms: String(d.terms || INVOICE_TERMS),
     poNumber: d.poNumber ? String(d.poNumber) : null,
     status: String(d.status || FIRESTORE_INVOICE_STATUS.SENT),
+    ...(() => {
+      const payments = (Array.isArray(d.payments) ? (d.payments as Array<Record<string, unknown>>) : []).map(
+        (p) => ({
+          amount: Number(p.amount) || 0,
+          method: String(p.method || "wire"),
+          reference: String(p.reference || ""),
+          note: String(p.note || ""),
+          receivedAt: toIso(p.receivedAt),
+          recordedBy: String(p.recordedBy || ""),
+        }),
+      );
+      const amountPaid = payments.reduce((s, p) => s + p.amount, 0);
+      const total = Number(d.total || 0);
+      const paid = String(d.status || "") === FIRESTORE_INVOICE_STATUS.PAID;
+      return { payments, amountPaid, balance: paid ? 0 : Math.max(0, total - amountPaid) };
+    })(),
     fulfillmentStatus: (String(d.fulfillmentStatus || FULFILLMENT_STATUS.UNFULFILLED) as FulfillmentStatus),
     carrier: d.carrier ? String(d.carrier) : null,
     trackingNumber: d.trackingNumber ? String(d.trackingNumber) : null,
@@ -89,6 +120,7 @@ function serializeInvoice(id: string, d: Record<string, unknown>): PortalInvoice
     issuedAt: toIso(d.issuedAt),
     dueDate: toIso(d.dueDate),
     paidAt: toIso(d.paidAt),
+    lastReminderAt: toIso(d.lastReminderAt),
     createdAt: toIso(d.createdAt),
     updatedAt: toIso(d.updatedAt),
     createdBy: String(d.createdBy || ""),
@@ -303,6 +335,68 @@ export async function updateInvoiceStatus(
 
   const next = await ref.get();
   return serializeInvoice(next.id, next.data() || {});
+}
+
+/**
+ * Record a (possibly partial) payment against an invoice. When cumulative
+ * payments reach the invoice total, the invoice flips to PAID (paidAt set) —
+ * same end state as the mark-paid shortcut, which remains available for
+ * one-step full payments.
+ */
+export async function recordInvoicePayment(
+  invoiceId: string,
+  payment: { amount: number; method?: string; reference?: string; note?: string },
+  recordedBy: string,
+): Promise<{ invoice: PortalInvoice; fullyPaid: boolean }> {
+  const amount = Math.round(Number(payment.amount) * 100) / 100;
+  if (!Number.isFinite(amount) || amount <= 0) throw new Error("Enter a payment amount above 0.");
+
+  const ref = getDb().collection("salesPortalInvoices").doc(invoiceId);
+  const snap = await ref.get();
+  if (!snap.exists) throw new Error("Invoice not found.");
+  const data = snap.data() || {};
+  if (String(data.status || "") === FIRESTORE_INVOICE_STATUS.PAID) {
+    throw new Error("Invoice is already paid in full.");
+  }
+
+  const existing = Array.isArray(data.payments) ? (data.payments as unknown[]) : [];
+  const priorPaid = existing.reduce(
+    (s: number, p) => s + (Number((p as Record<string, unknown>).amount) || 0),
+    0,
+  );
+  const total = Number(data.total || 0);
+  const nowPaid = priorPaid + amount;
+  const fullyPaid = nowPaid >= total - 0.005;
+
+  const entry = {
+    amount,
+    method: String(payment.method || "wire").slice(0, 40),
+    reference: String(payment.reference || "").slice(0, 120),
+    note: String(payment.note || "").slice(0, 500),
+    receivedAt: new Date(),
+    recordedBy,
+  };
+  const update: Record<string, unknown> = {
+    payments: [...existing, entry],
+    updatedAt: new Date(),
+    updatedBy: recordedBy,
+  };
+  if (fullyPaid) {
+    update.status = FIRESTORE_INVOICE_STATUS.PAID;
+    update.paidAt = new Date();
+  }
+  await ref.update(update);
+
+  const next = await ref.get();
+  return { invoice: serializeInvoice(next.id, next.data() || {}), fullyPaid };
+}
+
+/** Stamp when an overdue reminder email went out (cron throttle). */
+export async function markReminderSent(invoiceId: string): Promise<void> {
+  await getDb()
+    .collection("salesPortalInvoices")
+    .doc(invoiceId)
+    .update({ lastReminderAt: new Date() });
 }
 
 /** Minimal viable fulfillment: staff records carrier + tracking once the pieces ship. */

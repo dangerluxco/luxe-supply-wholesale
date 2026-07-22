@@ -73,6 +73,12 @@ export default async function InvoiceDetail({ params }: { params: Promise<{ numb
             <Meta k="Due" v={inv.dueDate ? fullDate(inv.dueDate) : "—"} />
             <Meta k="Terms" v={inv.terms} />
             {inv.paidAt ? <Meta k="Paid" v={fullDate(inv.paidAt)} /> : null}
+            {inv.amountPaid > 0 && inv.status !== "PAID" ? (
+              <>
+                <Meta k="Received" v={money(inv.amountPaid)} />
+                <Meta k="Balance due" v={money(inv.balance)} />
+              </>
+            ) : null}
             {inv.fulfillmentStatus === "SHIPPED" ? (
               <>
                 <Meta k="Carrier" v={inv.carrier || "—"} />

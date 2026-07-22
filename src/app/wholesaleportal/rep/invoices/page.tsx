@@ -8,6 +8,20 @@ export const dynamic = "force-dynamic";
 export default async function RepInvoicesPage() {
   const invoices = await listInvoices({ limit: 150 });
 
+  // AR aging over outstanding balances (partial payments already netted out).
+  const now = Date.now();
+  const aging = { current: 0, d30: 0, d60: 0, d61plus: 0 };
+  for (const inv of invoices) {
+    if (inv.status === "PAID" || inv.balance <= 0) continue;
+    const due = inv.dueDate ? new Date(inv.dueDate).getTime() : null;
+    const daysOver = due == null ? 0 : Math.floor((now - due) / 86_400_000);
+    if (due == null || daysOver <= 0) aging.current += inv.balance;
+    else if (daysOver <= 30) aging.d30 += inv.balance;
+    else if (daysOver <= 60) aging.d60 += inv.balance;
+    else aging.d61plus += inv.balance;
+  }
+  const outstanding = aging.current + aging.d30 + aging.d60 + aging.d61plus;
+
   return (
     <div className="px-10 pb-12 pt-8">
       <div className="mb-6 flex items-baseline gap-3">
@@ -16,6 +30,36 @@ export default async function RepInvoicesPage() {
           Live from Firestore · {invoices.length} total
         </span>
       </div>
+
+      {outstanding > 0 ? (
+        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-5">
+          {[
+            { label: "Outstanding", value: outstanding, danger: false },
+            { label: "Current", value: aging.current, danger: false },
+            { label: "1–30 days over", value: aging.d30, danger: aging.d30 > 0 },
+            { label: "31–60 days over", value: aging.d60, danger: aging.d60 > 0 },
+            { label: "61+ days over", value: aging.d61plus, danger: aging.d61plus > 0 },
+          ].map((b) => (
+            <div
+              key={b.label}
+              className={`rounded-card border p-4 ${
+                b.danger ? "border-danger/40 bg-danger/5" : "border-border bg-surface"
+              }`}
+            >
+              <div className="micro-badge mb-2 text-[9.5px] tracking-[0.14em] text-muted">
+                {b.label}
+              </div>
+              <div
+                className={`font-mono text-[18px] font-semibold ${
+                  b.danger ? "text-danger" : "text-ink"
+                }`}
+              >
+                {money(b.value)}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       {invoices.length === 0 ? (
         <EmptyState

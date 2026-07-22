@@ -4,6 +4,7 @@ import { getInvoiceById, displayInvoiceStatus } from "@/lib/firestore/invoices";
 import { money, fullDate } from "@/lib/format";
 import { InvoiceBadge, FulfillmentBadge } from "@/components/badges";
 import { InvoiceMarkPaidButton } from "@/components/InvoiceMarkPaidButton";
+import { InvoicePaymentsPanel } from "@/components/InvoicePaymentsPanel";
 import { InvoiceFulfillmentForm } from "@/components/InvoiceFulfillmentForm";
 import { PortalItemLine } from "@/components/PortalItemLine";
 import { trackingUrlFor } from "@/lib/tracking";
@@ -139,6 +140,15 @@ export default async function StaffInvoiceDetailPage({
               ) : null}
             </div>
           </div>
+
+          <InvoicePaymentsPanel
+            invoiceId={invoice.id}
+            total={invoice.total}
+            amountPaid={invoice.amountPaid}
+            balance={invoice.balance}
+            payments={invoice.payments}
+            paid={invoice.status === "PAID"}
+          />
 
           <div className="rounded-card border border-border bg-surface p-5">
             <div className="mb-3 micro-badge text-[10px] tracking-[0.14em] text-accent">
