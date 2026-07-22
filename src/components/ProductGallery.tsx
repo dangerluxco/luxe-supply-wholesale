@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export type GalleryItem = {
@@ -337,12 +338,11 @@ export function ProductGallery({
                   key={`${thumb}-${i}`}
                   type="button"
                   onClick={() => onIndexChange(i)}
-                  className={`h-10 w-10 shrink-0 overflow-hidden rounded border ${
+                  className={`relative h-10 w-10 shrink-0 overflow-hidden rounded border ${
                     i === safeIndex ? "border-accent" : "border-white/15 opacity-70 hover:opacity-100"
                   }`}
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={thumb} alt="" className="h-full w-full object-cover" />
+                  <Image src={thumb} alt="" fill sizes="40px" className="object-cover" />
                 </button>
               ))}
             </div>

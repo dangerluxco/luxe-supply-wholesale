@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { Placeholder, OneOfOneBadge } from "./Placeholder";
 import { ProductGallery } from "./ProductGallery";
 import { clsx } from "@/lib/clsx";
@@ -39,6 +40,7 @@ export function ProductPdpGallery({
           label={title}
           imageSrc={urls[safeActive] || null}
           priority
+          sizes="(max-width: 640px) 100vw, 440px"
           className="h-full w-full"
         >
           <OneOfOneBadge />
@@ -59,12 +61,11 @@ export function ProductPdpGallery({
               onClick={() => setActive(i)}
               aria-label={`Photo ${i + 1}`}
               className={clsx(
-                "h-14 w-14 shrink-0 overflow-hidden rounded-chip border transition sm:h-16 sm:w-16",
+                "relative h-14 w-14 shrink-0 overflow-hidden rounded-chip border transition sm:h-16 sm:w-16",
                 i === safeActive ? "border-accent" : "border-border opacity-70 hover:opacity-100",
               )}
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={u} alt="" loading="lazy" className="h-full w-full object-cover" />
+              <Image src={u} alt="" fill loading="lazy" sizes="64px" className="object-cover" />
             </button>
           ))}
         </div>

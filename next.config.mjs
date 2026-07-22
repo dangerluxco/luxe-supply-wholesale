@@ -19,6 +19,10 @@ const nextConfig = {
     },
   },
   images: {
+    // Product photo URLs are content-stable (tokened Firebase Storage links),
+    // so optimized variants can cache long on the instance disk + browser.
+    minimumCacheTTL: 2_678_400, // 31 days
+    formats: ["image/avif", "image/webp"],
     remotePatterns: [
       { protocol: "https", hostname: "**.googleapis.com" },
       { protocol: "https", hostname: "**.googleusercontent.com" },
@@ -48,6 +52,19 @@ const nextConfig = {
             key: "Cache-Control",
             value: isProd
               ? "public, max-age=31536000, immutable"
+              : "private, no-cache, no-store, max-age=0, must-revalidate",
+          },
+        ],
+      },
+      {
+        // Optimized product images — must override the no-store catch-all above,
+        // or every catalog view re-downloads every photo.
+        source: "/_next/image",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: isProd
+              ? "public, max-age=86400, stale-while-revalidate=2592000"
               : "private, no-cache, no-store, max-age=0, must-revalidate",
           },
         ],

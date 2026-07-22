@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef } from "react";
+import Image from "next/image";
 
 const SIZE = {
   sm: { container: "h-16 w-[200px]", item: "h-16 w-16", gap: "gap-1" },
@@ -85,10 +86,16 @@ export function BundleImageStrip({
         {urls.map((url, i) => (
           <div
             key={`${url}-${i}`}
-            className={`shrink-0 snap-start overflow-hidden rounded-chip bg-ground ${dims.item}`}
+            className={`relative shrink-0 snap-start overflow-hidden rounded-chip bg-ground ${dims.item}`}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={url} alt="" draggable={false} className="h-full w-full select-none object-cover" />
+            <Image
+              src={url}
+              alt=""
+              fill
+              draggable={false}
+              sizes="120px"
+              className="select-none object-cover"
+            />
           </div>
         ))}
       </div>

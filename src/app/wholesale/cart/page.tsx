@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { DEFAULT_MAX_CART_ITEMS, DEFAULT_MAX_CART_VALUE, ROLE } from "@/lib/constants";
@@ -104,10 +105,9 @@ export default async function CartPage() {
                       size="md"
                     />
                   ) : (
-                    <div className="h-24 w-24 shrink-0 overflow-hidden rounded-chip bg-ground">
+                    <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-chip bg-ground">
                       {item.imageUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={item.imageUrl} alt="" className="h-full w-full object-cover" />
+                        <Image src={item.imageUrl} alt="" fill sizes="96px" className="object-cover" />
                       ) : null}
                     </div>
                   )}
