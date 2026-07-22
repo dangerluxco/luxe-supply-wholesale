@@ -10,6 +10,7 @@ export type RepNavIconKey =
   | "bundles"
   | "curation"
   | "invoices"
+  | "fulfillment"
   | "wishlist"
   | "performance"
   | "staff"
@@ -45,7 +46,11 @@ export function repNavItems(
   if (features.curation) {
     items.push({ label: "Curate Order", href: "/wholesaleportal/rep/curation", icon: "curation" });
   }
-  items.push({ label: "Invoices", href: "/wholesaleportal/rep/invoices", icon: "invoices" });
+  items.push(
+    { label: "Invoices", href: "/wholesaleportal/rep/invoices", icon: "invoices" },
+    // Warehouse console — staff sessions are allowed in (admin visibility).
+    { label: "Fulfillment", href: "/fulfillment", icon: "fulfillment" },
+  );
   if (features.wishlist) {
     items.push({ label: "Wishlist", href: "/wholesaleportal/rep/wishlist", icon: "wishlist" });
   }

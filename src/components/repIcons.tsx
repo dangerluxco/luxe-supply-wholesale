@@ -93,6 +93,21 @@ export function BundlesIcon({ className }: IconProps) {
   );
 }
 
+export function FulfillmentIcon({ className }: IconProps) {
+  return (
+    <Svg className={className}>
+      <path
+        d="M3.5 6.5h13v9a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-9Z"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinejoin="round"
+      />
+      <path d="M3.5 6.5 5 3.5h10l1.5 3M10 3.5v3" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+      <path d="M8 10h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </Svg>
+  );
+}
+
 export function CurationIcon({ className }: IconProps) {
   return (
     <Svg className={className}>

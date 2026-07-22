@@ -39,6 +39,7 @@ export function EditClientAccountModal({
   const [shippingCountry, setShippingCountry] = useState(buyer.shippingCountry || "USA");
   const [shippingMethodId, setShippingMethodId] = useState(buyer.shippingMethodId);
   const [shippingSignatureRequired, setShippingSignatureRequired] = useState(buyer.shippingSignatureRequired);
+  const [shippingInstructions, setShippingInstructions] = useState(buyer.shippingInstructions);
 
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -73,6 +74,7 @@ export function EditClientAccountModal({
           shippingCountry,
           shippingMethodId,
           shippingSignatureRequired,
+          shippingInstructions,
         }),
       });
       const data = (await res.json().catch(() => ({}))) as { error?: string; buyer?: PortalBuyer };
@@ -258,6 +260,18 @@ export function EditClientAccountModal({
                 Signature required on delivery
               </label>
             </div>
+            <label className="mt-3 block">
+              <span className="micro-badge mb-1.5 block text-[10px] tracking-[0.14em] text-muted">
+                SHIPPING INSTRUCTIONS
+              </span>
+              <textarea
+                rows={2}
+                value={shippingInstructions}
+                onChange={(e) => setShippingInstructions(e.target.value)}
+                placeholder="Preferred carrier, dock hours, address notes…"
+                className="w-full rounded-chip border border-border bg-ground px-3 py-2 text-[12.5px] text-ink outline-none focus:border-accent"
+              />
+            </label>
           </div>
 
           {error ? <p className="text-[12px] text-danger">{error}</p> : null}

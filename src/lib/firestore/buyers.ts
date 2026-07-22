@@ -48,6 +48,8 @@ export type PortalBuyer = {
   shippingState: string;
   shippingPostalCode: string;
   shippingCountry: string;
+  /** Free-text shipping instructions (dock hours, carrier prefs, address notes). */
+  shippingInstructions: string;
   /** One of SHIPPING_OPTIONS ids — this buyer's default method. */
   shippingMethodId: string;
   shippingSignatureRequired: boolean;
@@ -99,6 +101,7 @@ function serializeBuyer(id: string, d: Record<string, unknown>): PortalBuyer {
     shippingState: String(d.shippingState || ""),
     shippingPostalCode: String(d.shippingPostalCode || ""),
     shippingCountry: String(d.shippingCountry || ""),
+    shippingInstructions: String(d.shippingInstructions || ""),
     shippingMethodId: String(d.shippingMethodId || DEFAULT_SHIPPING_METHOD_ID),
     shippingSignatureRequired: !!d.shippingSignatureRequired,
   };
@@ -254,6 +257,7 @@ export type BuyerAccountDetailsInput = {
   shippingPostalCode?: string;
   shippingCountry?: string;
   shippingMethodId?: string;
+  shippingInstructions?: string;
   shippingSignatureRequired?: boolean;
 };
 
@@ -286,7 +290,9 @@ export async function updateBuyerAccountDetails(
     const v = updates[key];
     if (v != null) payload[key] = String(v).trim().slice(0, 160);
   }
-  // Multiline Bill To keeps its newlines (each line prints on the invoice PDF).
+  // Multiline fields keep their newlines and get a longer cap.
+  if (updates.shippingInstructions != null)
+    payload.shippingInstructions = String(updates.shippingInstructions).trim().slice(0, 2000);
   if (updates.billTo != null) payload.billTo = String(updates.billTo).trim().slice(0, 600);
   if (updates.paymentTier !== undefined) {
     const tier = Number(updates.paymentTier);
@@ -768,6 +774,7 @@ export async function createBuyerQuote(opts: {
   items: CartItem[];
   message?: string;
   shippingMethodId?: string;
+  shippingInstructions?: string;
   shippingLabel?: string;
   shipping?: number;
 }): Promise<{ id: string }> {

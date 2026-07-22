@@ -113,7 +113,15 @@ export default async function PackStationPage({ params }: { params: Promise<{ id
               <div className="font-semibold text-accent">⚠ Signature required on delivery</div>
             ) : null}
             {buyer?.phone ? <div className="font-mono text-[11.5px]">☎ {buyer.phone}</div> : null}
-            {!shipMethod && !buyer?.shippingSignatureRequired && !buyer?.phone ? (
+            {buyer?.shippingInstructions ? (
+              <div className="whitespace-pre-line rounded-chip border border-white/10 bg-white/5 px-2.5 py-2 text-[12px] text-white/70">
+                {buyer.shippingInstructions}
+              </div>
+            ) : null}
+            {!shipMethod &&
+            !buyer?.shippingSignatureRequired &&
+            !buyer?.phone &&
+            !buyer?.shippingInstructions ? (
               <p className="text-[12px] text-white/40">No preferences recorded.</p>
             ) : null}
           </div>
