@@ -40,10 +40,9 @@ export function bookCallDraftFromApi(opts: {
 }
 
 /**
- * In-portal event editor: date/time, title, description, attendees, notes.
- * Primary path creates a REAL Calendar event via /api/staff/calendar/create-event
- * (invites emailed to all guests). Staff without a connected calendar get a
- * one-click connect flow, with the pre-filled template URL as a manual fallback.
+ * In-portal event editor: date/time, title, description, attendees, notes —
+ * then opens a pre-filled Google Calendar template (the eelo pattern; no
+ * sensitive scopes, so no unverified-app screen for staff).
  */
 export function BookCallEventModal({
   draft,
