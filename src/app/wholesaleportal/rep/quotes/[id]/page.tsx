@@ -5,6 +5,8 @@ import { ROLE } from "@/lib/constants";
 import { getQuoteById } from "@/lib/firestore/quotes";
 import { QuoteStatusSelect } from "@/components/QuoteStatusSelect";
 import { QuoteNotesForm } from "@/components/QuoteNotesForm";
+import { QuoteActivityThread } from "@/components/QuoteActivityThread";
+import { listQuoteActivities } from "@/lib/firestore/quoteActivities";
 import { QuoteItemsEditor } from "@/components/QuoteItemsEditor";
 import { QuoteClaimControls } from "@/components/QuoteClaimControls";
 import { GenerateInvoiceButton } from "@/components/GenerateInvoiceButton";
@@ -37,6 +39,7 @@ export default async function StaffQuoteDetailPage({
   const { id } = await params;
   const quote = await getQuoteById(id);
   if (!quote) notFound();
+  const activities = await listQuoteActivities(quote.id).catch(() => []);
 
   const initialCurationUrl = quote.curationToken
     ? `${buyerStorefrontOrigin()}/curation/${quote.curationToken}`
@@ -151,6 +154,8 @@ export default async function StaffQuoteDetailPage({
             </div>
             <QuoteNotesForm quoteId={quote.id} adminNotes={quote.adminNotes} />
           </div>
+
+          <QuoteActivityThread quoteId={quote.id} activities={activities} />
         </div>
 
         <div className="space-y-6">
