@@ -9,6 +9,14 @@ const nextConfig = {
     serverActions: {
       bodySizeLimit: "32mb",
     },
+    // Reuse a just-rendered dynamic page (e.g. the catalog) when navigating back
+    // to it within this window, instead of re-fetching all products/images from
+    // scratch. Makes Catalog → Orders → Catalog feel instant. Mutations still call
+    // router.refresh(), which busts this cache, so edits stay fresh. Kept short so
+    // one-of-one inventory/availability doesn't look stale for long.
+    staleTimes: {
+      dynamic: 30,
+    },
   },
   images: {
     remotePatterns: [
