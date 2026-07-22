@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { money } from "@/lib/format";
 import { marginFor, marginToneClass, marginTone } from "@/lib/pricing";
@@ -166,6 +167,7 @@ export function CatalogSettingsForm({
   mode: string;
   curatedCatalog: CuratedCatalog | null;
 }) {
+  const router = useRouter();
   const [curated, setCurated] = useState<CuratedCatalog | null>(curatedCatalog);
   const [draft, setDraft] = useState<{ items: CuratedCatalogItem[] }>({
     items: curatedCatalog?.items || [],
@@ -351,6 +353,7 @@ export function CatalogSettingsForm({
       setJustAddedSkuKeys(new Set());
       setShowNewOnly(false);
       setMessage(data.message || "Storefront catalog cleared.");
+      router.refresh();
     });
   }
 
@@ -378,6 +381,9 @@ export function CatalogSettingsForm({
       setJustAddedSkuKeys(new Set());
       setReviewExpanded(false);
       setMessage(data.message || "Curated catalog saved.");
+      // Re-render the server-side catalog grid around this form (and bust the
+      // 30s client route cache) so the saved list shows without a manual reload.
+      router.refresh();
     });
   }
 
