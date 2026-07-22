@@ -15,6 +15,8 @@ import { RepPipelineBoard } from "@/components/RepPipelineBoard";
 import { NeedsAttentionPanel } from "@/components/NeedsAttentionPanel";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { listPendingCallRequests } from "@/lib/firestore/callRequests";
+import { listOpenTasks } from "@/lib/firestore/tasks";
+import { TasksPanel } from "@/components/TasksPanel";
 import { money } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -116,6 +118,11 @@ export default async function StaffDashboardPage() {
     );
   }
 
+  const isManager = session.role === ROLE.MANAGER;
+  const openTasks = await listOpenTasks(
+    isManager ? {} : { assignedToEmail: session.email },
+  ).catch(() => []);
+
   const { kpis, pipeline, pipelineTable, needsAttention } = computeRepDashboard({
     quotes: quotesResult.quotes,
     invoices,
@@ -165,7 +172,10 @@ export default async function StaffDashboardPage() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.6fr_1fr]">
         <RepPipelineBoard columns={pipeline} table={pipelineTable} callRequests={callRequests} />
-        <NeedsAttentionPanel items={needsAttention} />
+        <div className="space-y-6">
+          <TasksPanel tasks={openTasks} currentEmail={session.email} isManager={isManager} />
+          <NeedsAttentionPanel items={needsAttention} />
+        </div>
       </div>
     </div>
   );
