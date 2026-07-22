@@ -942,8 +942,11 @@ export async function listCatalogProducts(
   };
   const orgName = String(org.data.displayName || org.data.name || WHOLESALE_ORG_SLUG);
 
-  // Curated mode with a saved catalog: list exactly those SKUs at the staff-set
-  // price (never a live re-filter), hydrating image/title/sold status live.
+  // Curated mode: list exactly the saved SKUs at the staff-set price (never a
+  // live re-filter), hydrating image/title/sold status live. An EMPTY curated
+  // catalog means an intentionally empty storefront — never fall back to the
+  // full inventory (that fallthrough was the "Clear all didn't clear" bug:
+  // clearing the list silently re-exposed every unvetted item to buyers).
   if (catalogSelection.mode === "sku_list") {
     const curatedCatalog = parseCuratedCatalog(salesPortal.curatedCatalog);
     if (curatedCatalog && curatedCatalog.items.length) {
@@ -955,6 +958,9 @@ export async function listCatalogProducts(
       const hasMore = sellable.length > safeLimit;
       const products = await hydrateCuratedItems(page, { buyerUsername });
       return { products, catalogSelection, orgName, hasMore };
+    }
+    if (!catalogSelection.skus.length) {
+      return { products: [], catalogSelection, orgName, hasMore: false };
     }
   }
 

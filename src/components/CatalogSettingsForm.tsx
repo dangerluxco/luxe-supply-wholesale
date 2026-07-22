@@ -330,6 +330,30 @@ export function CatalogSettingsForm({
     setMessage("Working list cleared.");
   }
 
+  function clearEntireCatalog() {
+    const ok = window.confirm(
+      "Clear the ENTIRE storefront catalog?\n\nBuyers will immediately see an empty catalog until you publish a new curated list. The working list here is cleared too. This is the live storefront, not just the draft.",
+    );
+    if (!ok) return;
+    setError(null);
+    start(async () => {
+      const res = await fetch("/api/staff/catalog/clear-all", {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+      if (!res.ok || data.error) {
+        setError(data.error || "Could not clear the catalog.");
+        return;
+      }
+      setDraft({ items: [] });
+      setCurated({ items: [], unresolvedSkus: [], updatedAt: new Date().toISOString(), updatedBy: "you" });
+      setJustAddedSkuKeys(new Set());
+      setShowNewOnly(false);
+      setMessage(data.message || "Storefront catalog cleared.");
+    });
+  }
+
   function saveCatalog() {
     setError(null);
     setMessage(null);
@@ -501,6 +525,15 @@ export function CatalogSettingsForm({
                 className="h-10 rounded-chip border border-border px-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted transition hover:border-danger hover:text-danger"
               >
                 Clear all
+              </button>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={clearEntireCatalog}
+                title="Empties the LIVE storefront catalog (not just this draft) — buyers see nothing until a new list is published."
+                className="h-10 rounded-chip border border-danger/50 bg-danger/5 px-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-danger transition hover:bg-danger/10 disabled:opacity-50"
+              >
+                Clear entire catalog
               </button>
             </div>
             {listQuery.trim() || showNewOnly ? (
