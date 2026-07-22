@@ -40,6 +40,9 @@ export type PortalQuote = {
   curationCreatedAt: string | null;
   /** When staff last emailed the buyer asking for call times ("Request a call"). */
   callRequestedAt: string | null;
+  /** Stamped by the fulfillment console when the shipment goes out. */
+  shippedAt: string | null;
+  shipmentBoxes: Array<{ label: string; carrier: string; trackingNumber: string }>;
 };
 
 export type QuoteItemInput = {
@@ -185,6 +188,15 @@ function serializeQuote(id: string, d: Record<string, unknown>): PortalQuote {
     curationToken: d.curationToken ? String(d.curationToken) : null,
     curationCreatedAt: toIso(d.curationCreatedAt),
     callRequestedAt: toIso(d.callRequestedAt),
+    shippedAt: toIso(d.shippedAt),
+    shipmentBoxes: (Array.isArray(d.shipmentBoxes)
+      ? (d.shipmentBoxes as Array<Record<string, unknown>>)
+      : []
+    ).map((b) => ({
+      label: String(b.label || ""),
+      carrier: String(b.carrier || ""),
+      trackingNumber: String(b.trackingNumber || ""),
+    })),
   };
 }
 
@@ -433,6 +445,23 @@ export async function linkQuoteToInvoice(
     invoiceId: invoice.id,
     invoiceNumber: invoice.invoiceNumber,
     status: "quoted",
+    updatedAt: new Date(),
+  });
+}
+
+/** Stamp the outbound shipment (per-box carrier + tracking) onto the originating
+ * order request, so the order object itself carries tracking — not just the invoice. */
+export async function attachShipmentToQuote(
+  quoteId: string,
+  boxes: Array<{ label: string; carrier: string; trackingNumber: string }>,
+): Promise<void> {
+  await getDb().collection("salesPortalQuotes").doc(quoteId).update({
+    shippedAt: new Date(),
+    shipmentBoxes: boxes.map((b) => ({
+      label: String(b.label || ""),
+      carrier: String(b.carrier || ""),
+      trackingNumber: String(b.trackingNumber || ""),
+    })),
     updatedAt: new Date(),
   });
 }

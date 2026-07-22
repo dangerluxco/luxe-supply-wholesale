@@ -33,3 +33,14 @@ export async function requireManagerSession(
   if (!session || session.role !== ROLE.MANAGER) return null;
   return session;
 }
+
+/**
+ * Gate for the fulfillment console + its APIs: a dedicated warehouse login
+ * (FULFILLMENT role in the fulfillment cookie slot) OR any rep/manager on
+ * their staff session (admin visibility).
+ */
+export async function requireFulfillmentAccess(): Promise<SessionUser | null> {
+  const ful = await getSessionForArea("fulfillment");
+  if (ful && ful.role === ROLE.FULFILLMENT) return ful;
+  return requireStaffSession();
+}

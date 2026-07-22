@@ -512,7 +512,7 @@ export async function sendPaymentReceiptEmail(opts: {
   });
 }
 
-/** Buyer notification when their order ships, with a tracking link when known. */
+/** Buyer notification when their order ships, with tracking link(s). */
 export async function sendShippedEmail(opts: {
   invoiceNumber: string;
   customerName: string;
@@ -520,14 +520,25 @@ export async function sendShippedEmail(opts: {
   carrier: string;
   trackingNumber: string;
   trackingUrl: string | null;
+  /** Multi-box shipments: one line per box. */
+  boxes?: Array<{ label: string; carrier: string; trackingNumber: string; trackingUrl: string | null }>;
 }): Promise<boolean> {
   const firstName = (opts.customerName || "").trim().split(/\s+/)[0] || "there";
   const invoiceUrl = `${buyerStorefrontOrigin()}/wholesale/invoices/${encodeURIComponent(opts.invoiceNumber)}`;
-  const trackingBit = opts.trackingNumber
-    ? opts.trackingUrl
-      ? `<p><strong>Tracking:</strong> <a href="${opts.trackingUrl}">${escapeHtml(opts.trackingNumber)}</a> (${escapeHtml(opts.carrier)})</p>`
-      : `<p><strong>Tracking:</strong> ${escapeHtml(opts.trackingNumber)} (${escapeHtml(opts.carrier)})</p>`
-    : `<p><strong>Carrier:</strong> ${escapeHtml(opts.carrier)}</p>`;
+  const trackingBit =
+    opts.boxes && opts.boxes.length > 1
+      ? `<p><strong>Tracking (${opts.boxes.length} boxes):</strong><br/>${opts.boxes
+          .map((b) =>
+            b.trackingUrl
+              ? `&nbsp;&nbsp;${escapeHtml(b.label)}: <a href="${b.trackingUrl}">${escapeHtml(b.trackingNumber)}</a> (${escapeHtml(b.carrier)})`
+              : `&nbsp;&nbsp;${escapeHtml(b.label)}: ${escapeHtml(b.trackingNumber)} (${escapeHtml(b.carrier)})`,
+          )
+          .join("<br/>")}</p>`
+      : opts.trackingNumber
+        ? opts.trackingUrl
+          ? `<p><strong>Tracking:</strong> <a href="${opts.trackingUrl}">${escapeHtml(opts.trackingNumber)}</a> (${escapeHtml(opts.carrier)})</p>`
+          : `<p><strong>Tracking:</strong> ${escapeHtml(opts.trackingNumber)} (${escapeHtml(opts.carrier)})</p>`
+        : `<p><strong>Carrier:</strong> ${escapeHtml(opts.carrier)}</p>`;
   const html = emailShell(`
   <p>Hi ${escapeHtml(firstName)},</p>
   <p>Great news — your order (invoice <strong>${escapeHtml(opts.invoiceNumber)}</strong>) has <strong>shipped</strong>.</p>

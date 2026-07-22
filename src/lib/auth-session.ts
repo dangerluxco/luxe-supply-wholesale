@@ -215,6 +215,9 @@ export function roleCanAccess(role: string, pathname: string): boolean {
   if (pathname.startsWith("/wholesaleportal")) {
     return role === ROLE.REP || role === ROLE.MANAGER;
   }
-  if (pathname.startsWith("/fulfillment")) return role === ROLE.FULFILLMENT;
+  if (pathname.startsWith("/fulfillment")) {
+    // Warehouse logins plus admin visibility for reps/managers.
+    return role === ROLE.FULFILLMENT || role === ROLE.REP || role === ROLE.MANAGER;
+  }
   return true;
 }

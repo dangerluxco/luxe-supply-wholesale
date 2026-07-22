@@ -118,7 +118,19 @@ export default async function StaffInvoiceDetailPage({
                 <Row label="Shipped" value={fullDate(invoice.shippedAt)} />
               </div>
             ) : (
-              <InvoiceFulfillmentForm invoiceId={invoice.id} />
+              <>
+                <Link
+                  href={`/fulfillment/${invoice.id}`}
+                  className="mb-3 flex h-9 items-center justify-center rounded-chip bg-accent text-[11px] font-semibold uppercase tracking-[0.12em] text-ink transition hover:opacity-90"
+                >
+                  Open pack station →
+                </Link>
+                <p className="mb-3 text-[11px] text-muted">
+                  Scan pieces into boxes with per-box tracking — or quick-ship below with a single
+                  tracking number.
+                </p>
+                <InvoiceFulfillmentForm invoiceId={invoice.id} />
+              </>
             )}
           </div>
         </div>

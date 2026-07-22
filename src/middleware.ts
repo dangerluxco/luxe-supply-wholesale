@@ -54,7 +54,11 @@ export function middleware(req: NextRequest) {
     return withArea(req, area);
   }
 
-  const session = decodeSession(areaSessionFrom(req.cookies.get(SESSION_COOKIE)?.value, area));
+  let session = decodeSession(areaSessionFrom(req.cookies.get(SESSION_COOKIE)?.value, area));
+  if (!session && isFulfillment) {
+    // Admin visibility: reps/managers may open /fulfillment on their staff session.
+    session = decodeSession(areaSessionFrom(req.cookies.get(SESSION_COOKIE)?.value, "staff"));
+  }
   if (!session) {
     const url = req.nextUrl.clone();
     url.pathname = signInForArea(isBuyer);

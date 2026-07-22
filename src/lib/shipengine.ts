@@ -179,6 +179,117 @@ export type PurchasedLabel = {
   zplUrl: string;
 };
 
+// ---------------------------------------------------------------------------
+// Live tracking — buyer-facing status, ETA, and event timeline.
+// ---------------------------------------------------------------------------
+
+export type TrackingEvent = {
+  at: string | null;
+  description: string;
+  location: string;
+};
+
+export type TrackingInfo = {
+  statusCode: string;
+  statusDescription: string;
+  estimatedDelivery: string | null;
+  actualDelivery: string | null;
+  events: TrackingEvent[];
+};
+
+/**
+ * Map a stored carrier value (ShipEngine carrier_code for purchased labels,
+ * or a free-text name like "UPS" typed during manual entry) to a tracking-API
+ * carrier_code. Returns null when unrecognized — callers skip the live fetch
+ * and fall back to the plain carrier link.
+ */
+export function trackingCarrierCode(carrier: string | null): string | null {
+  const c = String(carrier || "").trim().toLowerCase();
+  if (!c) return null;
+  if (c.includes("stamps") || c.includes("usps")) return "stamps_com";
+  if (c.includes("ups")) return "ups";
+  if (c.includes("fedex")) return "fedex";
+  if (c.includes("dhl")) return "dhl_express";
+  // Already a carrier_code (snake_case from a purchased label) — pass through.
+  if (/^[a-z0-9_]+$/.test(c)) return c;
+  return null;
+}
+
+function parseTracking(data: Record<string, unknown>): TrackingInfo {
+  const rawEvents = Array.isArray(data.events)
+    ? (data.events as Array<Record<string, unknown>>)
+    : [];
+  return {
+    statusCode: String(data.status_code || ""),
+    statusDescription: String(data.status_description || ""),
+    estimatedDelivery: data.estimated_delivery_date ? String(data.estimated_delivery_date) : null,
+    actualDelivery: data.actual_delivery_date ? String(data.actual_delivery_date) : null,
+    events: rawEvents
+      .map((e) => ({
+        at: e.occurred_at ? String(e.occurred_at) : null,
+        description: String(e.description || e.carrier_status_description || ""),
+        location: [e.city_locality, e.state_province]
+          .map((v) => String(v || "").trim())
+          .filter(Boolean)
+          .join(", "),
+      }))
+      .filter((e) => e.description),
+  };
+}
+
+// Per-instance cache so a burst of buyer page views doesn't hammer the API.
+const trackingCache = new Map<string, { info: TrackingInfo | null; at: number }>();
+const TRACKING_TTL_MS = 5 * 60_000;
+
+async function seGet(path: string): Promise<Record<string, unknown> | null> {
+  const res = await fetch(`${BASE}${path}`, { headers: headers() });
+  if (!res.ok) return null;
+  return (await res.json().catch(() => null)) as Record<string, unknown> | null;
+}
+
+/**
+ * Best-effort live tracking for a box. Prefers the label id (works for every
+ * label we purchased); falls back to carrier_code + tracking number, which also
+ * covers manually entered UPS/FedEx/USPS numbers. Never throws — returns null
+ * when the key is missing, the carrier is unknown, or the API has nothing yet.
+ */
+export async function getTrackingInfo(opts: {
+  labelId?: string | null;
+  carrier?: string | null;
+  trackingNumber?: string | null;
+}): Promise<TrackingInfo | null> {
+  if (!shipEngineConfigured()) return null;
+  const key = opts.labelId || `${opts.carrier}:${opts.trackingNumber}`;
+  const hit = trackingCache.get(key);
+  if (hit && Date.now() - hit.at < TRACKING_TTL_MS) return hit.info;
+
+  let info: TrackingInfo | null = null;
+  try {
+    let data: Record<string, unknown> | null = null;
+    if (opts.labelId) {
+      data = await seGet(`/labels/${encodeURIComponent(opts.labelId)}/track`);
+    }
+    if (!data) {
+      const code = trackingCarrierCode(opts.carrier || null);
+      const tn = String(opts.trackingNumber || "").trim();
+      if (code && tn) {
+        data = await seGet(
+          `/tracking?carrier_code=${encodeURIComponent(code)}&tracking_number=${encodeURIComponent(tn)}`,
+        );
+      }
+    }
+    if (data) {
+      const parsed = parseTracking(data);
+      // "Unknown" with no events means the carrier has nothing yet — treat as absent.
+      info = parsed.statusCode && parsed.statusCode !== "UN" ? parsed : parsed.events.length ? parsed : null;
+    }
+  } catch {
+    info = null;
+  }
+  trackingCache.set(key, { info, at: Date.now() });
+  return info;
+}
+
 /** Buy a label from a previously quoted rate. */
 export async function purchaseLabelFromRate(rateId: string): Promise<PurchasedLabel> {
   const data = await seFetch(`/labels/rates/${encodeURIComponent(rateId)}`, {

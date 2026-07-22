@@ -8,13 +8,28 @@ const CARRIER_URLS: Array<{ match: RegExp; url: (tn: string) => string }> = [
 ];
 
 /**
+ * Buyer-facing carrier name. Purchased labels store ShipEngine carrier_codes
+ * ("stamps_com", "dhl_express") — map those back to household names; manual
+ * entries ("UPS") pass through.
+ */
+export function friendlyCarrierName(carrier: string | null): string {
+  const c = (carrier || "").trim();
+  if (!c) return "";
+  if (/stamps|usps/i.test(c)) return "USPS";
+  if (/ups/i.test(c)) return "UPS";
+  if (/fedex/i.test(c)) return "FedEx";
+  if (/dhl/i.test(c)) return "DHL";
+  return c.replace(/_/g, " ").toUpperCase();
+}
+
+/**
  * Best-effort tracking link for a carrier + tracking number. Returns null when
  * either is missing or the carrier isn't recognized — callers fall back to
  * plain text.
  */
 export function trackingUrlFor(carrier: string | null, trackingNumber: string | null): string | null {
   const tn = (trackingNumber || "").trim();
-  const c = (carrier || "").trim();
+  const c = friendlyCarrierName(carrier);
   if (!tn || !c) return null;
   const hit = CARRIER_URLS.find((e) => e.match.test(c));
   return hit ? hit.url(tn) : null;

@@ -7,6 +7,7 @@ import { money, fullDate } from "@/lib/format";
 import { trackingUrlFor } from "@/lib/tracking";
 import { getFulfillmentForInvoice } from "@/lib/firestore/fulfillment";
 import { InvoiceBadge, FulfillmentBadge } from "@/components/badges";
+import { ShipmentTracking, shipmentBoxesFromRecord } from "@/components/ShipmentTracking";
 import { Logo } from "@/components/Logo";
 
 export const dynamic = "force-dynamic";
@@ -25,17 +26,7 @@ export default async function InvoiceDetail({ params }: { params: Promise<{ numb
     inv.fulfillmentStatus === "SHIPPED"
       ? await getFulfillmentForInvoice(inv.id).catch(() => null)
       : null;
-  const shipmentBoxes =
-    fulfillment && fulfillment.status === "shipped"
-      ? fulfillment.boxes
-          .map((box) => ({
-            ...box,
-            skus: Object.entries(fulfillment.assignments)
-              .filter(([, b]) => b === box.id)
-              .map(([sku]) => sku),
-          }))
-          .filter((b) => b.skus.length)
-      : [];
+  const shipmentBoxes = shipmentBoxesFromRecord(fulfillment);
 
   return (
     <div className="mx-auto max-w-3xl px-8 pb-16 pt-8">
@@ -153,48 +144,7 @@ export default async function InvoiceDetail({ params }: { params: Promise<{ numb
 
         {shipmentBoxes.length > 0 ? (
           <div className="mt-8 border-t border-border pt-5">
-            <div className="micro-badge mb-3 text-[10px] tracking-[0.14em] text-accent">
-              SHIPMENT — {shipmentBoxes.length} BOX{shipmentBoxes.length === 1 ? "" : "ES"}
-            </div>
-            <div className="space-y-3">
-              {shipmentBoxes.map((box) => (
-                <div key={box.id} className="rounded-chip border border-border bg-ground/40 px-4 py-3">
-                  <div className="flex flex-wrap items-baseline justify-between gap-2 text-[12.5px]">
-                    <span className="font-semibold text-ink">Box {box.label}</span>
-                    <span className="font-mono text-[12px]">
-                      {box.carrier}{" "}
-                      {trackingUrlFor(box.carrier, box.trackingNumber) ? (
-                        <a
-                          href={trackingUrlFor(box.carrier, box.trackingNumber)!}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-accent underline"
-                        >
-                          {box.trackingNumber}
-                        </a>
-                      ) : (
-                        box.trackingNumber
-                      )}
-                    </span>
-                  </div>
-                  {box.trackingStatus ? (
-                    <div className="mt-1 text-[11.5px] text-secondary">
-                      Status: <span className="font-semibold text-ink">{box.trackingStatus}</span>
-                    </div>
-                  ) : null}
-                  <div className="mt-1.5 flex flex-wrap gap-1.5">
-                    {box.skus.map((sku) => (
-                      <span
-                        key={sku}
-                        className="rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-[10.5px] text-secondary"
-                      >
-                        {sku}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
+            <ShipmentTracking boxes={shipmentBoxes} />
           </div>
         ) : null}
 

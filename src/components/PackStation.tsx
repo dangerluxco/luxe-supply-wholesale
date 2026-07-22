@@ -37,6 +37,7 @@ export function PackStation({
   const [feed, setFeed] = useState<Array<{ ok: boolean; text: string }>>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [addressModalOpen, setAddressModalOpen] = useState(false);
   const scanRef = useRef<HTMLInputElement | null>(null);
 
   // Keep the scanner input focused — barcode guns type into whatever has focus.
@@ -66,9 +67,16 @@ export function PackStation({
         outcome?: string;
         message?: string;
         currentBoxId?: string | null;
+        needsAddress?: boolean;
       };
       if (!res.ok || data.error) {
-        setError(data.error || "Something went wrong.");
+        // Missing buyer address isn't a dead end — open the add-address modal.
+        if (data.needsAddress) {
+          setAddressModalOpen(true);
+          setError(null);
+        } else {
+          setError(data.error || "Something went wrong.");
+        }
         return null;
       }
       if (data.record) setRecord(data.record);
@@ -102,6 +110,22 @@ export function PackStation({
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.2fr_1fr]">
+      {addressModalOpen ? (
+        <ShipAddressModal
+          onClose={() => setAddressModalOpen(false)}
+          onSave={async (address) => {
+            const data = await api({ action: "ship-address", address });
+            if (data) {
+              setAddressModalOpen(false);
+              setFeed((f) =>
+                [{ ok: true, text: "Shipping address saved — get rates again." }, ...f].slice(0, 12),
+              );
+              router.refresh();
+            }
+            return data != null;
+          }}
+        />
+      ) : null}
       <div className="space-y-5">
         {/* Scan input */}
         <div
@@ -525,6 +549,90 @@ function BoxShipping({
           ) : null}
         </>
       )}
+    </div>
+  );
+}
+
+/** Dark-console modal to capture the buyer's shipping address when the account
+ *  has none on file — saves against the client account, then rates can re-quote. */
+function ShipAddressModal({
+  onClose,
+  onSave,
+}: {
+  onClose: () => void;
+  onSave: (address: Record<string, string>) => Promise<boolean>;
+}) {
+  const [form, setForm] = useState({
+    attn: "",
+    line1: "",
+    line2: "",
+    city: "",
+    state: "",
+    postalCode: "",
+    country: "US",
+  });
+  const [saving, setSaving] = useState(false);
+  const canSave =
+    form.line1.trim() && form.city.trim() && form.state.trim() && form.postalCode.trim();
+
+  const field = (key: keyof typeof form, placeholder: string, extra = "") => (
+    <input
+      value={form[key]}
+      onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+      placeholder={placeholder}
+      className={clsx(
+        "h-10 rounded-chip border border-white/20 bg-[#1c1c20] px-3 text-[13px] text-white outline-none placeholder:text-white/30 focus:border-accent",
+        extra,
+      )}
+    />
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6">
+      <div className="w-full max-w-md rounded-card border border-white/15 bg-[#232327] p-6 shadow-2xl">
+        <div className="micro-badge mb-1 text-[10px] tracking-[0.14em] text-accent">
+          NO SHIPPING ADDRESS ON FILE
+        </div>
+        <p className="mb-4 text-[12.5px] text-white/60">
+          Enter the buyer&apos;s ship-to address — it saves to their client account and is used for
+          rate quotes and labels going forward.
+        </p>
+        <div className="grid grid-cols-1 gap-2">
+          {field("attn", "Attn / recipient (optional)")}
+          {field("line1", "Street address")}
+          {field("line2", "Apt / suite (optional)")}
+          <div className="grid grid-cols-[1fr_72px_96px] gap-2">
+            {field("city", "City")}
+            {field("state", "ST")}
+            {field("postalCode", "ZIP")}
+          </div>
+          {field("country", "Country", "w-24")}
+        </div>
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-10 rounded-chip border border-white/20 px-4 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/70 hover:border-white/40 hover:text-white"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={!canSave || saving}
+            onClick={async () => {
+              setSaving(true);
+              try {
+                await onSave(form);
+              } finally {
+                setSaving(false);
+              }
+            }}
+            className="h-10 rounded-chip bg-accent px-5 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink hover:opacity-90 disabled:opacity-40"
+          >
+            {saving ? "Saving…" : "Save address"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

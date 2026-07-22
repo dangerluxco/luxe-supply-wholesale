@@ -3,6 +3,8 @@ import { notFound, redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { ROLE } from "@/lib/constants";
 import { getQuoteById } from "@/lib/firestore/quotes";
+import { getFulfillmentForInvoice } from "@/lib/firestore/fulfillment";
+import { ShipmentTracking, shipmentBoxesFromRecord } from "@/components/ShipmentTracking";
 import { PortalItemLine, portalDisplayTitle } from "@/components/PortalItemLine";
 import { MicroBadge } from "@/components/badges";
 import { BuyerOrderStatusBadge } from "@/components/BuyerOrderStatusBadge";
@@ -75,6 +77,13 @@ export default async function BuyerOrderDetailPage({
   }
 
   const items = normalizeItems(quote.items);
+
+  // Once fulfillment ships the invoice, the order shows per-box live tracking.
+  const fulfillment =
+    quote.shippedAt && quote.invoiceId
+      ? await getFulfillmentForInvoice(quote.invoiceId).catch(() => null)
+      : null;
+  const shipmentBoxes = shipmentBoxesFromRecord(fulfillment);
 
   return (
     <div className="px-8 pb-16 pt-8">
@@ -157,6 +166,28 @@ export default async function BuyerOrderDetailPage({
         </div>
 
         <div className="space-y-6">
+          {shipmentBoxes.length > 0 ? (
+            <div className="rounded-card border border-border bg-surface p-5">
+              <ShipmentTracking boxes={shipmentBoxes} />
+            </div>
+          ) : quote.shipmentBoxes.length > 0 ? (
+            <div className="rounded-card border border-border bg-surface p-5">
+              <div className="micro-badge mb-3 text-[10px] tracking-[0.14em] text-accent">
+                SHIPMENT
+              </div>
+              <div className="space-y-1.5 text-[12.5px]">
+                {quote.shipmentBoxes.map((b, i) => (
+                  <div key={i} className="flex items-baseline justify-between gap-3">
+                    <span className="text-secondary">Box {b.label}</span>
+                    <span className="font-mono text-[12px] text-ink">
+                      {b.carrier} {b.trackingNumber}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           {quote.invoiceNumber ? (
             <div className="rounded-card border border-border bg-surface p-5">
               <div className="micro-badge mb-3 text-[10px] tracking-[0.14em] text-accent">
@@ -205,6 +236,7 @@ export default async function BuyerOrderDetailPage({
             <div className="space-y-2 text-[12.5px]">
               <Row label="Submitted" value={fullDate(quote.createdAt)} />
               <Row label="Last updated" value={fullDate(quote.updatedAt)} />
+              {quote.shippedAt ? <Row label="Shipped" value={fullDate(quote.shippedAt)} /> : null}
             </div>
           </div>
         </div>

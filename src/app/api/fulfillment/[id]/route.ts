@@ -11,11 +11,12 @@ import {
   fulfillmentReadyToShip,
 } from "@/lib/firestore/fulfillment";
 import { markInvoiceShipped } from "@/lib/firestore/invoices";
-import { findBuyerByIdentifier } from "@/lib/firestore/buyers";
+import { attachShipmentToQuote } from "@/lib/firestore/quotes";
+import { findBuyerByIdentifier, updateBuyerAccountDetails } from "@/lib/firestore/buyers";
 import { getRates, purchaseLabelFromRate, shipEngineConfigured } from "@/lib/shipengine";
 import { logAudit } from "@/lib/firestore/audit";
 import { sendShippedEmail } from "@/lib/notify";
-import { trackingUrlFor } from "@/lib/tracking";
+import { trackingUrlFor, friendlyCarrierName } from "@/lib/tracking";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +49,15 @@ export async function POST(
     widthIn?: number | null;
     heightIn?: number | null;
     rateId?: string;
+    address?: {
+      attn?: string;
+      line1?: string;
+      line2?: string;
+      city?: string;
+      state?: string;
+      postalCode?: string;
+      country?: string;
+    };
   };
 
   try {
@@ -94,8 +104,13 @@ export async function POST(
         ? await findBuyerByIdentifier(invoice.portalUsername).catch(() => null)
         : null;
       if (!buyer?.shippingLine1 || !buyer.shippingCity || !buyer.shippingState || !buyer.shippingPostalCode) {
+        // needsAddress lets the pack station open its add-address modal in place.
         return NextResponse.json(
-          { error: "Buyer has no shipping address on file — set it on the client account first." },
+          {
+            error: "Buyer has no shipping address on file.",
+            needsAddress: true,
+            buyerId: buyer?.id || null,
+          },
           { status: 400 },
         );
       }
@@ -119,6 +134,45 @@ export async function POST(
         },
       );
       return NextResponse.json({ ok: true, rates: rates.slice(0, 8) });
+    }
+
+    if (body.action === "ship-address") {
+      // Save the buyer's shipping address from the pack-station modal, so the
+      // shipper isn't dead-ended when the account has no address on file.
+      const a = body.address || {};
+      if (!a.line1?.trim() || !a.city?.trim() || !a.state?.trim() || !a.postalCode?.trim()) {
+        return NextResponse.json(
+          { error: "Street, city, state, and ZIP are required." },
+          { status: 400 },
+        );
+      }
+      const { invoice } = await getOrCreateFulfillment(invoiceId);
+      const buyer = invoice.portalUsername
+        ? await findBuyerByIdentifier(invoice.portalUsername).catch(() => null)
+        : null;
+      if (!buyer) {
+        return NextResponse.json(
+          { error: "No buyer account is linked to this invoice." },
+          { status: 400 },
+        );
+      }
+      await updateBuyerAccountDetails(buyer.id, {
+        shippingAttn: a.attn ?? "",
+        shippingLine1: a.line1,
+        shippingLine2: a.line2 ?? "",
+        shippingCity: a.city,
+        shippingState: a.state,
+        shippingPostalCode: a.postalCode,
+        shippingCountry: a.country?.trim() || "US",
+      });
+      await logAudit({
+        actor: session,
+        action: "fulfillment.ship_address_saved",
+        entity: "buyer",
+        entityId: buyer.id,
+        payload: { invoiceId, city: a.city, state: a.state },
+      });
+      return NextResponse.json({ ok: true });
     }
 
     if (body.action === "buy-label") {
@@ -155,14 +209,29 @@ export async function POST(
       const usedBoxes = record.boxes.filter((b) => usedBoxIds.has(b.id));
       // Back-compat summary on the invoice (buyer page prefers per-box detail).
       const first = usedBoxes[0]!;
+      const firstCarrier = friendlyCarrierName(first.carrier);
       const invoice = await markInvoiceShipped(
         invoiceId,
         {
-          carrier: usedBoxes.length > 1 ? `${first.carrier} (${usedBoxes.length} boxes)` : first.carrier,
+          carrier: usedBoxes.length > 1 ? `${firstCarrier} (${usedBoxes.length} boxes)` : firstCarrier,
           trackingNumber: first.trackingNumber,
         },
         session.email,
       );
+      // Tracking also lands on the originating order request, so the order
+      // object carries the shipment — not just the invoice.
+      if (invoice.quoteId) {
+        await attachShipmentToQuote(
+          invoice.quoteId,
+          usedBoxes.map((b) => ({
+            label: b.label,
+            carrier: friendlyCarrierName(b.carrier),
+            trackingNumber: b.trackingNumber,
+          })),
+        ).catch((err) =>
+          console.warn("[fulfillment] quote tracking write failed:", err instanceof Error ? err.message : err),
+        );
+      }
       await logAudit({
         actor: session,
         action: "fulfillment.shipped",
@@ -180,12 +249,12 @@ export async function POST(
             invoiceNumber: invoice.invoiceNumber,
             customerName: invoice.customerName,
             customerEmail: invoice.customerEmail,
-            carrier: first.carrier,
+            carrier: firstCarrier,
             trackingNumber: first.trackingNumber,
             trackingUrl: trackingUrlFor(first.carrier, first.trackingNumber),
             boxes: usedBoxes.map((b) => ({
               label: `Box ${b.label}`,
-              carrier: b.carrier,
+              carrier: friendlyCarrierName(b.carrier),
               trackingNumber: b.trackingNumber,
               trackingUrl: trackingUrlFor(b.carrier, b.trackingNumber),
             })),
