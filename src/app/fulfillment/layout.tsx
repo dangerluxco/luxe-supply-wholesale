@@ -3,6 +3,8 @@ import { getSessionForArea } from "@/lib/auth";
 import { ROLE } from "@/lib/constants";
 import { Clock } from "@/components/Clock";
 import { Logo } from "@/components/Logo";
+import { listInvoices } from "@/lib/firestore/invoices";
+import { FulfillmentSidebar, type SidebarShipment } from "@/components/FulfillmentSidebar";
 
 /**
  * Dark warehouse console shell. Access: dedicated FULFILLMENT logins (their
@@ -18,6 +20,16 @@ export default async function FulfillmentLayout({ children }: { children: React.
         ? staff
         : null;
   if (!session) redirect("/wholesaleportal/sign-in?next=/fulfillment");
+
+  const shipments: SidebarShipment[] = (await listInvoices({ limit: 300 }).catch(() => [])).map(
+    (inv) => ({
+      invoiceId: inv.id,
+      invoiceNumber: inv.invoiceNumber,
+      buyer: inv.customerName || inv.buyerDisplayName || inv.customerCompany || "—",
+      itemCount: inv.itemCount,
+      shipped: inv.fulfillmentStatus === "SHIPPED",
+    }),
+  );
 
   return (
     <div className="min-h-screen bg-[#131316] text-white">
@@ -50,7 +62,12 @@ export default async function FulfillmentLayout({ children }: { children: React.
           </a>
         )}
       </header>
-      <main className="mx-auto max-w-6xl px-6 py-8">{children}</main>
+      <div className="flex">
+        <FulfillmentSidebar shipments={shipments} />
+        <main className="min-w-0 flex-1 px-6 py-8">
+          <div className="mx-auto max-w-5xl">{children}</div>
+        </main>
+      </div>
     </div>
   );
 }
