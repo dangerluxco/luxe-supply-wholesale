@@ -1,20 +1,30 @@
 import { redirect } from "next/navigation";
-import { getSession } from "@/lib/auth";
+import { getSessionForArea } from "@/lib/auth";
 import { ROLE } from "@/lib/constants";
 import { Clock } from "@/components/Clock";
 import { Logo } from "@/components/Logo";
-import { logout } from "@/lib/actions/auth";
 
+/**
+ * Dark warehouse console shell. Access: dedicated FULFILLMENT logins (their
+ * own cookie slot) or any rep/manager on their staff session (admin view).
+ */
 export default async function FulfillmentLayout({ children }: { children: React.ReactNode }) {
-  const session = await getSession();
-  if (!session || session.role !== ROLE.FULFILLMENT) redirect("/wholesaleportal/sign-in");
+  const ful = await getSessionForArea("fulfillment");
+  const staff = ful?.role === ROLE.FULFILLMENT ? null : await getSessionForArea("staff");
+  const session =
+    ful?.role === ROLE.FULFILLMENT
+      ? ful
+      : staff && (staff.role === ROLE.REP || staff.role === ROLE.MANAGER)
+        ? staff
+        : null;
+  if (!session) redirect("/wholesaleportal/sign-in?next=/fulfillment");
 
   return (
-    <div className="min-h-screen bg-ful-ground text-white">
+    <div className="min-h-screen bg-[#131316] text-white">
       <header className="flex h-[68px] items-center gap-6 border-b border-white/15 px-7">
         <Logo tone="light" height={28} priority />
         <span className="micro-badge rounded-full border border-accent/40 px-2.5 py-1 text-[10px] tracking-[0.14em] text-accent">
-          FULFILLMENT · GENEVA VAULT
+          FULFILLMENT
         </span>
         <div className="flex-1" />
         <Clock />
@@ -24,13 +34,23 @@ export default async function FulfillmentLayout({ children }: { children: React.
           </div>
           {session.name}
         </div>
-        <form action={logout}>
-          <button className="rounded border border-white/25 px-3 py-2 text-[12px] text-white/70 transition hover:border-accent hover:text-ground">
+        {session.role !== ROLE.FULFILLMENT ? (
+          <a
+            href="/wholesaleportal/rep"
+            className="rounded border border-white/25 px-3 py-2 text-[12px] text-white/70 transition hover:border-accent hover:text-ground"
+          >
+            Back to portal
+          </a>
+        ) : (
+          <a
+            href="/api/logout?area=fulfillment"
+            className="rounded border border-white/25 px-3 py-2 text-[12px] text-white/70 transition hover:border-accent hover:text-ground"
+          >
             Sign out
-          </button>
-        </form>
+          </a>
+        )}
       </header>
-      {children}
+      <main className="mx-auto max-w-6xl px-6 py-8">{children}</main>
     </div>
   );
 }
