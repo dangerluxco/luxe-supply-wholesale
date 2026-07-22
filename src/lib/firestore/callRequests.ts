@@ -13,13 +13,17 @@ export type CallRequestItem = {
   buyerEmail: string;
   preferredTimes: string;
   note: string;
-  status: "pending" | "handled";
+  status: "pending" | "handled" | "converted";
+  assignedToEmail: string;
+  assignedToName: string;
+  convertedQuoteId: string;
   createdAt: string | null;
   handledAt: string | null;
   handledBy: string;
 };
 
 function serialize(id: string, d: Record<string, unknown>): CallRequestItem {
+  const rawStatus = String(d.status || "pending");
   return {
     id,
     sku: String(d.sku || ""),
@@ -29,11 +33,41 @@ function serialize(id: string, d: Record<string, unknown>): CallRequestItem {
     buyerEmail: String(d.buyerEmail || ""),
     preferredTimes: String(d.preferredTimes || ""),
     note: String(d.note || ""),
-    status: String(d.status || "pending") === "handled" ? "handled" : "pending",
+    status: rawStatus === "handled" ? "handled" : rawStatus === "converted" ? "converted" : "pending",
+    assignedToEmail: String(d.assignedToEmail || ""),
+    assignedToName: String(d.assignedToName || ""),
+    convertedQuoteId: String(d.convertedQuoteId || ""),
     createdAt: toIso(d.createdAt),
     handledAt: toIso(d.handledAt),
     handledBy: String(d.handledBy || ""),
   };
+}
+
+/** Assign (or unassign with empty email) a pending call request to a staffer. */
+export async function assignCallRequest(
+  id: string,
+  assignee: { email: string; name: string },
+): Promise<void> {
+  await getDb().collection("salesPortalCallRequests").doc(id).update({
+    assignedToEmail: assignee.email,
+    assignedToName: assignee.name,
+    updatedAt: new Date(),
+  });
+}
+
+/** Close a call request as converted into an order request. */
+export async function markCallRequestConverted(
+  id: string,
+  quoteId: string,
+  convertedBy: string,
+): Promise<void> {
+  await getDb().collection("salesPortalCallRequests").doc(id).update({
+    status: "converted",
+    convertedQuoteId: quoteId,
+    handledAt: new Date(),
+    handledBy: convertedBy,
+    updatedAt: new Date(),
+  });
 }
 
 export async function addCallRequest(opts: {
@@ -86,6 +120,12 @@ export async function listPendingCallRequests(limitCount = 50): Promise<CallRequ
     .map((doc) => serialize(doc.id, doc.data() || {}))
     .filter((r) => r.status === "pending")
     .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+}
+
+export async function getCallRequestById(id: string): Promise<CallRequestItem | null> {
+  const snap = await getDb().collection("salesPortalCallRequests").doc(String(id || "").trim()).get();
+  if (!snap.exists) return null;
+  return serialize(snap.id, snap.data() || {});
 }
 
 export async function markCallRequestHandled(id: string, handledBy: string): Promise<void> {

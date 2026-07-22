@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { clsx } from "@/lib/clsx";
-import { money } from "@/lib/format";
+import { money, fullDate } from "@/lib/format";
 import type { PipelineColumn, PipelineTableRow } from "@/lib/repDashboard";
 import type { CallRequestItem } from "@/lib/firestore/callRequests";
 
@@ -39,15 +40,36 @@ export function RepPipelineBoard({
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyCallId, setBusyCallId] = useState<string | null>(null);
+  const [detailRequest, setDetailRequest] = useState<CallRequestItem | null>(null);
+  const [staffOptions, setStaffOptions] = useState<Array<{ email: string; displayName: string }>>([]);
   const [, start] = useTransition();
 
-  function markCallHandled(id: string) {
+  // Staff list for the inline assign dropdown — only fetched when the
+  // call-request column is on screen.
+  useEffect(() => {
+    if (!callRequests.length) return;
+    let cancelled = false;
+    fetch("/api/staff/directory", { credentials: "same-origin" })
+      .then((r) => r.json())
+      .then((d: { staff?: Array<{ email: string; displayName: string }> }) => {
+        if (!cancelled && Array.isArray(d.staff)) setStaffOptions(d.staff);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [callRequests.length]);
+
+  function callRequestAction(id: string, path: "handled" | "assign" | "convert", body?: unknown) {
     setError(null);
     setBusyCallId(id);
     start(async () => {
-      const res = await fetch(`/api/staff/call-requests/${id}/handled`, {
+      const res = await fetch(`/api/staff/call-requests/${id}/${path}`, {
         method: "POST",
         credentials: "same-origin",
+        ...(body !== undefined
+          ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
+          : {}),
       });
       const data = (await res.json().catch(() => ({}))) as { error?: string };
       setBusyCallId(null);
@@ -55,8 +77,13 @@ export function RepPipelineBoard({
         setError(data.error || "Could not update the call request.");
         return;
       }
+      setDetailRequest(null);
       router.refresh();
     });
+  }
+
+  function markCallHandled(id: string) {
+    callRequestAction(id, "handled");
   }
 
   // Resync when the server re-renders the dashboard (e.g. after router.refresh()).
@@ -170,19 +197,43 @@ export function RepPipelineBoard({
                 {callRequests.slice(0, 6).map((r) => (
                   <div
                     key={r.id}
-                    className="rounded-chip border border-border bg-surface px-2.5 py-2 text-[12px]"
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData("text/call-request-id", r.id);
+                      e.dataTransfer.effectAllowed = "move";
+                    }}
+                    onClick={() => setDetailRequest(r)}
+                    className="cursor-pointer rounded-chip border border-border bg-surface px-2.5 py-2 text-[12px] transition hover:border-accent active:cursor-grabbing"
                   >
                     <div className="truncate font-semibold text-ink">{r.buyerDisplayName}</div>
                     <div className="mt-0.5 truncate text-[10.5px] text-muted">
                       {r.title}
                       {r.preferredTimes ? ` · prefers ${r.preferredTimes}` : ""}
                     </div>
+                    <select
+                      value={r.assignedToEmail || ""}
+                      disabled={busyCallId === r.id}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        callRequestAction(r.id, "assign", { staffEmail: e.target.value });
+                      }}
+                      className="mt-1.5 h-6 w-full rounded border border-border bg-ground px-1 text-[10.5px] text-secondary outline-none focus:border-accent disabled:opacity-50"
+                    >
+                      <option value="">Unassigned</option>
+                      {staffOptions.map((s) => (
+                        <option key={s.email} value={s.email}>
+                          {s.displayName}
+                        </option>
+                      ))}
+                    </select>
                     <div className="mt-1.5 flex items-center gap-2">
                       {r.buyerEmail ? (
                         <a
                           href={`mailto:${r.buyerEmail}?subject=${encodeURIComponent(
                             `Call about ${r.title} — Luxe Supply Co.`,
                           )}`}
+                          onClick={(e) => e.stopPropagation()}
                           className="text-[10px] font-semibold uppercase tracking-[0.08em] text-accent hover:underline"
                         >
                           Email
@@ -191,7 +242,10 @@ export function RepPipelineBoard({
                       <button
                         type="button"
                         disabled={busyCallId === r.id}
-                        onClick={() => markCallHandled(r.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          markCallHandled(r.id);
+                        }}
                         className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted transition hover:text-ink disabled:opacity-50"
                       >
                         {busyCallId === r.id ? "Saving…" : "✓ Handled"}
@@ -204,6 +258,9 @@ export function RepPipelineBoard({
                     +{callRequests.length - 6} more
                   </div>
                 ) : null}
+                <div className="pt-1 text-center text-[9.5px] text-muted/80">
+                  drag to Open to start an order request
+                </div>
               </div>
             </div>
           ) : null}
@@ -215,6 +272,10 @@ export function RepPipelineBoard({
                 onDragOver={
                   droppable
                     ? (e) => {
+                        // Call requests can only land on Open (they convert into
+                        // an order request there); quote cards use DRAGGABLE.
+                        const isCallDrag = e.dataTransfer.types.includes("text/call-request-id");
+                        if (isCallDrag && col.key !== "open") return;
                         e.preventDefault();
                         setDragOverKey(col.key);
                       }
@@ -228,6 +289,11 @@ export function RepPipelineBoard({
                     ? (e) => {
                         e.preventDefault();
                         setDragOverKey(null);
+                        const callRequestId = e.dataTransfer.getData("text/call-request-id");
+                        if (callRequestId) {
+                          if (col.key === "open") callRequestAction(callRequestId, "convert");
+                          return;
+                        }
                         const quoteId = e.dataTransfer.getData("text/quote-id");
                         const fromKey = e.dataTransfer.getData("text/from-status");
                         if (quoteId && fromKey) moveQuoteStatus(quoteId, fromKey, col.key);
@@ -346,6 +412,106 @@ export function RepPipelineBoard({
           )}
         </div>
       )}
+
+      {detailRequest ? (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-ink/40 p-6"
+          onClick={() => setDetailRequest(null)}
+        >
+          <div
+            className="w-[460px] max-w-full rounded-card border border-border bg-surface p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="micro-badge mb-1 text-[10px] tracking-[0.14em] text-accent">
+              CALL REQUEST
+            </div>
+            <div className="mb-4 text-[15px] font-semibold text-ink">{detailRequest.title}</div>
+
+            <div className="space-y-2.5 text-[12.5px]">
+              <div className="flex justify-between gap-3">
+                <span className="text-muted">Buyer</span>
+                <span className="text-right text-ink">
+                  {detailRequest.buyerDisplayName}
+                  {detailRequest.portalUsername ? (
+                    <span className="ml-1.5 font-mono text-[11px] text-muted">
+                      @{detailRequest.portalUsername}
+                    </span>
+                  ) : null}
+                </span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-muted">Email</span>
+                <span className="text-right font-mono text-[11.5px] text-ink">
+                  {detailRequest.buyerEmail || "—"}
+                </span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-muted">Piece</span>
+                <Link
+                  href={`/wholesale/product/${encodeURIComponent(detailRequest.sku)}`}
+                  className="text-right text-accent underline"
+                  onClick={() => setDetailRequest(null)}
+                >
+                  {detailRequest.sku}
+                </Link>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-muted">Preferred times</span>
+                <span className="text-right text-ink">{detailRequest.preferredTimes || "—"}</span>
+              </div>
+              {detailRequest.note ? (
+                <div>
+                  <div className="mb-1 text-muted">Buyer note</div>
+                  <div className="rounded-chip border border-border bg-ground px-3 py-2 text-ink">
+                    {detailRequest.note}
+                  </div>
+                </div>
+              ) : null}
+              <div className="flex justify-between gap-3">
+                <span className="text-muted">Requested</span>
+                <span className="text-right font-mono text-[11.5px] text-ink">
+                  {fullDate(detailRequest.createdAt)}
+                </span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-muted">Assigned to</span>
+                <span className="text-right text-ink">
+                  {detailRequest.assignedToName || "Unassigned"}
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-5 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={busyCallId === detailRequest.id}
+                onClick={() => callRequestAction(detailRequest.id, "convert")}
+                className="h-9 flex-1 rounded-chip bg-ink px-4 text-[11px] font-semibold uppercase tracking-[0.12em] text-ground transition hover:opacity-90 disabled:opacity-50"
+              >
+                {busyCallId === detailRequest.id ? "Working…" : "Start order request"}
+              </button>
+              {detailRequest.buyerEmail ? (
+                <a
+                  href={`mailto:${detailRequest.buyerEmail}?subject=${encodeURIComponent(
+                    `Call about ${detailRequest.title} — Luxe Supply Co.`,
+                  )}`}
+                  className="inline-flex h-9 items-center rounded-chip border border-border px-4 text-[11px] font-semibold uppercase tracking-[0.12em] text-secondary transition hover:border-accent hover:text-ink"
+                >
+                  Email buyer
+                </a>
+              ) : null}
+              <button
+                type="button"
+                disabled={busyCallId === detailRequest.id}
+                onClick={() => markCallHandled(detailRequest.id)}
+                className="inline-flex h-9 items-center rounded-chip border border-border px-4 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted transition hover:text-ink disabled:opacity-50"
+              >
+                ✓ Handled
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
