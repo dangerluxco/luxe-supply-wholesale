@@ -13,6 +13,7 @@ import {
 import { computeRepDashboard } from "@/lib/repDashboard";
 import { RepPipelineBoard } from "@/components/RepPipelineBoard";
 import { NeedsAttentionPanel } from "@/components/NeedsAttentionPanel";
+import { AutoRefresh } from "@/components/AutoRefresh";
 import { listPendingCallRequests } from "@/lib/firestore/callRequests";
 import { money } from "@/lib/format";
 
@@ -125,6 +126,7 @@ export default async function StaffDashboardPage() {
 
   return (
     <div className="px-10 pb-12 pt-8">
+      <AutoRefresh intervalMs={20_000} />
       <div className="mb-6">
         <h1 className="text-[24px] font-semibold text-ink">Dashboard</h1>
         <p className="mt-1 text-[13px] text-muted">Rep pipeline &amp; account health at a glance.</p>

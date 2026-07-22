@@ -467,16 +467,44 @@ export function RepPipelineBoard({
                   {detailRequest.buyerEmail || "—"}
                 </span>
               </div>
-              <div className="flex justify-between gap-3">
-                <span className="text-muted">Piece</span>
-                <Link
-                  href={`/wholesale/product/${encodeURIComponent(detailRequest.sku)}`}
-                  className="text-right text-accent underline"
-                  onClick={() => setDetailRequest(null)}
-                >
-                  {detailRequest.sku}
-                </Link>
-              </div>
+              {detailRequest.items.length > 1 ? (
+                <div>
+                  <div className="mb-1 text-muted">Pieces ({detailRequest.items.length})</div>
+                  <div className="max-h-48 space-y-1.5 overflow-y-auto rounded-chip border border-border bg-ground p-2">
+                    {detailRequest.items.map((it) => (
+                      <div key={it.sku} className="flex items-center gap-2">
+                        {it.imageUrl ? (
+                          <img
+                            src={it.imageUrl}
+                            alt=""
+                            className="h-8 w-8 shrink-0 rounded border border-border object-cover"
+                            loading="lazy"
+                          />
+                        ) : null}
+                        <Link
+                          href={`/wholesale/product/${encodeURIComponent(it.sku)}`}
+                          className="min-w-0 truncate text-[12px] text-ink hover:text-accent"
+                          onClick={() => setDetailRequest(null)}
+                        >
+                          {it.title}
+                          <span className="ml-1.5 font-mono text-[10px] text-muted">{it.sku}</span>
+                        </Link>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted">Piece</span>
+                  <Link
+                    href={`/wholesale/product/${encodeURIComponent(detailRequest.sku)}`}
+                    className="text-right text-accent underline"
+                    onClick={() => setDetailRequest(null)}
+                  >
+                    {detailRequest.sku}
+                  </Link>
+                </div>
+              )}
               <div className="flex justify-between gap-3">
                 <span className="text-muted">Preferred times</span>
                 <span className="text-right text-ink">{detailRequest.preferredTimes || "—"}</span>

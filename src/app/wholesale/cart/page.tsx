@@ -10,6 +10,7 @@ import { CartCheckoutPanel } from "@/components/CartCheckoutPanel";
 import { RemoveCartItemButton } from "@/components/RemoveCartItemButton";
 import { HoldCountdown } from "@/components/HoldCountdown";
 import { InfoTip } from "@/components/InfoTip";
+import { RequestPieceCallButton } from "@/components/RequestPieceCallButton";
 import { MicroBadge } from "@/components/badges";
 import { BundleImageStrip } from "@/components/BundleImageStrip";
 
@@ -142,6 +143,12 @@ export default async function CartPage() {
               </p>
             ) : null}
             <CartCheckoutPanel subtotal={total} submitDisabled={!thresholdCheck.met} />
+            <RequestPieceCallButton
+              cart
+              title={
+                cart.length === 1 ? cart[0]!.title : `${cart.length} pieces in your order`
+              }
+            />
           </div>
         </div>
       )}

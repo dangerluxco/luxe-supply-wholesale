@@ -37,12 +37,15 @@ export async function POST(
     );
   }
 
-  // Best-effort price/imagery from the live catalog; the piece may have changed
-  // state since the request, which is fine — staff adjust line items as needed.
-  const products = await getCatalogProductsBySkus([callRequest.sku]).catch(
+  // Multi-piece (cart) requests carry an items array; single-piece requests use
+  // the top-level sku/title. Best-effort price/imagery from the live catalog —
+  // pieces may have changed state since the request; staff adjust lines as needed.
+  const requestItems = callRequest.items.length
+    ? callRequest.items
+    : [{ sku: callRequest.sku, title: callRequest.title, imageUrl: callRequest.imageUrl }];
+  const products = await getCatalogProductsBySkus(requestItems.map((i) => i.sku)).catch(
     () => new Map<string, never>(),
   );
-  const product = products.get(callRequest.sku);
 
   try {
     const { id: quoteId } = await createStaffQuote({
@@ -54,15 +57,19 @@ export async function POST(
         company: buyer.company,
         phone: buyer.phone,
       },
-      items: [
-        {
-          sku: callRequest.sku,
-          title: callRequest.title,
+      // Land in Open — this is the pipeline's entry phase, matching the drag
+      // target (createStaffQuote's default "contacted" is for curation calls).
+      status: "open",
+      items: requestItems.map((it) => {
+        const product = products.get(it.sku);
+        return {
+          sku: it.sku,
+          title: it.title,
           brand: product?.brand,
           price: Math.round(product?.price ?? 0),
-          imageUrl: product?.imageUrl || null,
-        },
-      ],
+          imageUrl: it.imageUrl || product?.imageUrl || null,
+        };
+      }),
       message: [
         `Converted from a buyer call request about ${callRequest.title}.`,
         callRequest.preferredTimes ? `Preferred times: ${callRequest.preferredTimes}` : "",

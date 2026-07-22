@@ -4,10 +4,22 @@ import { useState, useTransition } from "react";
 import { requestPieceCall } from "@/lib/actions/request-piece-call";
 
 /**
- * Buyer PDP action: "Request a call about this piece." Opens a small modal for
- * preferred times + a note, submits via server action, and confirms inline.
+ * Buyer call-request action. Two modes:
+ * - PDP: `{ sku, title }` — "Request a call about this piece"
+ * - Cart: `{ cart: true }` — "Request a call about these pieces" (server reads
+ *   the cart contents; title is display-only)
+ * Opens a small modal for preferred times + a note, submits via server action,
+ * and confirms inline.
  */
-export function RequestPieceCallButton({ sku, title }: { sku: string; title: string }) {
+export function RequestPieceCallButton({
+  sku,
+  title,
+  cart = false,
+}: {
+  sku?: string;
+  title: string;
+  cart?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [preferredTimes, setPreferredTimes] = useState("");
@@ -30,7 +42,7 @@ export function RequestPieceCallButton({ sku, title }: { sku: string; title: str
         onClick={() => setOpen(true)}
         className="flex h-[44px] w-full items-center justify-center gap-2 rounded-chip border border-accent bg-accent/5 text-[12px] uppercase tracking-[0.14em] text-[#6E5A30] transition hover:bg-accent/10"
       >
-        ◉ Request a call about this piece
+        ◉ {cart ? "Request a call about these pieces" : "Request a call about this piece"}
       </button>
 
       {open ? (
@@ -80,7 +92,7 @@ export function RequestPieceCallButton({ sku, title }: { sku: string; title: str
                 onClick={() => {
                   setError(null);
                   start(async () => {
-                    const res = await requestPieceCall({ sku, title, preferredTimes, note });
+                    const res = await requestPieceCall({ sku, title, cart, preferredTimes, note });
                     if (res.error) {
                       setError(res.error);
                       return;

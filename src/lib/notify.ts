@@ -597,6 +597,8 @@ export async function notifyStaffOfCallRequest(opts: {
   buyerEmail: string;
   sku: string;
   title: string;
+  /** Multi-piece (cart) requests: "Title (SKU)" lines. */
+  items?: string[];
   preferredTimes?: string;
   note?: string;
 }): Promise<{ sent: boolean; recipients: string[] }> {
@@ -614,11 +616,17 @@ export async function notifyStaffOfCallRequest(opts: {
     return { sent: false, recipients: [] };
   }
 
+  const pieceLine =
+    opts.items && opts.items.length > 1
+      ? `<strong>Pieces (${opts.items.length}):</strong><br/>${opts.items
+          .map((it) => `&nbsp;&nbsp;· ${escapeHtml(it)}`)
+          .join("<br/>")}<br/>`
+      : `<strong>Piece:</strong> ${escapeHtml(opts.title)} (${escapeHtml(opts.sku)})<br/>`;
   const html = emailShell(`
   <p>A buyer requested a <strong>call / viewing</strong> on the wholesale storefront.</p>
   <p>
     <strong>Buyer:</strong> ${escapeHtml(opts.buyerName)} &lt;${escapeHtml(opts.buyerEmail)}&gt;<br/>
-    <strong>Piece:</strong> ${escapeHtml(opts.title)} (${escapeHtml(opts.sku)})<br/>
+    ${pieceLine}
     ${opts.preferredTimes ? `<strong>Preferred times:</strong> ${escapeHtml(opts.preferredTimes)}<br/>` : ""}
   </p>
   ${opts.note ? `<p><strong>Note:</strong><br/>${escapeHtml(opts.note).replace(/\n/g, "<br/>")}</p>` : ""}

@@ -10,6 +10,9 @@ export type CallRequestItem = {
   title: string;
   /** Product hero image at request time (render-time catalog fallback for old docs). */
   imageUrl: string | null;
+  /** Multi-piece requests (e.g. from the cart). Single-piece requests leave this empty
+   *  and use sku/title/imageUrl directly. */
+  items: Array<{ sku: string; title: string; imageUrl: string | null }>;
   portalUsername: string;
   buyerDisplayName: string;
   buyerEmail: string;
@@ -31,6 +34,11 @@ function serialize(id: string, d: Record<string, unknown>): CallRequestItem {
     sku: String(d.sku || ""),
     title: String(d.title || d.sku || ""),
     imageUrl: d.imageUrl ? String(d.imageUrl) : null,
+    items: (Array.isArray(d.items) ? (d.items as Array<Record<string, unknown>>) : []).map((it) => ({
+      sku: String(it.sku || ""),
+      title: String(it.title || it.sku || ""),
+      imageUrl: it.imageUrl ? String(it.imageUrl) : null,
+    })),
     portalUsername: String(d.portalUsername || ""),
     buyerDisplayName: String(d.buyerDisplayName || d.portalUsername || ""),
     buyerEmail: String(d.buyerEmail || ""),
@@ -80,6 +88,7 @@ export async function addCallRequest(opts: {
   sku: string;
   title?: string;
   imageUrl?: string | null;
+  items?: Array<{ sku: string; title: string; imageUrl: string | null }>;
   preferredTimes?: string;
   note?: string;
 }): Promise<string> {
@@ -93,6 +102,7 @@ export async function addCallRequest(opts: {
     sku: String(opts.sku || "").trim(),
     title: opts.title || opts.sku,
     imageUrl: opts.imageUrl || null,
+    items: (opts.items || []).slice(0, 100),
     preferredTimes: String(opts.preferredTimes || "").trim().slice(0, 500),
     note: String(opts.note || "").trim().slice(0, 2000),
     status: "pending",
