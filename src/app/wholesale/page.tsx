@@ -14,6 +14,7 @@ import { listHoldAlertsForBuyer } from "@/lib/firestore/holdAlerts";
 import { loadProductOverridesBySku, type ProductOverrides } from "@/lib/firestore/productOverrides";
 import { matchesKeywords } from "@/lib/search";
 import { Suspense } from "react";
+import { AutoRefresh } from "@/components/AutoRefresh";
 
 export const dynamic = "force-dynamic";
 
@@ -212,6 +213,9 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
 
   return (
     <div>
+      {/* Staff catalog edits land without the buyer refreshing: instant paint
+          from the client cache, then a silent catch-up fetch (SWR pattern). */}
+      <AutoRefresh intervalMs={45_000} />
       <Suspense
         fallback={
           <div className="border-b border-border bg-surface/95 px-8 py-4">

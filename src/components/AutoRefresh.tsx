@@ -5,15 +5,18 @@ import { useRouter } from "next/navigation";
 
 /**
  * Near-real-time page updates without websockets: soft-refreshes the current
- * route on an interval while the tab is visible, plus immediately when the tab
- * regains focus. router.refresh() re-fetches server components in place —
- * client state (open modals, selections, drag in progress) is preserved.
+ * route once on mount (so a navigation served from the router's 30s client
+ * cache catches up in the background without a manual reload), then on an
+ * interval while the tab is visible, plus immediately when the tab regains
+ * focus. router.refresh() re-fetches server components in place — client
+ * state (open modals, selections, drag in progress) is preserved.
  */
 export function AutoRefresh({ intervalMs = 20_000 }: { intervalMs?: number }) {
   const router = useRouter();
 
   useEffect(() => {
     let timer: ReturnType<typeof setInterval> | null = null;
+    router.refresh();
 
     function startTimer() {
       if (timer) return;
