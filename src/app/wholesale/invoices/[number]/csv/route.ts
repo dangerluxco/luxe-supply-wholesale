@@ -1,7 +1,7 @@
 import { getSession } from "@/lib/auth";
 import { ROLE } from "@/lib/constants";
 import { getInvoiceByNumber, displayInvoiceStatus } from "@/lib/firestore/invoices";
-import { csvBody, isoDate } from "@/lib/csv";
+import { csvBody, csvExcelSku, isoDate } from "@/lib/csv";
 
 // Single-invoice CSV download (header block + line items + totals).
 export async function GET(_req: Request, { params }: { params: Promise<{ number: string }> }) {
@@ -24,12 +24,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ number:
     ["Paid", isoDate(inv.paidAt)],
     ["Fulfillment", inv.fulfillmentStatus],
     [],
-    ["SKU", "Piece", "Wholesale (USD)"],
-    ...inv.items.map((l) => [l.sku, l.title, l.price]),
+    ["SKU", "Piece", "Brand", "Wholesale (USD)", "Image URL"],
+    ...inv.items.map((l) => [csvExcelSku(l.sku), l.title, l.brand || "", l.price, l.imageUrl || ""]),
     [],
-    ["Subtotal", "", inv.subtotal],
-    ["Shipping", "", inv.shipping],
-    ["Total", "", inv.total],
+    ["Subtotal", "", "", inv.subtotal, ""],
+    ["Shipping", "", "", inv.shipping, ""],
+    ["Total", "", "", inv.total, ""],
   ];
 
   const body = csvBody(rows);

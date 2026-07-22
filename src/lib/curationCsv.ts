@@ -1,4 +1,4 @@
-import { csvBody } from "@/lib/csv";
+import { csvBody, csvExcelSku } from "@/lib/csv";
 import type { CurationItem, CurationShare } from "@/lib/firestore/curation";
 
 /** Approved-item CSV export for a curation share (staff: includeCost; buyer: never). */
@@ -26,7 +26,7 @@ export function buildCurationApprovedCsv(
   ];
 
   const rows = approved.map((it) => [
-    it.sku,
+    csvExcelSku(it.sku),
     it.title,
     it.brand,
     it.condition,
