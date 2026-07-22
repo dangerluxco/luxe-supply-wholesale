@@ -110,7 +110,11 @@ export default async function ProductPage({
             {pricesVisible ? (
               <>
                 <AddToOrderButton sku={product.sku} price={price} disabled={unavailable} />
-                <RequestPieceCallButton sku={product.sku} title={product.title} />
+                <RequestPieceCallButton
+                  sku={product.sku}
+                  title={product.title}
+                  imageUrls={[product.imageUrls?.[0] || product.imageUrl]}
+                />
               </>
             ) : (
               <Link

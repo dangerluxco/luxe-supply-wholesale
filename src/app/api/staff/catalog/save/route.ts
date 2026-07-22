@@ -5,6 +5,7 @@ import {
   saveCuratedCatalog,
   type CuratedCatalogItem,
 } from "@/lib/firestore/catalog";
+import { warmupOptimizedImages } from "@/lib/imageWarmup";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +33,8 @@ export async function POST(request: Request) {
       unresolvedSkus: Array.isArray(body.unresolvedSkus) ? body.unresolvedSkus : [],
       updatedBy: session.email,
     });
+    // Pre-generate optimized variants so the first buyer view is already cached.
+    warmupOptimizedImages(body.items.map((i) => i.imageUrl));
     return NextResponse.json({
       ok: true,
       message: `Curated catalog saved — ${body.items.length} item${

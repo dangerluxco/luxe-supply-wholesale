@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { clsx } from "@/lib/clsx";
@@ -207,13 +208,16 @@ export function RepPipelineBoard({
                   >
                     <div className="flex items-center gap-2">
                       {r.imageUrl ? (
-                        <img
-                          src={r.imageUrl}
-                          alt=""
-                          className="h-9 w-9 shrink-0 rounded border border-border object-cover"
-                          loading="lazy"
-                          draggable={false}
-                        />
+                        <span className="relative h-9 w-9 shrink-0 overflow-hidden rounded border border-border">
+                          <Image
+                            src={r.imageUrl}
+                            alt=""
+                            fill
+                            sizes="36px"
+                            draggable={false}
+                            className="object-cover"
+                          />
+                        </span>
                       ) : null}
                       <div className="min-w-0">
                         <div className="truncate font-semibold text-ink">{r.buyerDisplayName}</div>
@@ -440,11 +444,15 @@ export function RepPipelineBoard({
             </div>
             <div className="mb-4 flex items-center gap-3">
               {detailRequest.imageUrl ? (
-                <img
-                  src={detailRequest.imageUrl}
-                  alt={detailRequest.title}
-                  className="h-16 w-16 shrink-0 rounded-chip border border-border object-cover"
-                />
+                <span className="relative h-16 w-16 shrink-0 overflow-hidden rounded-chip border border-border">
+                  <Image
+                    src={detailRequest.imageUrl}
+                    alt={detailRequest.title}
+                    fill
+                    sizes="64px"
+                    className="object-cover"
+                  />
+                </span>
               ) : null}
               <div className="text-[15px] font-semibold text-ink">{detailRequest.title}</div>
             </div>
@@ -474,12 +482,9 @@ export function RepPipelineBoard({
                     {detailRequest.items.map((it) => (
                       <div key={it.sku} className="flex items-center gap-2">
                         {it.imageUrl ? (
-                          <img
-                            src={it.imageUrl}
-                            alt=""
-                            className="h-8 w-8 shrink-0 rounded border border-border object-cover"
-                            loading="lazy"
-                          />
+                          <span className="relative h-8 w-8 shrink-0 overflow-hidden rounded border border-border">
+                            <Image src={it.imageUrl} alt="" fill sizes="32px" className="object-cover" />
+                          </span>
                         ) : null}
                         <Link
                           href={`/wholesale/product/${encodeURIComponent(it.sku)}`}

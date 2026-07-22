@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Image from "next/image";
 import { requestPieceCall } from "@/lib/actions/request-piece-call";
 
 /**
@@ -15,11 +16,15 @@ export function RequestPieceCallButton({
   sku,
   title,
   cart = false,
+  imageUrls = [],
 }: {
   sku?: string;
   title: string;
   cart?: boolean;
+  /** Piece thumbnails shown in the modal (single image for PDP, cart items for cart mode). */
+  imageUrls?: Array<string | null | undefined>;
 }) {
+  const thumbs = imageUrls.filter((u): u is string => !!u).slice(0, 8);
   const [open, setOpen] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [preferredTimes, setPreferredTimes] = useState("");
@@ -57,7 +62,19 @@ export function RequestPieceCallButton({
             <div className="micro-badge mb-1 text-[10px] tracking-[0.14em] text-accent">
               REQUEST A CALL
             </div>
-            <div className="mb-4 text-[14px] font-semibold text-ink">{title}</div>
+            <div className="mb-3 text-[14px] font-semibold text-ink">{title}</div>
+            {thumbs.length ? (
+              <div className="mb-4 flex gap-2 overflow-x-auto">
+                {thumbs.map((u, i) => (
+                  <span
+                    key={`${u}-${i}`}
+                    className="relative h-14 w-14 shrink-0 overflow-hidden rounded-chip border border-border"
+                  >
+                    <Image src={u} alt="" fill sizes="56px" className="object-cover" />
+                  </span>
+                ))}
+              </div>
+            ) : null}
 
             <label className="mb-3 flex flex-col gap-1.5">
               <span className="micro-badge text-[10px] tracking-[0.14em] text-muted">

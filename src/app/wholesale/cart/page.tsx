@@ -148,6 +148,7 @@ export default async function CartPage() {
               title={
                 cart.length === 1 ? cart[0]!.title : `${cart.length} pieces in your order`
               }
+              imageUrls={cart.map((i) => i.imageUrl)}
             />
           </div>
         </div>
