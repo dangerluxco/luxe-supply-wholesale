@@ -7,6 +7,7 @@ import { ROLE, PRODUCT_STATUS } from "@/lib/constants";
 import { ProductPdpGallery } from "@/components/ProductPdpGallery";
 import { money } from "@/lib/format";
 import { AddToOrderButton } from "@/components/AddToOrderButton";
+import { RequestPieceCallButton } from "@/components/RequestPieceCallButton";
 import { HoldAlertButton } from "@/components/HoldAlertButton";
 import { LiveBundledSkuGuard } from "@/components/StorefrontAvailability";
 import { getHoldAlertForBuyerSku } from "@/lib/firestore/holdAlerts";
@@ -100,9 +101,12 @@ export default async function ProductPage({
 
           <div className="mt-2 text-[12px] text-secondary">Condition · {product.condition}</div>
 
-          <div className="mt-8">
+          <div className="mt-8 space-y-3">
             {pricesVisible ? (
-              <AddToOrderButton sku={product.sku} price={price} disabled={unavailable} />
+              <>
+                <AddToOrderButton sku={product.sku} price={price} disabled={unavailable} />
+                <RequestPieceCallButton sku={product.sku} title={product.title} />
+              </>
             ) : (
               <Link
                 href={`/wholesale/sign-in?next=${encodeURIComponent(`/wholesale/product/${product.sku}`)}`}

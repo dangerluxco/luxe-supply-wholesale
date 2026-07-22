@@ -9,6 +9,8 @@ import { getCatalogSettingsState, listCatalogProducts } from "@/lib/firestore/ca
 import { computeRepDashboard } from "@/lib/repDashboard";
 import { RepPipelineBoard } from "@/components/RepPipelineBoard";
 import { NeedsAttentionPanel } from "@/components/NeedsAttentionPanel";
+import { CallRequestsPanel } from "@/components/CallRequestsPanel";
+import { listPendingCallRequests } from "@/lib/firestore/callRequests";
 import { money } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -83,15 +85,18 @@ export default async function StaffDashboardPage() {
   let buyers: Awaited<ReturnType<typeof listBuyers>> = [];
   let pendingApplications: Awaited<ReturnType<typeof listRegistrationRequests>> = [];
   let catalogValue = { total: 0, count: 0, approximate: true };
+  let callRequests: Awaited<ReturnType<typeof listPendingCallRequests>> = [];
 
   try {
-    [quotesResult, invoices, buyers, pendingApplications, catalogValue] = await Promise.all([
-      listQuotes({ status: "all", limit: 300 }),
-      listInvoices({ limit: 300 }),
-      listBuyers(),
-      listRegistrationRequests("pending"),
-      loadCatalogValue(),
-    ]);
+    [quotesResult, invoices, buyers, pendingApplications, catalogValue, callRequests] =
+      await Promise.all([
+        listQuotes({ status: "all", limit: 300 }),
+        listInvoices({ limit: 300 }),
+        listBuyers(),
+        listRegistrationRequests("pending"),
+        loadCatalogValue(),
+        listPendingCallRequests().catch(() => []),
+      ]);
   } catch (err) {
     console.warn("[rep dashboard] Firestore unavailable:", err instanceof Error ? err.message : err);
   }
@@ -141,6 +146,8 @@ export default async function StaffDashboardPage() {
           href="/wholesaleportal/rep/clients?tab=applications"
         />
       </div>
+
+      <CallRequestsPanel requests={callRequests} />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.6fr_1fr]">
         <RepPipelineBoard columns={pipeline} table={pipelineTable} />

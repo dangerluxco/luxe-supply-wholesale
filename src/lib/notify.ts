@@ -589,3 +589,46 @@ export async function sendOverdueReminderEmail(opts: {
     html,
   });
 }
+
+/** Staff notification when a buyer requests a call/viewing about a piece. */
+export async function notifyStaffOfCallRequest(opts: {
+  requestId: string;
+  buyerName: string;
+  buyerEmail: string;
+  sku: string;
+  title: string;
+  preferredTimes?: string;
+  note?: string;
+}): Promise<{ sent: boolean; recipients: string[] }> {
+  const [staffEmails, extraEmails] = await Promise.all([
+    listActiveStaffEmails(),
+    getNotifyEmails(),
+  ]);
+  const envEmails = String(process.env.STAFF_NOTIFICATION_EMAILS || "")
+    .split(/[\s,;]+/)
+    .map((e) => e.trim().toLowerCase())
+    .filter((e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+  const recipients = [...new Set([...staffEmails, ...extraEmails, ...envEmails])];
+  if (!recipients.length) {
+    console.warn("[notify] No staff recipients for call request", opts.requestId);
+    return { sent: false, recipients: [] };
+  }
+
+  const html = emailShell(`
+  <p>A buyer requested a <strong>call / viewing</strong> on the wholesale storefront.</p>
+  <p>
+    <strong>Buyer:</strong> ${escapeHtml(opts.buyerName)} &lt;${escapeHtml(opts.buyerEmail)}&gt;<br/>
+    <strong>Piece:</strong> ${escapeHtml(opts.title)} (${escapeHtml(opts.sku)})<br/>
+    ${opts.preferredTimes ? `<strong>Preferred times:</strong> ${escapeHtml(opts.preferredTimes)}<br/>` : ""}
+  </p>
+  ${opts.note ? `<p><strong>Note:</strong><br/>${escapeHtml(opts.note).replace(/\n/g, "<br/>")}</p>` : ""}
+  <p><a href="${staffPortalOrigin()}/wholesaleportal/rep/dashboard">Open the dashboard</a> to follow up — reply to this email to reach the buyer directly.</p>`);
+
+  const sent = await sendEmail({
+    to: recipients,
+    subject: `Call request: ${opts.title} — ${opts.buyerName || "a buyer"}`,
+    html,
+    replyTo: opts.buyerEmail || undefined,
+  });
+  return { sent, recipients };
+}
