@@ -3,6 +3,9 @@ const isProd = process.env.NODE_ENV === "production";
 
 const nextConfig = {
   output: "standalone",
+  // `next build` and `next dev` corrupt each other when they share .next.
+  // Set NEXT_DIST_DIR (e.g. ".next-build") to verify a build while dev runs.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   eslint: { ignoreDuringBuilds: true },
   typescript: { ignoreBuildErrors: false },
   experimental: {

@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { getOrCreateFulfillment } from "@/lib/firestore/fulfillment";
 import { getQuoteById } from "@/lib/firestore/quotes";
 import { findBuyerByIdentifier } from "@/lib/firestore/buyers";
-import { SHIPPING_OPTIONS } from "@/lib/constants";
+import { getShippingRules } from "@/lib/firestore/settings";
+import { shippingMethodLabel } from "@/lib/shipping-rules";
 import { money } from "@/lib/format";
 import { PackStation } from "@/components/PackStation";
 import { shipEngineConfigured } from "@/lib/shipengine";
@@ -72,7 +73,7 @@ export default async function PackStationPage({ params }: { params: Promise<{ id
     ? await findBuyerByIdentifier(invoice.portalUsername).catch(() => null)
     : null;
   const shipMethod = buyer
-    ? SHIPPING_OPTIONS.find((o) => o.id === buyer.shippingMethodId)?.label || null
+    ? shippingMethodLabel(await getShippingRules(), buyer.shippingMethodId)
     : null;
   const addressLines = buyer
     ? [

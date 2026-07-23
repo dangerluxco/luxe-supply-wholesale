@@ -2,6 +2,12 @@ import { getDb, toIso } from "./admin";
 import { getLuxesupplyOrg } from "./staff";
 import { getQuoteById, linkQuoteToInvoice, finalizeInvoiceRequestAsSold } from "./quotes";
 import { findBuyerByIdentifier } from "./buyers";
+import { getShippingRules } from "./settings";
+import {
+  parseShippingComp,
+  reevaluateInvoiceShipping,
+  type ShippingComp,
+} from "@/lib/shipping-rules";
 import {
   FIRESTORE_INVOICE_STATUS,
   FULFILLMENT_STATUS,
@@ -47,6 +53,10 @@ export type PortalInvoice = {
   itemCount: number;
   subtotal: number;
   shipping: number;
+  /** Buyer-chosen method label snapshotted from the order request (may be empty on staff-created orders). */
+  shippingLabel: string;
+  /** Set when the free-shipping threshold comped shipping on this invoice. */
+  shippingComp: ShippingComp | null;
   total: number;
   terms: string;
   /** Multiline Bill To override snapshotted from the buyer account at generation. */
@@ -99,6 +109,8 @@ function serializeInvoice(id: string, d: Record<string, unknown>): PortalInvoice
     itemCount: Number(d.itemCount || items.length || 0),
     subtotal: Number(d.subtotal || 0),
     shipping: Number(d.shipping || 0),
+    shippingLabel: String(d.shippingLabel || ""),
+    shippingComp: parseShippingComp(d.shippingComp),
     total: Number(d.total || 0),
     terms: String(d.terms || INVOICE_TERMS),
     billTo: String(d.billTo || ""),
@@ -149,10 +161,16 @@ export function displayInvoiceStatus(inv: { status: string; dueDate: string | nu
 async function nextInvoiceNumber(orgId: string): Promise<string> {
   const db = getDb();
   const ref = db.collection("organizations").doc(orgId);
+  // Prefix comes from Settings → Invoicing; read inside the same transaction
+  // snapshot as the sequence so both reflect one consistent org doc.
+  let prefix = "INV";
   const seq = await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     const data = (snap.data() || {}) as Record<string, unknown>;
     const salesPortal = (data.salesPortal || {}) as Record<string, unknown>;
+    const invoicing = (salesPortal.invoicing || {}) as Record<string, unknown>;
+    const configured = String(invoicing.invoicePrefix || "").trim().slice(0, 16).replace(/-+$/, "");
+    if (configured) prefix = configured;
     const current = Number(salesPortal.invoiceSeq) || 1000;
     const next = current + 1;
     tx.set(
@@ -162,7 +180,7 @@ async function nextInvoiceNumber(orgId: string): Promise<string> {
     );
     return next;
   });
-  return `INV-${seq}`;
+  return `${prefix}-${seq}`;
 }
 
 /**
@@ -210,7 +228,12 @@ export async function createInvoiceFromQuote(
   }));
   const subtotal =
     quote.cartTotal != null ? Math.round(quote.cartTotal) : items.reduce((s, i) => s + i.price * i.quantity, 0);
-  const shipping = Math.max(0, Math.round(Number(quote.shipping) || 0));
+  // Staff may have edited lines since submit, so the free-shipping comp is
+  // re-checked in both directions against the invoice subtotal. The buyer's
+  // agreed fee is never repriced — qualifying zeroes it, disqualifying
+  // restores the fee they saw at checkout.
+  const shippingRules = await getShippingRules();
+  const { shipping, comp: shippingComp } = reevaluateInvoiceShipping(shippingRules, quote, subtotal);
   const total = subtotal + shipping;
 
   const ref = getDb().collection("salesPortalInvoices").doc();
@@ -228,6 +251,8 @@ export async function createInvoiceFromQuote(
     itemCount: items.length,
     subtotal,
     shipping,
+    shippingLabel: quote.shippingLabel || "",
+    shippingComp,
     total,
     terms,
     billTo,

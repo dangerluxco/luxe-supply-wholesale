@@ -8,6 +8,7 @@ import {
   savePortalFeatures,
   saveQuoteSettings,
   saveSalesGoals,
+  saveShippingRules,
 } from "@/lib/firestore/settings";
 import { logAudit } from "@/lib/firestore/audit";
 
@@ -78,6 +79,26 @@ export async function POST(request: Request) {
         payload: saved,
       });
       return NextResponse.json({ ok: true, message: "Sales goals saved." });
+    }
+
+    if (section === "shipping") {
+      const saved = await saveShippingRules(body.shippingRules || {});
+      await logAudit({
+        actor: session,
+        action: "settings.shipping.update",
+        entity: "Settings",
+        entityId: "shipping",
+        payload: {
+          freeShippingThreshold: saved.freeShippingThreshold,
+          methods: saved.methods.map((m) => ({
+            id: m.id,
+            price: m.price,
+            enabled: m.enabled,
+            compEligible: m.compEligible,
+          })),
+        },
+      });
+      return NextResponse.json({ ok: true, message: "Shipping rules saved." });
     }
 
     if (section === "features") {

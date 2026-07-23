@@ -777,6 +777,7 @@ export async function createBuyerQuote(opts: {
   shippingInstructions?: string;
   shippingLabel?: string;
   shipping?: number;
+  shippingComp?: { applied: true; threshold: number; baseFee: number } | null;
 }): Promise<{ id: string }> {
   const org = await getLuxesupplyOrg();
   const cartTotal = opts.items.reduce((s, i) => s + (Number(i.price) || 0), 0);
@@ -815,6 +816,7 @@ export async function createBuyerQuote(opts: {
     shippingMethodId,
     shippingLabel,
     shipping,
+    shippingComp: opts.shippingComp ?? null,
     adminNotes: "",
     emailSent: false,
     createdAt: new Date(),

@@ -5,6 +5,7 @@ export type SettingsSectionKey =
   | "general"
   | "invoicing"
   | "thresholds"
+  | "shipping"
   | "features"
   | "goals"
   | "people"
@@ -24,6 +25,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   { key: "general", href: "/wholesaleportal/rep/settings/general", label: "General", group: "Company", minRole: "manager" },
   { key: "invoicing", href: "/wholesaleportal/rep/settings/invoicing", label: "Invoicing", group: "Company", minRole: "manager" },
   { key: "thresholds", href: "/wholesaleportal/rep/settings/thresholds", label: "Order thresholds", group: "Company", minRole: "manager" },
+  { key: "shipping", href: "/wholesaleportal/rep/settings/shipping", label: "Shipping", group: "Company", minRole: "manager" },
   { key: "features", href: "/wholesaleportal/rep/settings/features", label: "Features", group: "Company", minRole: "manager" },
   { key: "goals", href: "/wholesaleportal/rep/settings/goals", label: "Sales goals", group: "Company", minRole: "manager" },
   { key: "people", href: "/wholesaleportal/rep/settings/people", label: "People", group: "Team", minRole: "manager" },

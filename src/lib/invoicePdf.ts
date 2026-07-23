@@ -345,7 +345,9 @@ export async function renderInvoicePdf(
   const totalsX = PAGE_W - MARGIN - 200;
   const totalRows: Array<[string, string, boolean]> = [
     ["Subtotal", fmtMoney(inv.subtotal), false],
-    ["Shipping", fmtMoney(inv.shipping), false],
+    inv.shippingComp
+      ? ["Shipping — complimentary", "FREE", false]
+      : ["Shipping", fmtMoney(inv.shipping), false],
   ];
   for (const [k, v] of totalRows) {
     page.drawText(k, { x: totalsX, y, size: 9.5, font: helv, color: MUTED });

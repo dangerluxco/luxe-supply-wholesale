@@ -6,7 +6,6 @@ import {
   PAYMENT_TERMS_OPTIONS,
   PAYMENT_TIERS,
   PREFERRED_PAYMENT_OPTIONS,
-  SHIPPING_OPTIONS,
 } from "@/lib/constants";
 
 const fieldClass =
@@ -15,10 +14,13 @@ const labelClass = "micro-badge text-[10px] tracking-[0.14em] text-muted";
 
 export function EditClientAccountModal({
   buyer,
+  shippingMethods,
   onClose,
   onSaved,
 }: {
   buyer: PortalBuyer;
+  /** Manager-configured methods (Settings → Shipping) for the default-method picker. */
+  shippingMethods: Array<{ id: string; label: string }>;
   onClose: () => void;
   onSaved: (buyer: PortalBuyer) => void;
 }) {
@@ -243,11 +245,15 @@ export function EditClientAccountModal({
                   onChange={(e) => setShippingMethodId(e.target.value)}
                   className={fieldClass}
                 >
-                  {SHIPPING_OPTIONS.map((o) => (
+                  {shippingMethods.map((o) => (
                     <option key={o.id} value={o.id}>
                       {o.label}
                     </option>
                   ))}
+                  {shippingMethodId &&
+                  !shippingMethods.some((o) => o.id === shippingMethodId) ? (
+                    <option value={shippingMethodId}>{shippingMethodId} (removed method)</option>
+                  ) : null}
                 </select>
               </label>
               <label className="mt-6 flex items-center gap-2 text-[12.5px] text-ink">

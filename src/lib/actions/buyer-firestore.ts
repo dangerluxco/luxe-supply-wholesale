@@ -10,10 +10,14 @@ import {
   setBuyerCart,
 } from "@/lib/firestore/buyers";
 import { convertCartHoldsToQuote, syncCartHolds } from "@/lib/firestore/holds";
-import { getQuoteThresholds, evaluateQuoteThresholds } from "@/lib/firestore/settings";
+import {
+  getQuoteThresholds,
+  evaluateQuoteThresholds,
+  getShippingRules,
+} from "@/lib/firestore/settings";
 import { getDb } from "@/lib/firestore/admin";
 import { notifyStaffOfInvoiceRequest, sendOrderRequestConfirmationEmail } from "@/lib/notify";
-import { resolveShippingOption } from "@/lib/constants";
+import { evaluateShippingCharge } from "@/lib/shipping-rules";
 import { addSkusToCartForBuyer } from "@/lib/cart/addSkusToCart";
 
 async function requireBuyer() {
@@ -76,7 +80,11 @@ export async function submitInvoiceRequest(opts?: {
   // Configurable minimum item count / order total (staff: /wholesaleportal/rep/settings).
   const itemCount = cart.length;
   const cartTotal = cart.reduce((s, i) => s + (Number(i.price) || 0), 0);
-  const shipping = resolveShippingOption(opts?.shippingMethodId);
+  // Server-authoritative shipping: charge from manager-set rules against the
+  // server-computed subtotal, never the client's number. ≥-threshold orders get
+  // eligible methods comped (re-checked again at invoice generation).
+  const rules = await getShippingRules();
+  const shipping = evaluateShippingCharge(rules, String(opts?.shippingMethodId || ""), cartTotal);
   const thresholds = await getQuoteThresholds();
   const thresholdCheck = evaluateQuoteThresholds(thresholds, {
     itemCount,
@@ -93,9 +101,12 @@ export async function submitInvoiceRequest(opts?: {
     buyer,
     items: cart,
     message,
-    shippingMethodId: shipping.id,
+    shippingMethodId: shipping.methodId,
     shippingLabel: shipping.label,
     shipping: shipping.price,
+    shippingComp: shipping.comped
+      ? { applied: true, threshold: shipping.threshold, baseFee: shipping.basePrice }
+      : null,
   });
   await setBuyerCart(session.id, []);
   try {

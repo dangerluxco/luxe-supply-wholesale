@@ -3,6 +3,7 @@
 import { unstable_cache, revalidateTag } from "next/cache";
 import { getDb } from "./admin";
 import { getLuxesupplyOrg } from "./staff";
+import { normalizeShippingRules, type ShippingRules } from "@/lib/shipping-rules";
 
 /**
  * Portal feature flags are read on every staff-portal navigation (rep/layout)
@@ -210,6 +211,31 @@ export function formatPaymentInstructions(profile: InvoicingProfile): string {
 export async function getQuoteThresholds(): Promise<QuoteThresholds> {
   const org = await getLuxesupplyOrg();
   return normalizeQuoteThresholds(salesPortalOf(org.data).quoteThresholds);
+}
+
+/** Cart shipping methods + free-shipping comp threshold (Settings → Shipping). */
+export async function getShippingRules(): Promise<ShippingRules> {
+  const org = await getLuxesupplyOrg();
+  return normalizeShippingRules(salesPortalOf(org.data).shippingRules);
+}
+
+export async function saveShippingRules(input: unknown): Promise<ShippingRules> {
+  const next = normalizeShippingRules(input);
+  // Full method objects — managers own the list (add/remove/rename) self-serve.
+  await patchSalesPortal({
+    shippingRules: {
+      freeShippingThreshold: next.freeShippingThreshold,
+      methods: next.methods.map((m) => ({
+        id: m.id,
+        label: m.label,
+        description: m.description,
+        price: m.price,
+        enabled: m.enabled,
+        compEligible: m.compEligible,
+      })),
+    },
+  });
+  return next;
 }
 
 export async function getCompanyProfile(): Promise<CompanyProfile> {

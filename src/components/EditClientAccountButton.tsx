@@ -5,7 +5,13 @@ import { useRouter } from "next/navigation";
 import type { PortalBuyer } from "@/lib/firestore/buyers";
 import { EditClientAccountModal } from "@/components/EditClientAccountModal";
 
-export function EditClientAccountButton({ buyer }: { buyer: PortalBuyer }) {
+export function EditClientAccountButton({
+  buyer,
+  shippingMethods,
+}: {
+  buyer: PortalBuyer;
+  shippingMethods: Array<{ id: string; label: string }>;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
 
@@ -21,6 +27,7 @@ export function EditClientAccountButton({ buyer }: { buyer: PortalBuyer }) {
       {open ? (
         <EditClientAccountModal
           buyer={buyer}
+          shippingMethods={shippingMethods}
           onClose={() => setOpen(false)}
           onSaved={() => {
             setOpen(false);

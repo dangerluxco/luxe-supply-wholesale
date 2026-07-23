@@ -4,7 +4,11 @@ import { getSession } from "@/lib/auth";
 import { DEFAULT_MAX_CART_ITEMS, DEFAULT_MAX_CART_VALUE, ROLE } from "@/lib/constants";
 import { cartHoldSkus, getBuyerById, getBuyerCart } from "@/lib/firestore/buyers";
 import { loadActiveHoldsBySku } from "@/lib/firestore/holds";
-import { getQuoteThresholds, evaluateQuoteThresholds } from "@/lib/firestore/settings";
+import {
+  getQuoteThresholds,
+  evaluateQuoteThresholds,
+  getShippingRules,
+} from "@/lib/firestore/settings";
 import { money } from "@/lib/format";
 import { EmptyState } from "@/components/EmptyState";
 import { CartCheckoutPanel } from "@/components/CartCheckoutPanel";
@@ -21,10 +25,11 @@ export default async function CartPage() {
   const session = await getSession();
   if (!session || session.role !== ROLE.BUYER) redirect("/wholesale/sign-in");
 
-  const [cart, buyer, thresholds] = await Promise.all([
+  const [cart, buyer, thresholds, shippingRules] = await Promise.all([
     getBuyerCart(session.id),
     getBuyerById(session.id),
     getQuoteThresholds(),
+    getShippingRules(),
   ]);
   const total = cart.reduce((s, i) => s + i.price, 0);
   const holdSkus = cartHoldSkus(cart);
@@ -142,7 +147,11 @@ export default async function CartPage() {
                 {thresholdCheck.message}
               </p>
             ) : null}
-            <CartCheckoutPanel subtotal={total} submitDisabled={!thresholdCheck.met} />
+            <CartCheckoutPanel
+              subtotal={total}
+              submitDisabled={!thresholdCheck.met}
+              shippingRules={shippingRules}
+            />
             <RequestPieceCallButton
               cart
               title={

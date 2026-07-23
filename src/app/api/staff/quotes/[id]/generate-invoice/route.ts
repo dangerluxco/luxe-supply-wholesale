@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { ROLE } from "@/lib/constants";
 import { createInvoiceFromQuote } from "@/lib/firestore/invoices";
+import { getOrCreateFulfillment } from "@/lib/firestore/fulfillment";
 import { addQuoteActivity } from "@/lib/firestore/quoteActivities";
 import { logAudit } from "@/lib/firestore/audit";
 import { sendInvoiceReadyEmail } from "@/lib/notify";
@@ -29,6 +30,18 @@ export async function POST(
 
   try {
     const invoice = await createInvoiceFromQuote(quoteId, session.email);
+    // Create the pack-and-ship record now (not lazily on first pack-station
+    // open) so the order lands in the fulfillment queue fully seeded the moment
+    // the invoice exists. Non-blocking: the queue also lists UNFULFILLED
+    // invoices without a record, and the pack station still creates on demand.
+    try {
+      await getOrCreateFulfillment(invoice.id);
+    } catch (err) {
+      console.warn(
+        "[generate-invoice] fulfillment record create failed:",
+        err instanceof Error ? err.message : err,
+      );
+    }
     await addQuoteActivity({
       quoteId,
       type: "invoice_generated",

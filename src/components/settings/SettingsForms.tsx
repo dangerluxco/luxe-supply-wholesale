@@ -7,6 +7,7 @@ import type {
   PortalFeatures,
   QuoteThresholds,
 } from "@/lib/firestore/settings";
+import type { ShippingRules } from "@/lib/shipping-rules";
 
 const fieldClass =
   "h-10 w-full rounded-chip border border-border bg-ground px-3 text-[13px] text-ink outline-none focus:border-accent";
@@ -324,6 +325,192 @@ export function ThresholdsSettingsForm({ initial }: { initial: QuoteThresholds }
         className="h-10 rounded-chip bg-ink px-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-ground disabled:opacity-60"
       >
         {pending ? "Saving…" : "Save thresholds"}
+      </button>
+    </form>
+  );
+}
+
+type ShippingMethodRow = ShippingRules["methods"][number] & { _key: string };
+
+export function ShippingSettingsForm({ initial }: { initial: ShippingRules }) {
+  const { pending, start, error, setError, message, setMessage } = useSaveMessage();
+  const [threshold, setThreshold] = useState(String(initial.freeShippingThreshold));
+  const [methods, setMethods] = useState<ShippingMethodRow[]>(
+    initial.methods.map((m) => ({ ...m, _key: m.id })),
+  );
+  const setMethod = (key: string, patch: Partial<ShippingMethodRow>) =>
+    setMethods((ms) => ms.map((m) => (m._key === key ? { ...m, ...patch } : m)));
+  const addMethod = () =>
+    setMethods((ms) => [
+      ...ms,
+      {
+        _key: crypto.randomUUID(),
+        id: "", // slug assigned server-side from the label on save
+        label: "",
+        description: "",
+        price: 0,
+        enabled: true,
+        compEligible: false,
+      },
+    ]);
+  const removeMethod = (key: string) => setMethods((ms) => ms.filter((m) => m._key !== key));
+
+  return (
+    <form
+      className="max-w-2xl space-y-5 rounded-card border border-border bg-surface p-6"
+      onSubmit={(e) => {
+        e.preventDefault();
+        setError(null);
+        setMessage(null);
+        if (methods.some((m) => !m.label.trim())) {
+          setError("Every shipping method needs a name.");
+          return;
+        }
+        start(async () => {
+          try {
+            setMessage(
+              await postSettings({
+                section: "shipping",
+                shippingRules: {
+                  freeShippingThreshold: Number(threshold) || 0,
+                  methods: methods.map((m) => ({
+                    id: m.id,
+                    label: m.label,
+                    description: m.description,
+                    price: Number(m.price) || 0,
+                    enabled: m.enabled,
+                    compEligible: m.compEligible,
+                  })),
+                },
+              }),
+            );
+          } catch (err) {
+            setError(err instanceof Error ? err.message : "Save failed.");
+          }
+        });
+      }}
+    >
+      <div>
+        <div className="micro-badge mb-2 text-[10px] tracking-[0.14em] text-accent">
+          FREE SHIPPING
+        </div>
+        <label className="flex max-w-xs flex-col gap-1.5">
+          <span className={labelClass}>COMP THRESHOLD — ORDER SUBTOTAL ($)</span>
+          <input
+            type="number"
+            min={0}
+            value={threshold}
+            onChange={(e) => setThreshold(e.target.value)}
+            className={fieldClass}
+          />
+        </label>
+        <p className="mt-2 text-[12px] text-muted">
+          Orders with a merchandise subtotal (before shipping) at or above this amount ship free on
+          methods marked comp-eligible. Set to 0 to turn the comp off. Re-checked when the invoice is
+          generated, so staff edits to an order can add or remove the comp.
+        </p>
+      </div>
+
+      <div className="border-t border-border pt-5">
+        <div className="micro-badge mb-3 text-[10px] tracking-[0.14em] text-accent">
+          METHODS SHOWN AT CHECKOUT
+        </div>
+        <div className="space-y-3">
+          {methods.map((m) => (
+            <div
+              key={m._key}
+              className={`rounded-chip border px-4 py-3 ${m.enabled ? "border-border" : "border-border/60 opacity-60"}`}
+            >
+              <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
+                <label className="flex min-w-[160px] flex-1 flex-col gap-1.5">
+                  <span className={labelClass}>NAME</span>
+                  <input
+                    value={m.label}
+                    onChange={(e) => setMethod(m._key, { label: e.target.value })}
+                    placeholder="e.g. Overnight courier"
+                    className={fieldClass}
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5">
+                  <span className={labelClass}>PRICE $</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={m.price}
+                    onChange={(e) => setMethod(m._key, { price: Number(e.target.value) || 0 })}
+                    className={`${fieldClass} w-24`}
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => removeMethod(m._key)}
+                  disabled={methods.length <= 1}
+                  title={methods.length <= 1 ? "Keep at least one method" : "Remove this method"}
+                  className="h-10 rounded-chip border border-border px-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-secondary transition hover:border-danger hover:text-danger disabled:opacity-40"
+                >
+                  Remove
+                </button>
+              </div>
+              <label className="mt-2 flex flex-col gap-1.5">
+                <span className={labelClass}>DESCRIPTION (SHOWN UNDER THE NAME)</span>
+                <input
+                  value={m.description}
+                  onChange={(e) => setMethod(m._key, { description: e.target.value })}
+                  placeholder="e.g. Fully insured · next business day"
+                  className={fieldClass}
+                />
+              </label>
+              <div className="mt-2.5 flex flex-wrap items-center gap-x-5 gap-y-2">
+                <label className="flex cursor-pointer items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={m.enabled}
+                    onChange={() => setMethod(m._key, { enabled: !m.enabled })}
+                    className="h-4 w-4 accent-accent"
+                  />
+                  <span className="text-[11px] uppercase tracking-[0.1em] text-secondary">
+                    Visible in cart
+                  </span>
+                </label>
+                <label className="flex cursor-pointer items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={m.compEligible}
+                    onChange={() => setMethod(m._key, { compEligible: !m.compEligible })}
+                    className="h-4 w-4 accent-accent"
+                  />
+                  <span className="text-[11px] uppercase tracking-[0.1em] text-secondary">
+                    Free over threshold
+                  </span>
+                </label>
+              </div>
+            </div>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={addMethod}
+          disabled={methods.length >= 12}
+          className="mt-3 h-9 rounded-chip border border-dashed border-border px-4 text-[11px] font-semibold uppercase tracking-[0.12em] text-secondary transition hover:border-accent hover:text-ink disabled:opacity-40"
+        >
+          + Add method
+        </button>
+        <p className="mt-2 text-[11px] text-muted">
+          Removing a method doesn&rsquo;t touch existing order requests or invoices — they keep the
+          method and price saved at submit. Buyers whose default method was removed fall back to the
+          first visible method.
+        </p>
+      </div>
+
+      {error ? <p className="text-[12px] text-danger">{error}</p> : null}
+      {message ? <p className="text-[12px] text-[#4E9A6A]">{message}</p> : null}
+      <button
+        type="submit"
+        disabled={pending}
+        aria-busy={pending || undefined}
+        className="h-10 rounded-chip bg-ink px-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-ground disabled:opacity-60"
+      >
+        {pending ? "Saving…" : "Save shipping"}
       </button>
     </form>
   );

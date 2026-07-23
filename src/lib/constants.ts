@@ -66,9 +66,13 @@ export const HOLD_HOURS = 7 * 24;
 export const INSURED_SHIPPING = 185;
 
 /**
- * Buyer-selectable shipping methods on the wholesale cart.
- * Prices are placeholders — update this list anytime; existing order requests
- * keep whatever method/price was saved at submit.
+ * First-run seed for buyer-selectable shipping methods. The live list is fully
+ * manager-managed in Settings → Shipping (`salesPortal.shippingRules`, see
+ * src/lib/shipping-rules.ts) — add/remove/rename, prices, visibility, and
+ * free-shipping comp eligibility. This catalog only populates orgs that have
+ * never saved shipping settings, and provides label fallbacks for pre-existing
+ * saved method ids. Existing order requests keep whatever method/price was
+ * saved at submit.
  */
 export const SHIPPING_OPTIONS = [
   {

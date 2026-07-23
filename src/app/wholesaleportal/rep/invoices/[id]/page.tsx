@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getInvoiceById, displayInvoiceStatus } from "@/lib/firestore/invoices";
+import { getFulfillmentRecord } from "@/lib/firestore/fulfillment";
 import { money, fullDate } from "@/lib/format";
 import { InvoiceBadge, FulfillmentBadge } from "@/components/badges";
 import { InvoiceMarkPaidButton } from "@/components/InvoiceMarkPaidButton";
@@ -30,6 +31,11 @@ export default async function StaffInvoiceDetailPage({
   if (!invoice) notFound();
 
   const status = displayInvoiceStatus(invoice);
+  const fulfillment = await getFulfillmentRecord(invoice.id).catch(() => null);
+  // Actual carrier spend (ShipEngine label purchases) vs what the buyer was
+  // charged — the shipping margin on this order. Manual-tracking boxes have no
+  // labelCost, so this only shows once at least one label was bought in-app.
+  const labelCost = (fulfillment?.boxes || []).reduce((s, b) => s + (b.labelCost ?? 0), 0);
 
   return (
     <div className="px-10 pb-12 pt-8">
@@ -84,8 +90,26 @@ export default async function StaffInvoiceDetailPage({
                 Subtotal <span className="font-mono text-ink">{money(invoice.subtotal)}</span>
               </div>
               <div className="flex justify-between py-1 text-secondary">
-                Shipping <span className="font-mono text-ink">{money(invoice.shipping)}</span>
+                <span>
+                  Shipping
+                  {invoice.shippingLabel ? (
+                    <span className="text-muted"> · {invoice.shippingLabel}</span>
+                  ) : null}
+                </span>
+                {invoice.shippingComp ? (
+                  <span className="font-mono text-ink">
+                    <s className="mr-1.5 text-muted">{money(invoice.shippingComp.baseFee)}</s>
+                    Free
+                  </span>
+                ) : (
+                  <span className="font-mono text-ink">{money(invoice.shipping)}</span>
+                )}
               </div>
+              {invoice.shippingComp ? (
+                <p className="py-0.5 text-right text-[11px] text-muted">
+                  Comped — order of {money(invoice.shippingComp.threshold)}+ ships free
+                </p>
+              ) : null}
               <div className="mt-2 flex items-baseline justify-between border-t border-border pt-3">
                 <span className="text-[13px] font-semibold text-ink">Total</span>
                 <span className="font-mono text-[20px] font-semibold text-ink">{money(invoice.total)}</span>
@@ -116,6 +140,16 @@ export default async function StaffInvoiceDetailPage({
                   <Row label="Tracking" value={invoice.trackingNumber || "—"} />
                 )}
                 <Row label="Shipped" value={fullDate(invoice.shippedAt)} />
+                {labelCost > 0 ? (
+                  <div className="mt-3 space-y-1.5 border-t border-border/60 pt-3">
+                    <Row label="Shipping charged" value={money(invoice.shipping)} />
+                    <Row label="Label cost" value={`$${labelCost.toFixed(2)}`} />
+                    <Row
+                      label="Shipping margin"
+                      value={`${invoice.shipping - labelCost < 0 ? "-" : ""}$${Math.abs(invoice.shipping - labelCost).toFixed(2)}`}
+                    />
+                  </div>
+                ) : null}
               </div>
             ) : (
               <>

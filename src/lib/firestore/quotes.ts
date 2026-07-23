@@ -2,6 +2,7 @@ import type { Query } from "firebase-admin/firestore";
 import { getDb, toIso, WHOLESALE_ORG_SLUG } from "./admin";
 import { getLuxesupplyOrg } from "./staff";
 import { INVOICE_REQUEST_TIMEOUT_DAYS } from "@/lib/constants";
+import { parseShippingComp, type ShippingComp } from "@/lib/shipping-rules";
 import { releaseAllHoldsForQuote } from "./holds";
 import { archiveSuggestedLot } from "./suggestedLots";
 import { markSkusSold, resolveTitlesForSkus } from "./catalog";
@@ -24,6 +25,8 @@ export type PortalQuote = {
   shippingMethodId: string;
   shippingLabel: string;
   shipping: number;
+  /** Set when the free-shipping threshold comped this order at submit. */
+  shippingComp: ShippingComp | null;
   adminNotes: string;
   /** Staff member currently working this request (optional claim). */
   claimedByEmail: string | null;
@@ -177,6 +180,7 @@ function serializeQuote(id: string, d: Record<string, unknown>): PortalQuote {
     shippingMethodId: String(d.shippingMethodId || ""),
     shippingLabel: String(d.shippingLabel || ""),
     shipping: Number(d.shipping || 0),
+    shippingComp: parseShippingComp(d.shippingComp),
     adminNotes: String(d.adminNotes || ""),
     claimedByEmail: d.claimedByEmail ? String(d.claimedByEmail) : null,
     claimedByName: d.claimedByName ? String(d.claimedByName) : null,
@@ -544,6 +548,7 @@ export async function createStaffQuote(opts: {
     shippingMethodId: "",
     shippingLabel: "",
     shipping: 0,
+    shippingComp: null,
     adminNotes: "",
     claimedByEmail: opts.createdByEmail,
     claimedByName: opts.createdByDisplayName,

@@ -216,7 +216,9 @@ export default async function BuyerOrderDetailPage({
               />
               <Row
                 label={quote.shippingLabel ? `Shipping · ${quote.shippingLabel}` : "Shipping"}
-                value={money(Math.round(quote.shipping || 0))}
+                value={
+                  quote.shippingComp ? "Free · comped" : money(Math.round(quote.shipping || 0))
+                }
               />
               <Row
                 label="Order total"

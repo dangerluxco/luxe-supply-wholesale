@@ -14,7 +14,9 @@ import { EditClientAccountButton } from "@/components/EditClientAccountButton";
 import { MessageBuyerButton } from "@/components/MessageBuyerButton";
 import { PortalItemLine, PortalThumbnailTile } from "@/components/PortalItemLine";
 import { MicroBadge, InvoiceBadge, TierBadge } from "@/components/badges";
-import { PAYMENT_TIERS, resolveShippingOption } from "@/lib/constants";
+import { PAYMENT_TIERS } from "@/lib/constants";
+import { getShippingRules } from "@/lib/firestore/settings";
+import { enabledShippingMethods, shippingMethodLabel } from "@/lib/shipping-rules";
 import { money, fullDate, initialsOf } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -66,7 +68,8 @@ export default async function ClientDetailPage({
   const cartTotal = cart.reduce((s, i) => s + i.price, 0);
 
   const metrics = computeBuyerAccountMetrics(invoices, quotes);
-  const shippingOption = resolveShippingOption(buyer.shippingMethodId);
+  const shippingRules = await getShippingRules();
+  const shippingMethodName = shippingMethodLabel(shippingRules, buyer.shippingMethodId) ?? "—";
   const creditPct =
     buyer.creditLimit && buyer.creditLimit > 0
       ? Math.min(100, Math.round((metrics.outstanding / buyer.creditLimit) * 100))
@@ -105,7 +108,7 @@ export default async function ClientDetailPage({
               </MicroBadge>
               <TierBadge tier={buyer.paymentTier} />
               <MicroBadge tone="outline-gold">{buyer.paymentTerms}</MicroBadge>
-              <MicroBadge tone="outline-gray">{shippingOption.label}</MicroBadge>
+              <MicroBadge tone="outline-gray">{shippingMethodName}</MicroBadge>
               {buyer.resaleCertVerified ? (
                 <MicroBadge tone="solid-gold">RESALE CERT VERIFIED</MicroBadge>
               ) : null}
@@ -123,7 +126,13 @@ export default async function ClientDetailPage({
           </a>
           <MessageBuyerButton buyerId={buyer.id} disabled={!buyer.email} />
           <AssignCreditButton buyer={buyer} outstanding={metrics.outstanding} />
-          <EditClientAccountButton buyer={buyer} />
+          <EditClientAccountButton
+            buyer={buyer}
+            shippingMethods={enabledShippingMethods(shippingRules).map((m) => ({
+              id: m.id,
+              label: m.label,
+            }))}
+          />
         </div>
       </div>
 
@@ -408,7 +417,7 @@ export default async function ClientDetailPage({
               SHIPPING PROFILE
             </div>
             <div className="space-y-2 text-[12.5px]">
-              <Row label="Default method" value={shippingOption.label} />
+              <Row label="Default method" value={shippingMethodName} />
               <Row label="Attn" value={buyer.shippingAttn || "—"} />
               <Row
                 label="Address"

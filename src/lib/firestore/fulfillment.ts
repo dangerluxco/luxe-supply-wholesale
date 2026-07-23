@@ -164,6 +164,14 @@ export async function getOrCreateFulfillment(invoiceId: string): Promise<{
   return { record: serialize(doc as unknown as Record<string, unknown>), invoice };
 }
 
+/** Read-only lookup (no lazy create) — for staff views that only report on packing. */
+export async function getFulfillmentRecord(invoiceId: string): Promise<FulfillmentRecord | null> {
+  if (!invoiceId) return null;
+  const snap = await getDb().collection(COLLECTION).doc(invoiceId).get();
+  if (!snap.exists) return null;
+  return serialize(snap.data() || {});
+}
+
 export type ScanResult = {
   record: FulfillmentRecord;
   outcome: "box_selected" | "box_created" | "item_assigned" | "error";
