@@ -2,7 +2,15 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { ROLE } from "@/lib/constants";
-import { getQuoteById } from "@/lib/firestore/quotes";
+import { expandQuoteAllSkus, getQuoteById, listQuotesForBuyer } from "@/lib/firestore/quotes";
+import { getCatalogProductsBySkus, loadInventoryCostsBySkus } from "@/lib/firestore/catalog";
+import type { QuoteLineContext } from "@/components/QuoteItemsEditor";
+import { findBuyerByIdentifier } from "@/lib/firestore/buyers";
+import { listInvoicesForBuyer } from "@/lib/firestore/invoices";
+import { computeBuyerAccountMetrics, type BuyerAccountMetrics } from "@/lib/buyerAccount";
+import type { PortalBuyer } from "@/lib/firestore/buyers";
+import { TierBadge } from "@/components/badges";
+import { invoiceRequestDaysLeft, PAYMENT_TIERS } from "@/lib/constants";
 import { QuoteStatusSelect } from "@/components/QuoteStatusSelect";
 import { QuoteNotesForm } from "@/components/QuoteNotesForm";
 import { QuoteActivityThread } from "@/components/QuoteActivityThread";
@@ -18,6 +26,70 @@ import { fullDate, money } from "@/lib/format";
 import { buyerStorefrontOrigin } from "@/lib/notify";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * Client context for the deal screen — tier, terms, credit, payment history.
+ * Everything here already existed on the client detail page; joining it onto
+ * the quote means a rep prices Net-30 decisions without leaving the request.
+ * Best-effort: any failure (guest checkout, Firestore hiccup) renders nothing.
+ */
+async function loadBuyerAccountContext(
+  username: string,
+): Promise<{ buyer: PortalBuyer; metrics: BuyerAccountMetrics } | null> {
+  if (!username) return null;
+  try {
+    const buyer = await findBuyerByIdentifier(username);
+    if (!buyer) return null;
+    const [quotes, invoices] = await Promise.all([
+      listQuotesForBuyer(buyer.username, 30),
+      listInvoicesForBuyer(buyer.username),
+    ]);
+    return { buyer, metrics: computeBuyerAccountMetrics(invoices, quotes) };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Cost / comp / stock facts for every SKU on the request (lot members included)
+ * so the line editor can show live margin and flag sold/held-elsewhere pieces
+ * right where prices are set. Best-effort: failures render a plain editor.
+ */
+async function loadLineContext(
+  items: Array<Record<string, unknown>>,
+  buyerUsername: string,
+): Promise<Record<string, QuoteLineContext>> {
+  const out: Record<string, QuoteLineContext> = {};
+  try {
+    const skus = expandQuoteAllSkus(items);
+    if (!skus.length) return out;
+    // Costs come from raw inventory (IIQItemDetails) — quote lines routinely
+    // leave the curated storefront catalog (sold, de-listed), and margin must
+    // survive that. Stock/comp facts layer on top when the piece still resolves.
+    const [costs, map] = await Promise.all([
+      loadInventoryCostsBySkus(skus),
+      getCatalogProductsBySkus(skus, {
+        includeBundled: true,
+        buyerUsername: buyerUsername || null,
+      }).catch(() => new Map<string, never>()),
+    ]);
+    for (const sku of skus) {
+      const p = map.get(sku) || map.get(sku.toUpperCase());
+      const cost = costs.get(sku) ?? p?.cost ?? null;
+      if (!p && cost == null) continue;
+      out[sku.toUpperCase()] = {
+        cost,
+        compAvg: p?.hostCompAvgUsd ?? null,
+        soldOut: p?.soldOut ?? false,
+        heldByOther: p?.held ?? false,
+        heldUntil: p?.heldUntil ?? null,
+      };
+    }
+  } catch {
+    // fall through with whatever resolved
+  }
+  return out;
+}
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
@@ -39,7 +111,11 @@ export default async function StaffQuoteDetailPage({
   const { id } = await params;
   const quote = await getQuoteById(id);
   if (!quote) notFound();
-  const activities = await listQuoteActivities(quote.id).catch(() => []);
+  const [activities, account, lineContext] = await Promise.all([
+    listQuoteActivities(quote.id).catch(() => []),
+    loadBuyerAccountContext(quote.portalUsername),
+    loadLineContext(quote.items, quote.portalUsername),
+  ]);
 
   const initialCurationUrl = quote.curationToken
     ? `${buyerStorefrontOrigin()}/curation/${quote.curationToken}`
@@ -136,7 +212,7 @@ export default async function StaffQuoteDetailPage({
               </div>
               <span className="text-[11px] text-muted">Remove products or adjust prices below.</span>
             </div>
-            <QuoteItemsEditor quoteId={quote.id} items={quote.items} />
+            <QuoteItemsEditor quoteId={quote.id} items={quote.items} context={lineContext} />
           </div>
 
           <div className="rounded-card border border-border bg-surface p-5">
@@ -215,8 +291,16 @@ export default async function StaffQuoteDetailPage({
           </div>
 
           <div className="rounded-card border border-border bg-surface p-5">
-            <div className="micro-badge mb-3 text-[10px] tracking-[0.14em] text-accent">
-              BUYER
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div className="micro-badge text-[10px] tracking-[0.14em] text-accent">BUYER</div>
+              {account ? (
+                <Link
+                  href={`/wholesaleportal/rep/clients/${account.buyer.id}`}
+                  className="text-[11px] text-secondary transition hover:text-ink"
+                >
+                  Open client record →
+                </Link>
+              ) : null}
             </div>
             <div className="space-y-2 text-[12.5px]">
               <Row label="Name" value={quote.customerName || quote.buyerDisplayName || "—"} />
@@ -230,6 +314,81 @@ export default async function StaffQuoteDetailPage({
             </div>
           </div>
 
+          {account ? (
+            <div className="rounded-card border border-border bg-surface p-5">
+              <div className="mb-3 flex items-center gap-2">
+                <div className="micro-badge text-[10px] tracking-[0.14em] text-accent">
+                  ACCOUNT
+                </div>
+                <InfoTip label="Why this is here">
+                  Trust and payment context for pricing this deal — the same numbers as the
+                  client record, so you don&apos;t have to leave the request to decide on
+                  terms or discounts.
+                </InfoTip>
+              </div>
+              <div className="mb-3">
+                <TierBadge tier={account.buyer.paymentTier} />
+              </div>
+              <div className="space-y-2 text-[12.5px]">
+                <Row
+                  label="Terms"
+                  value={
+                    account.buyer.paymentTerms ||
+                    PAYMENT_TIERS.find((t) => t.tier === account.buyer.paymentTier)
+                      ?.defaultTerms ||
+                    "—"
+                  }
+                />
+                <Row
+                  label="Credit limit"
+                  value={
+                    account.buyer.creditLimit != null
+                      ? money(Math.round(account.buyer.creditLimit))
+                      : "Not set"
+                  }
+                />
+                <Row
+                  label="Outstanding"
+                  value={
+                    account.metrics.outstanding > 0
+                      ? `${money(Math.round(account.metrics.outstanding))} · ${account.metrics.outstandingCount} open`
+                      : "$0"
+                  }
+                />
+                {account.buyer.creditLimit != null ? (
+                  <Row
+                    label="Credit remaining"
+                    value={money(
+                      Math.round(
+                        Math.max(0, account.buyer.creditLimit - account.metrics.outstanding),
+                      ),
+                    )}
+                  />
+                ) : null}
+                <Row
+                  label="Lifetime purchases"
+                  value={money(Math.round(account.metrics.lifetimePurchases))}
+                />
+                <Row
+                  label="Avg order"
+                  value={
+                    account.metrics.avgOrderValue != null
+                      ? money(Math.round(account.metrics.avgOrderValue))
+                      : "—"
+                  }
+                />
+                <Row
+                  label="On-time payment"
+                  value={
+                    account.metrics.onTimePaymentRate != null
+                      ? `${account.metrics.onTimePaymentRate}%`
+                      : "No history"
+                  }
+                />
+              </div>
+            </div>
+          ) : null}
+
           <div className="rounded-card border border-border bg-surface p-5">
             <div className="micro-badge mb-3 text-[10px] tracking-[0.14em] text-accent">
               TIMELINE
@@ -237,6 +396,22 @@ export default async function StaffQuoteDetailPage({
             <div className="space-y-2 text-[12.5px]">
               <Row label="Submitted" value={fullDate(quote.createdAt)} />
               <Row label="Last updated" value={fullDate(quote.updatedAt)} />
+              {(() => {
+                const left = invoiceRequestDaysLeft(quote.createdAt, quote.status);
+                if (left == null) return null;
+                return (
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted">Times out</span>
+                    <span
+                      className={`text-right ${
+                        left <= 2 ? "font-semibold text-danger" : "text-ink"
+                      }`}
+                    >
+                      {left <= 0 ? "today — holds release" : `in ${left} day${left === 1 ? "" : "s"}`}
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>

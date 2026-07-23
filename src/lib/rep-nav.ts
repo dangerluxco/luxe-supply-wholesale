@@ -16,7 +16,14 @@ export type RepNavIconKey =
   | "staff"
   | "settings";
 
-export type RepNavItem = { label: string; href: string; icon: RepNavIconKey };
+export type RepNavItem = {
+  label: string;
+  href: string;
+  icon: RepNavIconKey;
+  /** Attention count pill (rendered only when > 0; set by the rep layout). */
+  badge?: number;
+  badgeTone?: "accent" | "danger";
+};
 
 const DEFAULT_FEATURES: PortalFeatures = {
   leads: true,

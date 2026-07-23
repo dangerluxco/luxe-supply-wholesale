@@ -102,6 +102,20 @@ export function RepSidebar({
             >
               <Icon className="h-[18px] w-[18px] shrink-0" />
               {n.label}
+              {n.badge != null && n.badge > 0 ? (
+                <span
+                  className={clsx(
+                    "ml-auto rounded-full px-1.5 py-0.5 font-mono text-[10px] leading-none",
+                    active
+                      ? "bg-ink/15 text-ink"
+                      : n.badgeTone === "danger"
+                        ? "bg-danger/80 text-white"
+                        : "bg-accent/90 text-ink",
+                  )}
+                >
+                  {n.badge > 99 ? "99+" : n.badge}
+                </span>
+              ) : null}
             </Link>
           );
         })}

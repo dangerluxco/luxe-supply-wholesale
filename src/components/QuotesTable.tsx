@@ -15,6 +15,8 @@ export type QuoteRow = {
   itemCount: number;
   total: number | null;
   waiting: string;
+  /** Days until the 7-day auto-timeout releases holds (active statuses only). */
+  timesOutDays?: number | null;
   status: string;
   claimedByEmail: string | null;
   claimedByName: string | null;
@@ -180,7 +182,20 @@ export function QuotesTable({
             <div className="text-right font-mono">
               {q.total != null ? money(Math.round(q.total)) : "—"}
             </div>
-            <div className="text-center font-mono text-muted">{q.waiting}</div>
+            <div className="text-center font-mono">
+              <div className="text-muted">{q.waiting}</div>
+              {q.timesOutDays != null ? (
+                <div
+                  className={`text-[10px] ${
+                    q.timesOutDays <= 2 ? "font-semibold text-danger" : "text-muted"
+                  }`}
+                >
+                  {q.timesOutDays <= 0
+                    ? "times out today"
+                    : `times out in ${q.timesOutDays}d`}
+                </div>
+              ) : null}
+            </div>
             <QuoteStatusSelect quoteId={q.id} status={q.status} />
             <QuoteClaimControls
               quoteId={q.id}

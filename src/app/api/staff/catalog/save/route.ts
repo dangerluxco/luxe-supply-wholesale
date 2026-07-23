@@ -27,6 +27,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Add at least one item before saving." }, { status: 400 });
   }
 
+  // Refuse unresolved rows: a manually priced SKU that isn't in inventory would
+  // pass the storefront's `price != null` filter and sell a phantom item. The
+  // client blocks this too; this is the backstop.
+  const unresolved = body.items.filter((i) => !i?.inDb).map((i) => String(i?.sku || "?"));
+  if (unresolved.length) {
+    return NextResponse.json(
+      {
+        error: `${unresolved.length} SKU${unresolved.length === 1 ? "" : "s"} not found in inventory — remove or fix before saving: ${unresolved.join(", ")}`,
+      },
+      { status: 400 },
+    );
+  }
+
   try {
     await saveCuratedCatalog({
       items: body.items,

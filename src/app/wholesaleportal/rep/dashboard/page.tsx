@@ -85,6 +85,7 @@ export default async function StaffDashboardPage() {
   let quotesResult: Awaited<ReturnType<typeof listQuotes>> = {
     quotes: [],
     openCount: 0,
+    activeCount: 0,
     organizationId: "",
   };
   let invoices: Awaited<ReturnType<typeof listInvoices>> = [];

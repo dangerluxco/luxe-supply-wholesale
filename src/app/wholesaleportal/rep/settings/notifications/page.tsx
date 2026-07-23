@@ -1,5 +1,6 @@
 import { SettingsSectionShell } from "@/components/settings/SettingsSectionShell";
 import { NotificationsSettingsForm } from "@/components/settings/SettingsForms";
+import { EmailConfigWarning } from "@/components/EmailConfigWarning";
 import { requireSettingsSession } from "@/lib/settings-access";
 import { getNotifyEmails } from "@/lib/firestore/settings";
 
@@ -15,6 +16,7 @@ export default async function SettingsNotificationsPage() {
       active="notifications"
       isManager={isManager}
     >
+      <EmailConfigWarning />
       <NotificationsSettingsForm initialEmails={emails} />
     </SettingsSectionShell>
   );

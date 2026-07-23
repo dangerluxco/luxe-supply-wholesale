@@ -44,6 +44,15 @@ export async function POST(
   if (!(QUOTE_STATUSES as readonly string[]).includes(next)) {
     return NextResponse.json({ error: "Invalid status." }, { status: 400 });
   }
+  // "quoted" (Invoiced) marks every SKU sold and releases holds; setting it
+  // without an invoice document leaves sold-out inventory and nothing in AR.
+  // The only path to Invoiced is Generate invoice, which does both together.
+  if (next === "quoted") {
+    return NextResponse.json(
+      { error: "Use Generate invoice — it creates the invoice and marks the items sold." },
+      { status: 400 },
+    );
+  }
 
   try {
     await updateQuoteStatus(quoteId, { status: next }, session.email);

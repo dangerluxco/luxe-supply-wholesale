@@ -5,6 +5,17 @@ import { useRouter } from "next/navigation";
 import { PortalItemLine } from "@/components/PortalItemLine";
 import { SimilarItemsCarousel, type SimilarItem } from "@/components/SimilarItemsLink";
 import { money } from "@/lib/format";
+import { formatMargin, marginFor, marginTone, marginToneClass } from "@/lib/pricing";
+
+/** Staff-only pricing/stock facts for one SKU, resolved server-side. */
+export type QuoteLineContext = {
+  cost: number | null;
+  compAvg: number | null;
+  soldOut: boolean;
+  /** Held by a different buyer (this request's own holds don't flag). */
+  heldByOther: boolean;
+  heldUntil: string | null;
+};
 
 type EditableItem = {
   sku: string;
@@ -65,9 +76,12 @@ function toEditable(raw: Array<Record<string, unknown>>): EditableItem[] {
 export function QuoteItemsEditor({
   quoteId,
   items,
+  context = {},
 }: {
   quoteId: string;
   items: Array<Record<string, unknown>>;
+  /** Keyed by UPPERCASE SKU. Absent keys render a plain row (no margin/stock line). */
+  context?: Record<string, QuoteLineContext>;
 }) {
   const initial = useMemo(() => toEditable(items), [items]);
   const router = useRouter();
@@ -115,6 +129,22 @@ export function QuoteItemsEditor({
     () => rows.flatMap((r) => [r.sku, ...r.lotItems.map((li) => String(li?.sku || ""))]),
     [rows],
   );
+
+  // Cost basis for a row — lot rows sum their members; null when any piece's
+  // cost is unknown (a partial sum would show a fake margin).
+  function rowCost(item: EditableItem): number | null {
+    if (item.isSuggestedLot) {
+      if (!item.lotItems.length) return null;
+      let sum = 0;
+      for (const li of item.lotItems) {
+        const c = context[String(li?.sku || "").toUpperCase()]?.cost;
+        if (c == null) return null;
+        sum += c;
+      }
+      return sum;
+    }
+    return context[item.sku.toUpperCase()]?.cost ?? null;
+  }
 
   function discardChanges() {
     setRows(savedRows);
@@ -223,6 +253,40 @@ export function QuoteItemsEditor({
                 Remove
               </button>
             </div>
+            {(() => {
+              const ctx = item.isSuggestedLot ? null : context[item.sku.toUpperCase()];
+              const cost = rowCost(item);
+              const margin = marginFor(
+                cost != null ? cost * item.quantity : null,
+                item.price * item.quantity,
+              );
+              const hasFacts = cost != null || ctx?.compAvg != null || ctx?.soldOut || ctx?.heldByOther;
+              if (!hasFacts) return null;
+              return (
+                <div className="col-span-full flex flex-wrap items-center gap-x-3 gap-y-1 pt-1 font-mono text-[10.5px]">
+                  {cost != null ? (
+                    <>
+                      <span className="text-muted">cost {money(Math.round(cost))}</span>
+                      <span className={marginToneClass(marginTone(margin.percent))}>
+                        margin {formatMargin(margin)}
+                      </span>
+                    </>
+                  ) : null}
+                  {ctx?.compAvg != null ? (
+                    <span className="text-muted">comp avg {money(Math.round(ctx.compAvg))}</span>
+                  ) : null}
+                  {ctx?.soldOut ? (
+                    <span className="rounded-chip border border-danger/40 bg-danger/5 px-1.5 py-0.5 font-semibold uppercase tracking-[0.08em] text-danger">
+                      Sold
+                    </span>
+                  ) : ctx?.heldByOther ? (
+                    <span className="rounded-chip border border-accent/50 bg-accent/10 px-1.5 py-0.5 font-semibold uppercase tracking-[0.08em] text-accent">
+                      Held · another buyer
+                    </span>
+                  ) : null}
+                </div>
+              );
+            })()}
             {!item.isSuggestedLot ? (
               <div className="col-span-full border-t border-border/60 pt-1">
                 <SimilarItemsCarousel
@@ -237,10 +301,30 @@ export function QuoteItemsEditor({
         ))}
       </div>
 
-      <div className="mt-3 flex items-center justify-between text-[12.5px]">
+      <div className="mt-3 flex items-center justify-between gap-3 text-[12.5px]">
         <span className="text-muted">
           {rows.length} item{rows.length === 1 ? "" : "s"}
         </span>
+        {(() => {
+          // Whole-request margin — only when every row's cost is known.
+          let costSum = 0;
+          let allKnown = rows.length > 0;
+          for (const r of rows) {
+            const c = rowCost(r);
+            if (c == null) {
+              allKnown = false;
+              break;
+            }
+            costSum += c * r.quantity;
+          }
+          if (!allKnown) return null;
+          const m = marginFor(costSum, total);
+          return (
+            <span className={`font-mono text-[11px] ${marginToneClass(marginTone(m.percent))}`}>
+              margin {formatMargin(m)}
+            </span>
+          );
+        })()}
         <span className="font-mono text-ink">{money(Math.round(total))}</span>
       </div>
 

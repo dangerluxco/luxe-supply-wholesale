@@ -1,6 +1,7 @@
 import { listHoldAlertsForStaff } from "@/lib/firestore/holdAlerts";
 import { getCatalogProductsBySkus } from "@/lib/firestore/catalog";
 import { EmptyState } from "@/components/EmptyState";
+import { EmailConfigWarning } from "@/components/EmailConfigWarning";
 import { NotifyBuyerButton } from "@/components/NotifyBuyerButton";
 import { fullDate } from "@/lib/format";
 import { requirePortalFeature } from "@/lib/require-feature";
@@ -24,9 +25,12 @@ export default async function StaffWishlistPage() {
       <div className="mb-6 flex items-baseline gap-3">
         <h1 className="text-[24px] font-semibold text-ink">Wishlist demand</h1>
         <span className="text-[12px] text-muted">
-          Buyers waiting on held pieces — notify them the moment a piece frees up
+          Buyers waiting on held pieces — freed-up pieces email automatically each morning;
+          use Notify to send sooner
         </span>
       </div>
+
+      <EmailConfigWarning />
 
       {alerts.length === 0 ? (
         <EmptyState

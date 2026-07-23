@@ -2,6 +2,7 @@ import type { PortalQuote } from "@/lib/firestore/quotes";
 import type { PortalInvoice } from "@/lib/firestore/invoices";
 import type { PortalBuyer } from "@/lib/firestore/buyers";
 import type { BuyerRegistrationRequest } from "@/lib/firestore/registrationRequests";
+import { INVOICE_REQUEST_TIMEOUT_DAYS } from "@/lib/constants";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const OPEN_STATUSES = new Set(["open", "contacted"]);
@@ -129,15 +130,29 @@ export function computeRepDashboard(input: {
       key,
       label,
       count: inColumn.length,
-      cards: inColumn.slice(0, 6).map((q) => ({
-        id: q.id,
-        name: q.customerName || q.buyerDisplayName || q.customerEmail || "—",
-        subtitle: `${q.portalUsername ? `@${q.portalUsername}` : "guest"} · ${q.itemCount} item${
-          q.itemCount === 1 ? "" : "s"
-        } · waiting ${elapsedShort(q.createdAt, now)}`,
-        total: Math.round((q.cartTotal || 0) + (q.shipping || 0)),
-        href: `/wholesaleportal/rep/quotes/${q.id}`,
-      })),
+      cards: inColumn.slice(0, 6).map((q) => {
+        // Surface the timeout cliff (not just elapsed time) while it can still
+        // be acted on — holds release and lots deactivate when it hits.
+        let timeoutNote = "";
+        if (OPEN_STATUSES.has(q.status) && q.createdAt) {
+          const t = new Date(q.createdAt).getTime();
+          if (Number.isFinite(t)) {
+            const left = Math.ceil((t + INVOICE_REQUEST_TIMEOUT_DAYS * DAY_MS - now) / DAY_MS);
+            if (left <= 2) {
+              timeoutNote = left <= 0 ? " · ⚠ times out today" : ` · ⚠ times out in ${left}d`;
+            }
+          }
+        }
+        return {
+          id: q.id,
+          name: q.customerName || q.buyerDisplayName || q.customerEmail || "—",
+          subtitle: `${q.portalUsername ? `@${q.portalUsername}` : "guest"} · ${q.itemCount} item${
+            q.itemCount === 1 ? "" : "s"
+          } · waiting ${elapsedShort(q.createdAt, now)}${timeoutNote}`,
+          total: Math.round((q.cartTotal || 0) + (q.shipping || 0)),
+          href: `/wholesaleportal/rep/quotes/${q.id}`,
+        };
+      }),
     };
   });
 

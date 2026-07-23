@@ -16,7 +16,12 @@ export function HoldCountdown({ expiresAt }: { expiresAt: string }) {
       const totalMin = Math.floor(ms / 60000);
       const h = Math.floor(totalMin / 60);
       const m = totalMin % 60;
-      setLabel(`held ${h}h ${String(m).padStart(2, "0")}m`);
+      // Long holds read in days ("held 6d 23h"), not raw hours ("held 167h 59m").
+      if (h >= 48) {
+        setLabel(`held ${Math.floor(h / 24)}d ${h % 24}h`);
+      } else {
+        setLabel(`held ${h}h ${String(m).padStart(2, "0")}m`);
+      }
     }
     tick();
     const id = setInterval(tick, 30000);

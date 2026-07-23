@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
-import { ROLE } from "@/lib/constants";
+import { invoiceRequestDaysLeft, ROLE } from "@/lib/constants";
 import { listQuotes } from "@/lib/firestore/quotes";
+import { AutoRefresh } from "@/components/AutoRefresh";
 import { EmptyState } from "@/components/EmptyState";
 import { QuotesTable } from "@/components/QuotesTable";
 import { InfoTip } from "@/components/InfoTip";
@@ -29,10 +30,13 @@ export default async function RepDashboard({
   if (!session || session.role === ROLE.BUYER) redirect("/wholesaleportal/sign-in");
 
   const params = await searchParams;
-  const status = String(params.status || "open").toLowerCase();
-  const { quotes, openCount } = await listQuotes({ status, limit: 50 });
+  // Default to the active pipeline (open + contacted) — matching the dashboard's
+  // "open requests" KPI — so the landing view is never empty while deals are live.
+  const status = String(params.status || "active").toLowerCase();
+  const { quotes, openCount, activeCount } = await listQuotes({ status, limit: 50 });
 
   const pipeline = [
+    { label: "Active", status: "active", href: "/wholesaleportal/rep?status=active" },
     { label: "Open", status: "open", href: "/wholesaleportal/rep?status=open" },
     { label: "Contacted", status: "contacted", href: "/wholesaleportal/rep?status=contacted" },
     { label: "Invoiced", status: "quoted", href: "/wholesaleportal/rep?status=quoted" },
@@ -42,6 +46,9 @@ export default async function RepDashboard({
 
   return (
     <div className="px-10 pb-12 pt-8">
+      {/* The main work queue must catch new submissions and teammates' claims
+          without a manual reload — same 20s visible-tab poll as the dashboard. */}
+      <AutoRefresh />
       <div className="mb-6 flex flex-wrap items-baseline gap-4">
         <h1 className="flex items-center gap-2 text-[24px] font-semibold text-ink">
           Order requests
@@ -54,7 +61,7 @@ export default async function RepDashboard({
           </InfoTip>
         </h1>
         <span className="text-[12px] text-muted">
-          Live from Firestore · {openCount} open
+          Live from Firestore · {activeCount} active ({openCount} open)
         </span>
         <div className="flex-1" />
         <a
@@ -110,6 +117,7 @@ export default async function RepDashboard({
             itemCount: q.itemCount,
             total: q.cartTotal != null ? q.cartTotal + (q.shipping || 0) : null,
             waiting: elapsed(q.createdAt),
+            timesOutDays: invoiceRequestDaysLeft(q.createdAt, q.status),
             status: q.status,
             claimedByEmail: q.claimedByEmail,
             claimedByName: q.claimedByName,

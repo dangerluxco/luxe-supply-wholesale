@@ -361,6 +361,17 @@ export function CatalogSettingsForm({
     setError(null);
     setMessage(null);
     const unresolvedSkus = draft.items.filter((i) => !i.inDb).map((i) => i.sku);
+    // Hard guard (Save is also disabled): an unresolved SKU with a manual price
+    // would pass the storefront's `price != null` filter and go live as a
+    // phantom item with no inventory behind it.
+    if (unresolvedSkus.length > 0) {
+      setError(
+        `Cannot save with ${unresolvedSkus.length} unresolved SKU${
+          unresolvedSkus.length === 1 ? "" : "s"
+        } — remove or fix: ${unresolvedSkus.join(", ")}`,
+      );
+      return;
+    }
     start(async () => {
       const res = await fetch("/api/staff/catalog/save", {
         method: "POST",
@@ -553,9 +564,21 @@ export function CatalogSettingsForm({
 
         {draftUnresolvedCount > 0 ? (
           <div className="space-y-1.5 rounded-chip border border-danger/40 bg-danger/5 px-3 py-2 text-[12px] text-danger">
-            <div>
-              {draftUnresolvedCount} SKU{draftUnresolvedCount === 1 ? "" : "s"} not found in
-              inventory — remove or fix before saving.
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span>
+                {draftUnresolvedCount} SKU{draftUnresolvedCount === 1 ? "" : "s"} not found in
+                inventory — Save is disabled until they are removed or fixed.
+              </span>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() =>
+                  setDraft((d) => ({ ...d, items: d.items.filter((i) => i.inDb) }))
+                }
+                className="rounded-chip border border-danger/40 bg-surface px-2 py-1 text-[11px] font-semibold text-danger hover:bg-danger/10 disabled:opacity-50"
+              >
+                Remove all unresolved
+              </button>
             </div>
             <div className="flex flex-wrap gap-1.5 font-mono text-[11px]">
               {draftUnresolvedSkus.map((sku, i) => (
@@ -683,8 +706,15 @@ export function CatalogSettingsForm({
         <div className="flex flex-wrap items-center gap-3">
           <button
             type="button"
-            disabled={pending || draft.items.length === 0 || !dirty}
+            disabled={
+              pending || draft.items.length === 0 || !dirty || draftUnresolvedCount > 0
+            }
             onClick={saveCatalog}
+            title={
+              draftUnresolvedCount > 0
+                ? "Remove or fix the unresolved SKUs above before saving."
+                : undefined
+            }
             className="h-9 rounded-chip bg-ink px-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-ground disabled:opacity-60"
           >
             {pending ? "Saving…" : "Save catalog"}

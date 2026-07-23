@@ -246,10 +246,19 @@ async function hydrateQuoteItemTitles(quote: PortalQuote): Promise<PortalQuote> 
   };
 }
 
+/** Statuses that count as "active" — work in progress a rep still owns. Keep in
+ * sync with OPEN_STATUSES in repDashboard.ts (the dashboard's "open" KPI). */
+export const ACTIVE_QUOTE_STATUSES = ["open", "contacted"] as const;
+
 export async function listQuotes(options?: {
   status?: string;
   limit?: number;
-}): Promise<{ quotes: PortalQuote[]; openCount: number; organizationId: string }> {
+}): Promise<{
+  quotes: PortalQuote[];
+  openCount: number;
+  activeCount: number;
+  organizationId: string;
+}> {
   const org = await getLuxesupplyOrg();
   const statusFilter = String(options?.status || "open").toLowerCase();
   // Ceiling raised from 100 to 500 so the performance dashboard can pull a full
@@ -261,7 +270,9 @@ export async function listQuotes(options?: {
     .collection("salesPortalQuotes")
     .where("organizationId", "==", org.id);
 
-  if (statusFilter && statusFilter !== "all") {
+  if (statusFilter === "active") {
+    query = query.where("status", "in", [...ACTIVE_QUOTE_STATUSES]);
+  } else if (statusFilter && statusFilter !== "all") {
     query = query.where("status", "==", statusFilter);
   }
 
@@ -277,19 +288,26 @@ export async function listQuotes(options?: {
     .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
 
   let openCount = 0;
+  let activeCount = 0;
   try {
-    const openSnap = await db
+    const activeSnap = await db
       .collection("salesPortalQuotes")
       .where("organizationId", "==", org.id)
-      .where("status", "==", "open")
-      .limit(100)
+      .where("status", "in", [...ACTIVE_QUOTE_STATUSES])
+      .limit(200)
       .get();
-    openCount = openSnap.size;
+    activeCount = activeSnap.size;
+    openCount = activeSnap.docs.filter(
+      (doc) => (doc.data() || {}).status === "open",
+    ).length;
   } catch {
     openCount = quotes.filter((q) => q.status === "open").length;
+    activeCount = quotes.filter((q) =>
+      (ACTIVE_QUOTE_STATUSES as readonly string[]).includes(q.status),
+    ).length;
   }
 
-  return { quotes, openCount, organizationId: org.id };
+  return { quotes, openCount, activeCount, organizationId: org.id };
 }
 
 export async function getQuoteById(id: string): Promise<PortalQuote | null> {
