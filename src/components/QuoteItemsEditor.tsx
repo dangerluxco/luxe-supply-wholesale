@@ -229,6 +229,7 @@ export function QuoteItemsEditor({
                   sku={item.sku}
                   excludeSkus={allKnownSkus}
                   onAdd={addSuggestedRow}
+                  addLabel="Add to order"
                 />
               </div>
             ) : null}

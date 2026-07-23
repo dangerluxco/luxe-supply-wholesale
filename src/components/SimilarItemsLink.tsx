@@ -61,6 +61,7 @@ function SimilarItemModal({
   onAdd,
   onAddAsHero,
   addingHero,
+  addLabel,
 }: {
   item: SimilarItem;
   adding: boolean;
@@ -68,6 +69,7 @@ function SimilarItemModal({
   onAdd: () => void;
   onAddAsHero?: () => void;
   addingHero?: boolean;
+  addLabel: string;
 }) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -129,7 +131,7 @@ function SimilarItemModal({
             onClick={onAdd}
             className="h-10 w-full rounded-chip border border-border text-[11.5px] font-semibold uppercase tracking-[0.14em] text-secondary transition hover:border-accent hover:text-ink disabled:opacity-60"
           >
-            {adding ? "Adding…" : "Add to catalog"}
+            {adding ? "Adding…" : addLabel}
           </button>
           {onAddAsHero ? (
             <button
@@ -157,12 +159,15 @@ export function SimilarItemsCarousel({
   excludeSkus,
   onAdd,
   onAddAsHero,
+  addLabel = "Add to catalog",
 }: {
   sku: string;
   excludeSkus: string[];
   onAdd: (item: SimilarItem) => Promise<void> | void;
   /** Curation-only: feature the item live for the buyer immediately instead of just adding it to the catalog. */
   onAddAsHero?: (item: SimilarItem) => Promise<void> | void;
+  /** Label for the modal's add button — set per context (e.g. "Add to order" on order requests). */
+  addLabel?: string;
 }) {
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<SimilarItem[]>([]);
@@ -341,6 +346,7 @@ export function SimilarItemsCarousel({
           onClose={() => setModalSku(null)}
           onAdd={() => handleAdd(modalItem)}
           onAddAsHero={onAddAsHero ? () => handleAddAsHero(modalItem) : undefined}
+          addLabel={addLabel}
         />
       ) : null}
     </div>
