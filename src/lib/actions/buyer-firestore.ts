@@ -110,6 +110,15 @@ export async function submitInvoiceRequest(opts?: {
     shippingComp: shipping.comped
       ? { applied: true, threshold: shipping.threshold, baseFee: shipping.basePrice }
       : null,
+    shippingCredit:
+      shipping.upgradeCredit > 0
+        ? {
+            applied: true,
+            threshold: shipping.threshold,
+            baseFee: shipping.basePrice,
+            credit: shipping.upgradeCredit,
+          }
+        : null,
   });
   await setBuyerCart(session.id, []);
   try {

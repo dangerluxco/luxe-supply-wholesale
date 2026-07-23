@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireFulfillmentAccess } from "@/lib/staff-api-auth";
 import {
+  createBox,
   getOrCreateFulfillment,
   markFulfillmentShipped,
   markFulfillmentUnshipped,
@@ -15,8 +16,19 @@ import {
 } from "@/lib/firestore/fulfillment";
 import { markInvoiceShipped, markInvoiceUnshipped, type PortalInvoice } from "@/lib/firestore/invoices";
 import { attachShipmentToQuote, clearShipmentFromQuote } from "@/lib/firestore/quotes";
-import { findBuyerByIdentifier, updateBuyerAccountDetails } from "@/lib/firestore/buyers";
-import { getRates, purchaseLabelFromRate, voidLabel, shipEngineConfigured } from "@/lib/shipengine";
+import {
+  findBuyerByIdentifier,
+  updateBuyerAccountDetails,
+  type PortalBuyer,
+} from "@/lib/firestore/buyers";
+import {
+  getRates,
+  purchaseLabelFromRate,
+  voidLabel,
+  shipEngineConfigured,
+  type RateQuote,
+  type ShipTo,
+} from "@/lib/shipengine";
 import { logAudit } from "@/lib/firestore/audit";
 import { sendShippedEmail } from "@/lib/notify";
 import { trackingUrlFor, friendlyCarrierName } from "@/lib/tracking";
@@ -47,6 +59,24 @@ function boxContentsValue(
     value += (invoice.total / record.expectedSkus.length) * unknown;
   }
   return Math.round(value);
+}
+
+/** Ship-to from the buyer's account (or null when no complete address is on file). */
+function shipToFromBuyer(buyer: PortalBuyer | null, fallbackName: string): ShipTo | null {
+  if (!buyer?.shippingLine1 || !buyer.shippingCity || !buyer.shippingState || !buyer.shippingPostalCode) {
+    return null;
+  }
+  return {
+    name: buyer.shippingAttn || buyer.displayName || fallbackName,
+    company: buyer.company || undefined,
+    phone: buyer.phone || undefined,
+    addressLine1: buyer.shippingLine1,
+    addressLine2: buyer.shippingLine2 || undefined,
+    city: buyer.shippingCity,
+    state: buyer.shippingState,
+    postalCode: buyer.shippingPostalCode,
+    country: buyer.shippingCountry || "US",
+  };
 }
 
 export const dynamic = "force-dynamic";
@@ -83,6 +113,7 @@ export async function POST(
     signature?: boolean;
     insure?: boolean;
     insuredValue?: number | null;
+    purchases?: Array<{ boxId?: string; rateId?: string }>;
     address?: {
       attn?: string;
       line1?: string;
@@ -104,6 +135,16 @@ export async function POST(
       );
       const readiness = fulfillmentReadyToShip(result.record);
       return NextResponse.json({ ok: true, ...result, readiness });
+    }
+
+    if (body.action === "add-box") {
+      const { record, boxId } = await createBox(invoiceId, session.email);
+      return NextResponse.json({
+        ok: true,
+        record,
+        currentBoxId: boxId,
+        readiness: fulfillmentReadyToShip(record),
+      });
     }
 
     if (body.action === "tracking") {
@@ -190,6 +231,152 @@ export async function POST(
         rates: rates.slice(0, 8),
         applied: { signature, insuredValue },
       });
+    }
+
+    if (body.action === "rates-all") {
+      // One shipping method for the whole multi-box order: quote every packed
+      // box, keep the services every box can use, and price them as a set.
+      if (!shipEngineConfigured()) {
+        return NextResponse.json({ error: "ShipEngine isn't configured yet." }, { status: 400 });
+      }
+      const { record, invoice } = await getOrCreateFulfillment(invoiceId);
+      const usedBoxIds = new Set(Object.values(record.assignments));
+      const boxes = record.boxes.filter((b) => usedBoxIds.has(b.id) && !b.labelId);
+      if (boxes.length < 2) {
+        return NextResponse.json(
+          { error: "Rate-all needs at least two packed boxes without labels." },
+          { status: 400 },
+        );
+      }
+      const missingWeight = boxes.filter((b) => !b.weightOz);
+      if (missingWeight.length) {
+        return NextResponse.json(
+          {
+            error: `Save weights first — missing on box${missingWeight.length === 1 ? "" : "es"} ${missingWeight
+              .map((b) => b.label)
+              .join(", ")}.`,
+          },
+          { status: 400 },
+        );
+      }
+      const buyer = invoice.portalUsername
+        ? await findBuyerByIdentifier(invoice.portalUsername).catch(() => null)
+        : null;
+      const shipTo = shipToFromBuyer(buyer, invoice.customerName);
+      if (!shipTo) {
+        return NextResponse.json(
+          { error: "Buyer has no shipping address on file.", needsAddress: true, buyerId: buyer?.id || null },
+          { status: 400 },
+        );
+      }
+      const signature = body.signature ?? !!buyer?.shippingSignatureRequired;
+      const insure = body.insure !== false;
+      const perBoxRates = await Promise.all(
+        boxes.map((box) =>
+          getRates(
+            shipTo,
+            {
+              weightOz: box.weightOz!,
+              lengthIn: box.lengthIn,
+              widthIn: box.widthIn,
+              heightIn: box.heightIn,
+            },
+            {
+              signature,
+              insuredValue: insure ? boxContentsValue(record, invoice, box.id) : null,
+            },
+          ),
+        ),
+      );
+      // Group by carrier+service; only services quotable for EVERY box are offered.
+      const key = (r: RateQuote) => `${r.carrier}::${r.serviceCode}`;
+      const first = new Map(perBoxRates[0]!.map((r) => [key(r), r]));
+      const options = [...first.entries()]
+        .map(([k, sample]) => {
+          const picks: Array<{ boxId: string; boxLabel: string; rateId: string; amount: number }> = [];
+          for (let i = 0; i < boxes.length; i += 1) {
+            const match = perBoxRates[i]!.find((r) => key(r) === k);
+            if (!match) return null;
+            picks.push({
+              boxId: boxes[i]!.id,
+              boxLabel: boxes[i]!.label,
+              rateId: match.rateId,
+              amount: match.amount,
+            });
+          }
+          const total = picks.reduce((s, p) => s + p.amount, 0);
+          return {
+            carrier: sample.carrier,
+            service: sample.service,
+            serviceCode: sample.serviceCode,
+            deliveryDays: sample.deliveryDays,
+            total: Math.round(total * 100) / 100,
+            avgPerBox: Math.round((total / picks.length) * 100) / 100,
+            boxes: picks,
+          };
+        })
+        .filter((o): o is NonNullable<typeof o> => o !== null)
+        .sort((a, b) => a.total - b.total)
+        .slice(0, 8);
+      return NextResponse.json({
+        ok: true,
+        options,
+        boxCount: boxes.length,
+        applied: { signature, insure },
+      });
+    }
+
+    if (body.action === "buy-labels-all") {
+      // Purchase the chosen service's rate for every box in one go.
+      if (!shipEngineConfigured()) {
+        return NextResponse.json({ error: "ShipEngine isn't configured yet." }, { status: 400 });
+      }
+      const purchases = (Array.isArray(body.purchases) ? body.purchases : [])
+        .map((p) => ({ boxId: String(p?.boxId || ""), rateId: String(p?.rateId || "") }))
+        .filter((p) => p.boxId && p.rateId);
+      if (!purchases.length) {
+        return NextResponse.json({ error: "Get rates for all boxes first." }, { status: 400 });
+      }
+      const { record: current } = await getOrCreateFulfillment(invoiceId);
+      const failed: Array<{ boxLabel: string; error: string }> = [];
+      let record = current;
+      for (const p of purchases) {
+        const box = current.boxes.find((b) => b.id === p.boxId);
+        if (!box || box.labelId) continue;
+        try {
+          const label = await purchaseLabelFromRate(p.rateId);
+          record = await attachLabelToBox(invoiceId, p.boxId, label);
+          await logAudit({
+            actor: session,
+            action: "fulfillment.label_purchased",
+            entity: "invoice",
+            entityId: invoiceId,
+            payload: {
+              boxId: p.boxId,
+              tracking: label.trackingNumber,
+              carrier: label.carrier,
+              cost: label.cost,
+              batch: true,
+            },
+          });
+        } catch (err) {
+          failed.push({
+            boxLabel: box.label,
+            error: err instanceof Error ? err.message : "Label purchase failed.",
+          });
+        }
+      }
+      if (failed.length) {
+        return NextResponse.json({
+          ok: true,
+          record,
+          readiness: fulfillmentReadyToShip(record),
+          warning: `Label failed on box${failed.length === 1 ? "" : "es"} ${failed
+            .map((f) => f.boxLabel)
+            .join(", ")}: ${failed[0]!.error}`,
+        });
+      }
+      return NextResponse.json({ ok: true, record, readiness: fulfillmentReadyToShip(record) });
     }
 
     if (body.action === "ship-address") {

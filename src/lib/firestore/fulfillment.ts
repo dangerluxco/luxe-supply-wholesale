@@ -177,14 +177,21 @@ export type ScanResult = {
   outcome: "box_selected" | "box_created" | "item_assigned" | "error";
   message: string;
   currentBoxId: string | null;
+  /** Wrong-piece scan (item not on this order) — the console shows a blocking stop alert. */
+  stop?: boolean;
 };
+
+/** Barcodes that open a NEW box must carry this prefix (printed box labels use it). */
+const BOX_BARCODE_PREFIX = /^BOX[-_ ]/i;
 
 /**
  * Process one scan. Rules:
  * - code matches an expected SKU  -> assign to the current box (error if none
  *   selected or already boxed — both logged)
  * - code matches an existing box barcode -> select that box
- * - anything else -> new box with that barcode (labels -1, -2, … per meeting)
+ * - a BOX-prefixed code -> new box with that barcode (labels -1, -2, … per meeting)
+ * - anything else -> STOP error. A stray SKU must never silently open a box —
+ *   that's how wrong pieces end up packed.
  */
 export async function recordScan(
   invoiceId: string,
@@ -227,6 +234,7 @@ export async function recordScan(
 
     let outcome: ScanResult["outcome"];
     let message: string;
+    let stop = false;
     let nextCurrentBoxId = currentBoxId;
     const scans = [
       ...record.scans.slice(-(MAX_SCANS - 1)).map((s) => ({ ...s, at: s.at ? new Date(s.at) : now })),
@@ -258,10 +266,11 @@ export async function recordScan(
       scans.push({ at: now, by, code: cleaned, kind: "box", boxId: matchedBox.id, error: null });
     } else if (unknownIsCatalogSku) {
       outcome = "error";
-      message = `${cleaned} is not on this shipment — wrong piece.`;
+      stop = true;
+      message = `${cleaned} is not on this order — wrong piece. Do not pack it.`;
       scans.push({ at: now, by, code: cleaned, kind: "error", boxId: null, error: message });
-    } else if (record.expectedSkus.length && upper.length >= 3) {
-      // Unknown non-catalog code — treat as a new box barcode. Label is
+    } else if (BOX_BARCODE_PREFIX.test(cleaned)) {
+      // BOX-prefixed code — a new box barcode. Label is
       // max-existing + 1, so removing a box never recycles an ordinal.
       const maxLabel = boxes.reduce(
         (m, b) => Math.max(m, Math.abs(parseInt(b.label, 10)) || 0),
@@ -294,12 +303,13 @@ export async function recordScan(
       scans.push({ at: now, by, code: cleaned, kind: "box", boxId: box.id, error: null });
     } else {
       outcome = "error";
-      message = `“${cleaned}” isn't on this shipment.`;
+      stop = true;
+      message = `“${cleaned}” isn't on this order — check the piece. (New-box barcodes start with BOX-, or use “+ New box”.)`;
       scans.push({ at: now, by, code: cleaned, kind: "error", boxId: null, error: message });
     }
 
     tx.update(ref, { scans, boxes, assignments, updatedAt: now });
-    return { outcome, message, nextCurrentBoxId };
+    return { outcome, message, stop, nextCurrentBoxId };
   });
 
   const saved = await ref.get();
@@ -307,8 +317,67 @@ export async function recordScan(
     record: serialize(saved.data() || {}),
     outcome: applied.outcome,
     message: applied.message,
+    stop: applied.stop,
     currentBoxId: applied.nextCurrentBoxId,
   };
+}
+
+/**
+ * Explicit new box (the “+ New box” button) — barcode is generated with the
+ * BOX- prefix and printed on the box ID label, so scanning that label later
+ * re-selects the box. Scanning arbitrary codes never creates boxes.
+ */
+export async function createBox(
+  invoiceId: string,
+  by: string,
+): Promise<{ record: FulfillmentRecord; boxId: string }> {
+  const db = getDb();
+  const ref = db.collection(COLLECTION).doc(invoiceId);
+  const boxId = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new Error("Open the shipment before adding boxes.");
+    const record = serialize(snap.data() || {});
+    if (record.status === "shipped") throw new Error("This shipment is already marked shipped.");
+
+    const now = new Date();
+    const maxLabel = record.boxes.reduce(
+      (m, b) => Math.max(m, Math.abs(parseInt(b.label, 10)) || 0),
+      0,
+    );
+    const n = maxLabel + 1;
+    const invoiceRef = (record.invoiceNumber || invoiceId).replace(/[^A-Za-z0-9-]+/g, "").toUpperCase();
+    const box = {
+      id: `box_${n}_${Math.random().toString(36).slice(2, 8)}`,
+      label: `-${n}`,
+      barcode: `BOX-${invoiceRef}-${n}`,
+      carrier: "",
+      trackingNumber: "",
+      createdAt: now,
+      weightOz: null,
+      lengthIn: null,
+      widthIn: null,
+      heightIn: null,
+      labelId: null,
+      labelPdfUrl: null,
+      labelZplUrl: null,
+      labelCost: null,
+      labelService: null,
+      trackingStatus: null,
+      trackingStatusAt: null,
+    };
+    const boxes = [
+      ...record.boxes.map((b) => ({ ...b, createdAt: b.createdAt ? new Date(b.createdAt) : now })),
+      box,
+    ];
+    const scans = [
+      ...record.scans.slice(-(MAX_SCANS - 1)).map((s) => ({ ...s, at: s.at ? new Date(s.at) : now })),
+      { at: now, by, code: box.barcode, kind: "box" as const, boxId: box.id, error: null },
+    ];
+    tx.update(ref, { boxes, scans, updatedAt: now });
+    return box.id;
+  });
+  const saved = await ref.get();
+  return { record: serialize(saved.data() || {}), boxId };
 }
 
 export async function setBoxTracking(

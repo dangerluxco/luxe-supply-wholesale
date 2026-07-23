@@ -41,7 +41,8 @@ export function CartCheckoutPanel({
         qualifies ? (
           <p className="mb-3 rounded-chip border border-accent/40 bg-accent/5 px-3 py-2 text-[11.5px] text-secondary">
             Complimentary shipping applied — orders of {money(threshold)}+ ship free on eligible
-            methods.
+            methods. Upgrading to a paid method? Your free-ground value is credited — you pay only
+            the difference.
           </p>
         ) : (
           <p className="mb-3 rounded-chip border border-border bg-ground px-3 py-2 text-[11.5px] text-secondary">
@@ -80,6 +81,11 @@ export function CartCheckoutPanel({
                       <>
                         <s className="mr-1.5 text-muted">{money(charge.basePrice)}</s>
                         Free
+                      </>
+                    ) : charge.upgradeCredit > 0 ? (
+                      <>
+                        <s className="mr-1.5 text-muted">{money(charge.basePrice)}</s>
+                        {charge.price === 0 ? "Free" : money(charge.price)}
                       </>
                     ) : charge.price === 0 ? (
                       "Free"
@@ -134,7 +140,12 @@ export function CartCheckoutPanel({
         </div>
         <div className="flex justify-between">
           <span className="text-secondary">
-            Shipping{shipping.comped ? " · comped" : ""}
+            Shipping
+            {shipping.comped
+              ? " · comped"
+              : shipping.upgradeCredit > 0
+                ? ` · ${money(shipping.upgradeCredit)} ground credit`
+                : ""}
           </span>
           <span className="font-mono">
             {shipping.price === 0 ? "Free" : money(shipping.price)}

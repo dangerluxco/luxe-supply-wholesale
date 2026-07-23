@@ -73,6 +73,7 @@ export function PackStation({
   const [feed, setFeed] = useState<Array<{ ok: boolean; text: string }>>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [stopAlert, setStopAlert] = useState<string | null>(null);
   const [addressModalOpen, setAddressModalOpen] = useState(false);
   const [gallerySku, setGallerySku] = useState<string | null>(null);
   const [flash, setFlash] = useState<"ok" | "bad" | null>(null);
@@ -114,6 +115,10 @@ export function PackStation({
         message?: string;
         currentBoxId?: string | null;
         needsAddress?: boolean;
+        stop?: boolean;
+        warning?: string;
+        options?: RateAllOption[];
+        boxCount?: number;
       };
       if (!res.ok || data.error) {
         // Missing buyer address isn't a dead end — open the add-address modal.
@@ -136,6 +141,12 @@ export function PackStation({
   async function submitScan() {
     const code = scanValue.trim();
     setScanValue("");
+    // A stop alert must be acknowledged before any further scan is processed —
+    // the first Enter/scan only clears the alert, nothing gets packed by it.
+    if (stopAlert) {
+      setStopAlert(null);
+      return;
+    }
     if (!code) return;
     const data = await api({ action: "scan", code, currentBoxId });
     if (!data) {
@@ -145,7 +156,18 @@ export function PackStation({
     if (data.currentBoxId !== undefined) setCurrentBoxId(data.currentBoxId);
     const ok = data.outcome !== "error";
     flashScan(ok);
+    if (data.stop) setStopAlert(data.message || `${code} is not on this order.`);
     setFeed((f) => [{ ok, text: data.message || code }, ...f].slice(0, 12));
+  }
+
+  async function addBox() {
+    const data = await api({ action: "add-box" });
+    if (!data) return;
+    if (data.currentBoxId !== undefined) setCurrentBoxId(data.currentBoxId);
+    flashScan(true);
+    setFeed((f) =>
+      [{ ok: true, text: "New box opened — scan items into it." }, ...f].slice(0, 12),
+    );
   }
 
   const unpacked = record.expectedSkus.filter((s) => !record.assignments[s]);
@@ -161,6 +183,31 @@ export function PackStation({
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.2fr_1fr]">
+      {stopAlert ? (
+        <div
+          className="fixed inset-0 z-[60] flex flex-col items-center justify-center gap-6 bg-[#E5484D]/95 p-8 text-center"
+          role="alertdialog"
+          aria-label="Wrong piece scanned"
+          onClick={() => setStopAlert(null)}
+        >
+          {/* Stop sign — unmissable from across the bench. */}
+          <div className="flex h-44 w-44 items-center justify-center [clip-path:polygon(30%_0,70%_0,100%_30%,100%_70%,70%_100%,30%_100%,0_70%,0_30%)] bg-white">
+            <span className="text-[44px] font-black tracking-[0.06em] text-[#E5484D]">STOP</span>
+          </div>
+          <div className="max-w-xl text-[26px] font-bold leading-snug text-white">{stopAlert}</div>
+          <div className="text-[14px] text-white/85">
+            Set the piece aside — it does not belong in this order.
+          </div>
+          <button
+            type="button"
+            autoFocus
+            onClick={() => setStopAlert(null)}
+            className="h-12 rounded-chip bg-white px-8 text-[13px] font-bold uppercase tracking-[0.14em] text-[#E5484D] hover:opacity-90"
+          >
+            OK — piece set aside
+          </button>
+        </div>
+      ) : null}
       {gallerySku ? (
         <ItemGalleryModal
           sku={gallerySku}
@@ -240,25 +287,38 @@ export function PackStation({
                       current box: <span className="text-accent">Box {currentBox.label}</span>
                     </>
                   ) : (
-                    "scan a box barcode to start"
+                    "open a box first — then scan items into it"
                   )}
                 </div>
               </div>
-              <input
-                ref={scanRef}
-                value={scanValue}
-                onChange={(e) => setScanValue(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    void submitScan();
+              <div className="flex gap-2">
+                <input
+                  ref={scanRef}
+                  value={scanValue}
+                  onChange={(e) => setScanValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void submitScan();
+                    }
+                  }}
+                  autoFocus
+                  disabled={busy}
+                  placeholder={
+                    currentBox ? "Scan item SKU…" : "Scan a BOX- barcode, or use + New box"
                   }
-                }}
-                autoFocus
-                disabled={busy}
-                placeholder="Scan box barcode or item SKU…"
-                className="h-12 w-full rounded-chip border border-white/20 bg-[#1c1c20] px-4 font-mono text-[15px] text-white outline-none focus:border-accent"
-              />
+                  className="h-12 w-full rounded-chip border border-white/20 bg-[#1c1c20] px-4 font-mono text-[15px] text-white outline-none focus:border-accent"
+                />
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void addBox()}
+                  title="Open a new box — its BOX- barcode goes on the printed box label"
+                  className="h-12 shrink-0 rounded-chip border border-accent/60 px-4 text-[11px] font-semibold uppercase tracking-[0.1em] text-accent hover:bg-accent/10 disabled:opacity-40"
+                >
+                  ＋ New box
+                </button>
+              </div>
               <div className="mt-3 space-y-1">
                 {feed.map((f, i) => (
                   <div
@@ -332,7 +392,7 @@ export function PackStation({
       <div className="space-y-5">
         {record.boxes.length === 0 ? (
           <div className="rounded-card border border-dashed border-white/20 px-5 py-10 text-center text-[12.5px] text-white/50">
-            No boxes yet — scan any box barcode to open Box -1.
+            No boxes yet — click ＋ New box (or scan a BOX- barcode) to open Box -1.
           </div>
         ) : (
           record.boxes.map((box) => {
@@ -399,15 +459,38 @@ export function PackStation({
           })
         )}
 
+        {(() => {
+          const usedBoxIds = new Set(Object.values(record.assignments));
+          const rateAllBoxes = record.boxes.filter((b) => usedBoxIds.has(b.id) && !b.labelId);
+          return shipEngineEnabled && !shipped && rateAllBoxes.length >= 2 ? (
+            <MultiBoxShipping
+              boxes={rateAllBoxes}
+              signatureDefault={signatureDefault}
+              api={api}
+            />
+          ) : null;
+        })()}
+
         {record.boxes.length > 0 ? (
-          <a
-            href={`/fulfillment/${invoiceId}/slips`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block rounded-card border border-white/15 px-5 py-3 text-center text-[11px] font-semibold uppercase tracking-[0.12em] text-white/70 transition hover:border-accent hover:text-white"
-          >
-            🖨 Print packing slips ({record.boxes.length} box{record.boxes.length === 1 ? "" : "es"})
-          </a>
+          <div className="grid grid-cols-2 gap-3">
+            <a
+              href={`/fulfillment/${invoiceId}/box-labels`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Internal box ID labels — invoice number + client name + scannable box barcode"
+              className="block rounded-card border border-white/15 px-5 py-3 text-center text-[11px] font-semibold uppercase tracking-[0.12em] text-white/70 transition hover:border-accent hover:text-white"
+            >
+              🏷 Print box labels
+            </a>
+            <a
+              href={`/fulfillment/${invoiceId}/slips`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block rounded-card border border-white/15 px-5 py-3 text-center text-[11px] font-semibold uppercase tracking-[0.12em] text-white/70 transition hover:border-accent hover:text-white"
+            >
+              🖨 Print packing slips
+            </a>
+          </div>
         ) : null}
 
         {!shipped ? (
@@ -442,6 +525,17 @@ type Rate = {
   service: string;
   amount: number;
   deliveryDays: number | null;
+};
+
+/** One shipping method priced across every packed box (rates-all). */
+type RateAllOption = {
+  carrier: string;
+  service: string;
+  serviceCode: string;
+  deliveryDays: number | null;
+  total: number;
+  avgPerBox: number;
+  boxes: Array<{ boxId: string; boxLabel: string; rateId: string; amount: number }>;
 };
 
 type BoxShape = {
@@ -868,6 +962,146 @@ function BoxShipping({
               ← buy a label instead
             </button>
           ) : null}
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Multi-box orders: one shipping method for every box. Quotes each packed box,
+ * offers only the services every box can use, priced as total + average per
+ * box, and buys all the labels in one click.
+ */
+function MultiBoxShipping({
+  boxes,
+  signatureDefault,
+  api,
+}: {
+  boxes: Array<BoxShape & { label: string }>;
+  signatureDefault: boolean;
+  api: (body: Record<string, unknown>) => Promise<{
+    options?: RateAllOption[];
+    warning?: string;
+    boxCount?: number;
+  } | null>;
+}) {
+  const [options, setOptions] = useState<RateAllOption[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [buyingCode, setBuyingCode] = useState<string | null>(null);
+  const [signature, setSignature] = useState(signatureDefault);
+  const [insure, setInsure] = useState(true);
+  const [notice, setNotice] = useState<string | null>(null);
+  const missingWeight = boxes.filter((b) => !b.weightOz);
+
+  return (
+    <div className="rounded-card border border-accent/40 p-5">
+      <div className="mb-2 flex items-baseline justify-between">
+        <div className="micro-badge text-[10px] tracking-[0.14em] text-accent">
+          SHIP ALL {boxes.length} BOXES TOGETHER
+        </div>
+        <span className="font-mono text-[10.5px] text-white/40">one method, every box</span>
+      </div>
+      {missingWeight.length ? (
+        <p className="text-[11.5px] text-white/50">
+          Save weight/dims on box{missingWeight.length === 1 ? "" : "es"}{" "}
+          {missingWeight.map((b) => b.label).join(", ")} above first, then rate the whole order
+          here.
+        </p>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-center gap-3 text-[11.5px] text-white/70">
+            <label className="flex cursor-pointer items-center gap-1.5">
+              <input
+                type="checkbox"
+                checked={signature}
+                onChange={(e) => setSignature(e.target.checked)}
+                className="h-3.5 w-3.5 accent-[#B08D3E]"
+              />
+              Signature
+            </label>
+            <label className="flex cursor-pointer items-center gap-1.5">
+              <input
+                type="checkbox"
+                checked={insure}
+                onChange={(e) => setInsure(e.target.checked)}
+                className="h-3.5 w-3.5 accent-[#B08D3E]"
+              />
+              Insure (contents value)
+            </label>
+            <button
+              type="button"
+              disabled={loading}
+              onClick={async () => {
+                setLoading(true);
+                setOptions(null);
+                setNotice(null);
+                try {
+                  const data = await api({ action: "rates-all", signature, insure });
+                  if (data?.options) setOptions(data.options);
+                } finally {
+                  setLoading(false);
+                }
+              }}
+              className="ml-auto h-9 rounded-chip bg-accent px-3 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ink hover:opacity-90 disabled:opacity-40"
+            >
+              {loading ? "Quoting…" : `Get rates for all ${boxes.length} boxes`}
+            </button>
+          </div>
+
+          {options ? (
+            options.length === 0 ? (
+              <p className="mt-2 text-[11.5px] text-white/50">
+                No service is available for every box — rate the boxes individually above.
+              </p>
+            ) : (
+              <div className="mt-3 space-y-1">
+                {options.map((o) => (
+                  <button
+                    key={`${o.carrier}-${o.serviceCode}`}
+                    type="button"
+                    disabled={buyingCode !== null}
+                    onClick={async () => {
+                      if (
+                        !window.confirm(
+                          `Buy ${boxes.length} ${o.carrier} ${o.service} labels for $${o.total.toFixed(2)} total?`,
+                        )
+                      )
+                        return;
+                      setBuyingCode(o.serviceCode);
+                      try {
+                        const data = await api({
+                          action: "buy-labels-all",
+                          purchases: o.boxes.map((b) => ({ boxId: b.boxId, rateId: b.rateId })),
+                        });
+                        if (data?.warning) setNotice(data.warning);
+                        else if (data) setOptions(null);
+                      } finally {
+                        setBuyingCode(null);
+                      }
+                    }}
+                    className="flex w-full items-center justify-between rounded-chip border border-white/15 px-3 py-2 text-left text-[12px] text-white/80 transition hover:border-accent hover:bg-white/5 disabled:opacity-50"
+                  >
+                    <span>
+                      {o.carrier} {o.service}
+                      {o.deliveryDays ? (
+                        <span className="ml-1.5 text-[10.5px] text-white/40">~{o.deliveryDays}d</span>
+                      ) : null}
+                    </span>
+                    <span className="text-right">
+                      <span className="mr-2 font-mono text-[10.5px] text-white/45">
+                        avg ${o.avgPerBox.toFixed(2)}/box
+                      </span>
+                      <span className="font-mono font-semibold text-accent">
+                        {buyingCode === o.serviceCode ? "Buying…" : `$${o.total.toFixed(2)} total`}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )
+          ) : null}
+          {notice ? <p className="mt-2 text-[11.5px] text-[#E5484D]">{notice}</p> : null}
         </>
       )}
     </div>

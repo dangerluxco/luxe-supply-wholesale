@@ -35,6 +35,20 @@ export type ShippingComp = {
   baseFee: number;
 };
 
+/**
+ * Upgrade-credit snapshot: a qualifying (≥ threshold) order picked a paid,
+ * non-comp-eligible method (express/white glove), so the comped ground value
+ * was credited and the buyer pays only the difference.
+ */
+export type ShippingCredit = {
+  applied: true;
+  threshold: number;
+  /** Full configured fee of the chosen method at submit. */
+  baseFee: number;
+  /** The comped ground value credited toward that fee. */
+  credit: number;
+};
+
 export const DEFAULT_FREE_SHIPPING_THRESHOLD = 10_000;
 
 /** Paid freight tiers are comped by default; white glove stays paid, pickup is already free. */
@@ -155,9 +169,22 @@ export type ShippingCharge = {
   price: number;
   comped: boolean;
   threshold: number;
+  /** $ credited toward a paid method because the order qualifies for free ground. */
+  upgradeCredit: number;
 };
 
-/** The one comp rule: merchandise subtotal ≥ threshold ⇒ eligible methods ship free. */
+/** The comped ground value a qualifying order forgoes when picking a paid method. */
+export function compEligibleCreditValue(rules: ShippingRules): number {
+  return enabledShippingMethods(rules)
+    .filter((m) => m.compEligible)
+    .reduce((max, m) => Math.max(max, m.price), 0);
+}
+
+/**
+ * Comp rules: merchandise subtotal ≥ threshold ⇒ eligible methods ship free;
+ * picking a paid method instead credits the forgone free-ground value, so the
+ * buyer pays only the difference (never below $0).
+ */
 export function evaluateShippingCharge(
   rules: ShippingRules,
   methodId: string,
@@ -165,14 +192,20 @@ export function evaluateShippingCharge(
 ): ShippingCharge {
   const method = resolveShippingMethodRule(rules, methodId);
   const threshold = rules.freeShippingThreshold;
-  const comped = threshold > 0 && method.compEligible && subtotal >= threshold;
+  const qualifies = threshold > 0 && subtotal >= threshold;
+  const comped = qualifies && method.compEligible;
+  const upgradeCredit =
+    qualifies && !method.compEligible
+      ? Math.min(method.price, compEligibleCreditValue(rules))
+      : 0;
   return {
     methodId: method.id,
     label: method.label,
     basePrice: method.price,
-    price: comped ? 0 : method.price,
+    price: comped ? 0 : Math.max(0, method.price - upgradeCredit),
     comped,
     threshold,
+    upgradeCredit,
   };
 }
 
@@ -185,23 +218,46 @@ export function compThresholdActive(rules: ShippingRules): boolean {
 
 /**
  * Invoice-generation pass: staff may have added/removed lines since submit, so the
- * comp is re-checked in both directions against the invoice subtotal. The buyer's
- * agreed fee is never repriced — qualifying zeroes it, disqualifying restores the
+ * comp (and the paid-method upgrade credit) is re-checked in both directions
+ * against the invoice subtotal. The buyer's agreed fee is never repriced —
+ * qualifying zeroes it (or credits the ground value), disqualifying restores the
  * fee they saw at checkout (not today's configured price).
  */
 export function reevaluateInvoiceShipping(
   rules: ShippingRules,
-  quote: { shipping: number; shippingMethodId: string; shippingComp: ShippingComp | null },
+  quote: {
+    shipping: number;
+    shippingMethodId: string;
+    shippingComp: ShippingComp | null;
+    shippingCredit?: ShippingCredit | null;
+  },
   subtotal: number,
-): { shipping: number; comp: ShippingComp | null } {
+): { shipping: number; comp: ShippingComp | null; credit: ShippingCredit | null } {
   const baseFee = quote.shippingComp
     ? Math.max(0, Math.round(quote.shippingComp.baseFee))
-    : Math.max(0, Math.round(Number(quote.shipping) || 0));
+    : quote.shippingCredit
+      ? Math.max(0, Math.round(quote.shippingCredit.baseFee))
+      : Math.max(0, Math.round(Number(quote.shipping) || 0));
   const method = rules.methods.find((m) => m.id === quote.shippingMethodId);
   const threshold = rules.freeShippingThreshold;
-  const qualifies = threshold > 0 && !!method?.compEligible && subtotal >= threshold;
-  if (qualifies) return { shipping: 0, comp: { applied: true, threshold, baseFee } };
-  return { shipping: baseFee, comp: null };
+  const qualifies = threshold > 0 && subtotal >= threshold;
+  if (qualifies && method?.compEligible) {
+    return { shipping: 0, comp: { applied: true, threshold, baseFee }, credit: null };
+  }
+  if (qualifies) {
+    // Keep the agreed credit; grant a fresh one when the order newly qualifies.
+    const credit = quote.shippingCredit
+      ? Math.max(0, Math.round(quote.shippingCredit.credit))
+      : Math.min(baseFee, compEligibleCreditValue(rules));
+    if (credit > 0) {
+      return {
+        shipping: Math.max(0, baseFee - credit),
+        comp: null,
+        credit: { applied: true, threshold, baseFee, credit },
+      };
+    }
+  }
+  return { shipping: baseFee, comp: null, credit: null };
 }
 
 /**
@@ -226,5 +282,18 @@ export function parseShippingComp(raw: unknown): ShippingComp | null {
     applied: true,
     threshold: Math.max(0, Math.round(Number(c.threshold) || 0)),
     baseFee: Math.max(0, Math.round(Number(c.baseFee) || 0)),
+  };
+}
+
+/** Parse a stored upgrade-credit snapshot back into a ShippingCredit. */
+export function parseShippingCredit(raw: unknown): ShippingCredit | null {
+  if (!raw || typeof raw !== "object") return null;
+  const c = raw as Record<string, unknown>;
+  if (c.applied !== true) return null;
+  return {
+    applied: true,
+    threshold: Math.max(0, Math.round(Number(c.threshold) || 0)),
+    baseFee: Math.max(0, Math.round(Number(c.baseFee) || 0)),
+    credit: Math.max(0, Math.round(Number(c.credit) || 0)),
   };
 }

@@ -2,7 +2,12 @@ import type { Query } from "firebase-admin/firestore";
 import { getDb, toIso, WHOLESALE_ORG_SLUG } from "./admin";
 import { getLuxesupplyOrg } from "./staff";
 import { INVOICE_REQUEST_TIMEOUT_DAYS } from "@/lib/constants";
-import { parseShippingComp, type ShippingComp } from "@/lib/shipping-rules";
+import {
+  parseShippingComp,
+  parseShippingCredit,
+  type ShippingComp,
+  type ShippingCredit,
+} from "@/lib/shipping-rules";
 import { releaseAllHoldsForQuote } from "./holds";
 import { archiveSuggestedLot } from "./suggestedLots";
 import { markSkusSold, resolveTitlesForSkus } from "./catalog";
@@ -29,6 +34,8 @@ export type PortalQuote = {
   shipping: number;
   /** Set when the free-shipping threshold comped this order at submit. */
   shippingComp: ShippingComp | null;
+  /** Set when a qualifying order picked a paid method and got the ground value credited. */
+  shippingCredit: ShippingCredit | null;
   adminNotes: string;
   /** Staff member currently working this request (optional claim). */
   claimedByEmail: string | null;
@@ -184,6 +191,7 @@ function serializeQuote(id: string, d: Record<string, unknown>): PortalQuote {
     shippingLabel: String(d.shippingLabel || ""),
     shipping: Number(d.shipping || 0),
     shippingComp: parseShippingComp(d.shippingComp),
+    shippingCredit: parseShippingCredit(d.shippingCredit),
     adminNotes: String(d.adminNotes || ""),
     claimedByEmail: d.claimedByEmail ? String(d.claimedByEmail) : null,
     claimedByName: d.claimedByName ? String(d.claimedByName) : null,
