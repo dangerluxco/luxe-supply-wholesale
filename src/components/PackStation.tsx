@@ -455,8 +455,17 @@ export function PackStation({
                     Box {box.label}
                     <span className="ml-2 font-mono text-[10.5px] text-white/40">{box.barcode}</span>
                   </button>
-                  <span className="font-mono text-[11px] text-white/50">
+                  <span className="flex items-center gap-2 font-mono text-[11px] text-white/50">
                     {items.length} piece{items.length === 1 ? "" : "s"}
+                    <a
+                      href={`/fulfillment/${invoiceId}/box-labels?box=${encodeURIComponent(box.id)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Print this box's ID label"
+                      className="rounded-chip border border-white/15 px-2 py-0.5 text-[10px] uppercase tracking-[0.08em] text-white/60 transition hover:border-accent hover:text-white"
+                    >
+                      🏷 label
+                    </a>
                   </span>
                 </div>
                 {items.length ? (
