@@ -514,6 +514,45 @@ export async function sendPaymentReceiptEmail(opts: {
   });
 }
 
+/** Staff heads-up for online (Stripe) invoice payments — full, partial, or failed. */
+export async function notifyStaffOfOnlinePayment(opts: {
+  invoiceNumber: string;
+  invoiceId: string;
+  buyerName: string;
+  amount: number;
+  fullyPaid: boolean;
+  remainingBalance: number;
+  failed?: boolean;
+}): Promise<boolean> {
+  const [staffEmails, extraEmails] = await Promise.all([
+    listActiveStaffEmails(),
+    getNotifyEmails(),
+  ]);
+  const envEmails = String(process.env.STAFF_NOTIFICATION_EMAILS || "")
+    .split(/[\s,;]+/)
+    .map((e) => e.trim().toLowerCase())
+    .filter((e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+  const recipients = [...new Set([...staffEmails, ...extraEmails, ...envEmails])];
+  if (!recipients.length) {
+    console.warn("[notify] No staff recipients for online payment", opts.invoiceNumber);
+    return false;
+  }
+
+  const invoiceUrl = `${staffPortalOrigin()}/wholesaleportal/rep/invoices/${opts.invoiceId}`;
+  const subject = opts.failed
+    ? `Online payment FAILED — invoice ${opts.invoiceNumber}`
+    : `${opts.fullyPaid ? "Invoice paid online" : "Partial payment received"} — ${opts.invoiceNumber}`;
+  const body = opts.failed
+    ? `<p>${escapeHtml(opts.buyerName)}'s online payment for invoice <strong>${escapeHtml(opts.invoiceNumber)}</strong> failed after checkout (delayed payment method). The invoice is still outstanding — you may want to follow up.</p>`
+    : `<p><strong>${escapeHtml(opts.buyerName)}</strong> paid <strong>${escapeHtml(money(Math.round(opts.amount)))}</strong> online via Stripe for invoice <strong>${escapeHtml(opts.invoiceNumber)}</strong>.</p>
+  <p>${opts.fullyPaid ? "The invoice is now <strong>PAID in full</strong>." : `Remaining balance: <strong>${escapeHtml(money(Math.round(opts.remainingBalance)))}</strong>.`}</p>`;
+  return sendEmail({
+    to: recipients,
+    subject,
+    html: emailShell(`${body}<p><a href="${invoiceUrl}">Open the invoice</a></p>`),
+  });
+}
+
 /** Buyer notification when their order ships, with tracking link(s). */
 export async function sendShippedEmail(opts: {
   invoiceNumber: string;

@@ -7,13 +7,22 @@ import { money, fullDate } from "@/lib/format";
 import { trackingUrlFor } from "@/lib/tracking";
 import { getFulfillmentForInvoice } from "@/lib/firestore/fulfillment";
 import { InvoiceBadge, FulfillmentBadge } from "@/components/badges";
+import { PayInvoiceButton } from "@/components/PayInvoiceButton";
+import { isStripeConfigured } from "@/lib/stripe";
 import { ShipmentTracking, shipmentBoxesFromRecord } from "@/components/ShipmentTracking";
 import { Logo } from "@/components/Logo";
 
 export const dynamic = "force-dynamic";
 
-export default async function InvoiceDetail({ params }: { params: Promise<{ number: string }> }) {
+export default async function InvoiceDetail({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ number: string }>;
+  searchParams: Promise<{ paid?: string }>;
+}) {
   const { number } = await params;
+  const { paid } = await searchParams;
   const session = await getSession();
   if (!session || session.role !== ROLE.BUYER) redirect("/wholesale/sign-in");
 
@@ -154,8 +163,27 @@ export default async function InvoiceDetail({ params }: { params: Promise<{ numb
           </div>
         ) : null}
 
+        {paid === "1" && inv.status !== "PAID" ? (
+          <div className="mt-8 rounded-card border border-[#4E9A6A]/40 bg-[#4E9A6A]/5 px-4 py-3 text-[12.5px] text-[#4E9A6A] print:hidden">
+            Payment received — thank you. This invoice will show as paid within a minute
+            once Stripe confirms the charge.
+          </div>
+        ) : null}
+
+        {isStripeConfigured() && inv.status === "SENT" && inv.balance > 0 && paid !== "1" ? (
+          <div className="mt-8 border-t border-border pt-5 print:hidden">
+            <PayInvoiceButton invoiceNumber={inv.invoiceNumber} balance={inv.balance} />
+            <p className="mt-2 text-center text-[11px] text-muted">
+              Secure checkout by Stripe — or pay by wire using the instructions on the PDF.
+            </p>
+          </div>
+        ) : null}
+
         <div className="mt-8 border-t border-border pt-5 text-[11px] text-muted">
-          Payment terms: {inv.terms}. Wire instructions are on the downloadable PDF invoice.
+          Payment terms: {inv.terms}.{" "}
+          {isStripeConfigured() && inv.status !== "PAID"
+            ? "Pay online above, or find wire instructions on the downloadable PDF invoice."
+            : "Wire instructions are on the downloadable PDF invoice."}{" "}
           Every piece is one of one and insured in transit. Thank you for collecting with Luxe
           Supply Co.
         </div>
