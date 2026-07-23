@@ -385,50 +385,40 @@ export async function setBoxTracking(
   boxId: string,
   tracking: { carrier: string; trackingNumber: string },
 ): Promise<FulfillmentRecord> {
-  const ref = getDb().collection(COLLECTION).doc(invoiceId);
-  const snap = await ref.get();
-  if (!snap.exists) throw new Error("Shipment not found.");
-  const record = serialize(snap.data() || {});
-  const boxes = record.boxes.map((b) =>
-    b.id === boxId
-      ? {
-          ...b,
-          carrier: String(tracking.carrier || "").trim().slice(0, 40),
-          trackingNumber: String(tracking.trackingNumber || "").trim().slice(0, 80),
-          createdAt: b.createdAt ? new Date(b.createdAt) : new Date(),
-        }
-      : { ...b, createdAt: b.createdAt ? new Date(b.createdAt) : new Date() },
-  );
-  if (!boxes.some((b) => b.id === boxId)) throw new Error("Box not found.");
-  await ref.update({
-    boxes,
-    trackingNumbers: boxes.map((b) => b.trackingNumber).filter(Boolean),
-    updatedAt: new Date(),
+  return updateBox(invoiceId, boxId, {
+    carrier: String(tracking.carrier || "").trim().slice(0, 40),
+    trackingNumber: String(tracking.trackingNumber || "").trim().slice(0, 80),
   });
-  const saved = await ref.get();
-  return serialize(saved.data() || {});
 }
 
+/**
+ * Transactional per-box patch — parcel auto-saves fire for several boxes at
+ * once (and stations can race each other), so a read-modify-write here would
+ * silently drop one box's update.
+ */
 async function updateBox(
   invoiceId: string,
   boxId: string,
   patch: Record<string, unknown>,
 ): Promise<FulfillmentRecord> {
-  const ref = getDb().collection(COLLECTION).doc(invoiceId);
-  const snap = await ref.get();
-  if (!snap.exists) throw new Error("Shipment not found.");
-  const record = serialize(snap.data() || {});
-  if (!record.boxes.some((b) => b.id === boxId)) throw new Error("Box not found.");
-  const boxes = record.boxes.map((b) =>
-    b.id === boxId
-      ? { ...b, ...patch, createdAt: b.createdAt ? new Date(b.createdAt) : new Date() }
-      : { ...b, createdAt: b.createdAt ? new Date(b.createdAt) : new Date() },
-  );
-  await ref.update({
-    boxes,
-    // Query index for the tracking webhook (nested array fields aren't queryable).
-    trackingNumbers: boxes.map((b) => b.trackingNumber).filter(Boolean),
-    updatedAt: new Date(),
+  const db = getDb();
+  const ref = db.collection(COLLECTION).doc(invoiceId);
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new Error("Shipment not found.");
+    const record = serialize(snap.data() || {});
+    if (!record.boxes.some((b) => b.id === boxId)) throw new Error("Box not found.");
+    const boxes = record.boxes.map((b) =>
+      b.id === boxId
+        ? { ...b, ...patch, createdAt: b.createdAt ? new Date(b.createdAt) : new Date() }
+        : { ...b, createdAt: b.createdAt ? new Date(b.createdAt) : new Date() },
+    );
+    tx.update(ref, {
+      boxes,
+      // Query index for the tracking webhook (nested array fields aren't queryable).
+      trackingNumbers: boxes.map((b) => b.trackingNumber).filter(Boolean),
+      updatedAt: new Date(),
+    });
   });
   const saved = await ref.get();
   return serialize(saved.data() || {});

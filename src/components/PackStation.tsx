@@ -106,7 +106,19 @@ export function PackStation({
     return () => clearInterval(t);
   }, [record.status, stillPacking]);
 
-  async function api(body: Record<string, unknown>) {
+  // All station calls run one at a time — several boxes auto-saving at once
+  // must not interleave, or a stale record snapshot can land last and hide
+  // another box's just-saved weight.
+  const apiChain = useRef<Promise<unknown>>(Promise.resolve());
+
+  function api(body: Record<string, unknown>) {
+    const run = () => apiOnce(body);
+    const p = apiChain.current.then(run, run);
+    apiChain.current = p.catch(() => null);
+    return p;
+  }
+
+  async function apiOnce(body: Record<string, unknown>) {
     setBusy(true);
     setError(null);
     try {
@@ -691,15 +703,14 @@ function BoxShipping({
     }),
   );
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Only auto-save after the packer actually touches the fields — the
-  // localStorage prefill alone must not silently write weights to a box.
-  const touchedRef = useRef(false);
 
-  // Auto-save weight/dims as they're entered (debounced) — packers shouldn't
-  // have to click Save per box; once the last piece is boxed, everything is
-  // already persisted and whole-order rating works immediately.
+  // Auto-save weight/dims whenever they hold a value the server doesn't —
+  // typed, preset, or station-default prefill. Packers never click Save: by
+  // the time the last piece is boxed every box is persisted and whole-order
+  // rating works immediately. (The values are visible in the fields and the
+  // status chip flips to "Saved ✓", so nothing is silently invented.)
   useEffect(() => {
-    if (!touchedRef.current || disabled || box.labelPdfUrl || totalOz <= 0) return;
+    if (disabled || box.labelPdfUrl || totalOz <= 0) return;
     const snap = JSON.stringify({ w: totalOz, l: dims.l, wd: dims.w, h: dims.h });
     if (snap === savedSnapRef.current) return;
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
@@ -864,14 +875,14 @@ function BoxShipping({
             <input
               inputMode="numeric"
               value={wLb}
-              onChange={(e) => { touchedRef.current = true; setWLb(e.target.value); }}
+              onChange={(e) => setWLb(e.target.value)}
               placeholder="lb"
               className="h-9 w-[54px] rounded-chip border border-white/20 bg-[#1c1c20] px-2 font-mono text-[12px] text-white outline-none focus:border-accent"
             />
             <input
               inputMode="numeric"
               value={wOz}
-              onChange={(e) => { touchedRef.current = true; setWOz(e.target.value); }}
+              onChange={(e) => setWOz(e.target.value)}
               placeholder="oz"
               className="h-9 w-[54px] rounded-chip border border-white/20 bg-[#1c1c20] px-2 font-mono text-[12px] text-white outline-none focus:border-accent"
             />
@@ -880,29 +891,48 @@ function BoxShipping({
                 key={k}
                 inputMode="numeric"
                 value={dims[k]}
-                onChange={(e) => { touchedRef.current = true; setDims((d) => ({ ...d, [k]: e.target.value })); }}
+                onChange={(e) => setDims((d) => ({ ...d, [k]: e.target.value }))}
                 placeholder={`${k.toUpperCase()}"`}
                 className="h-9 w-[52px] rounded-chip border border-white/20 bg-[#1c1c20] px-2 font-mono text-[12px] text-white outline-none focus:border-accent"
               />
             ))}
-            <button
-              type="button"
-              disabled={totalOz <= 0 || loadingRates}
-              onClick={async () => {
-                setLoadingRates(true);
-                setRates(null);
-                setApplied(null);
-                saveParcelDefaults(String(totalOz), dims);
-                try {
-                  const saved = await api({
-                    action: "parcel",
-                    boxId: box.id,
-                    weightOz: totalOz,
-                    lengthIn: dims.l ? Number(dims.l) : null,
-                    widthIn: dims.w ? Number(dims.w) : null,
-                    heightIn: dims.h ? Number(dims.h) : null,
-                  });
-                  if (saved) {
+            {multiBoxActive ? (
+              // Weights auto-save — this is just the status, nothing to click.
+              <span
+                className={clsx(
+                  "flex h-9 items-center rounded-chip border px-3 text-[10.5px] font-semibold uppercase tracking-[0.1em]",
+                  autoSave === "saving"
+                    ? "border-accent/50 text-accent"
+                    : autoSave === "saved" || box.weightOz
+                      ? "border-[#4E9A6A]/50 text-[#4E9A6A]"
+                      : "border-white/20 text-white/40",
+                )}
+              >
+                {autoSave === "saving"
+                  ? "Saving…"
+                  : autoSave === "saved" || box.weightOz
+                    ? "Saved ✓"
+                    : "Enter weight"}
+              </span>
+            ) : (
+              <button
+                type="button"
+                disabled={totalOz <= 0 || loadingRates}
+                onClick={async () => {
+                  setLoadingRates(true);
+                  setRates(null);
+                  setApplied(null);
+                  saveParcelDefaults(String(totalOz), dims);
+                  try {
+                    const saved = await api({
+                      action: "parcel",
+                      boxId: box.id,
+                      weightOz: totalOz,
+                      lengthIn: dims.l ? Number(dims.l) : null,
+                      widthIn: dims.w ? Number(dims.w) : null,
+                      heightIn: dims.h ? Number(dims.h) : null,
+                    });
+                    if (!saved) return;
                     savedSnapRef.current = JSON.stringify({
                       w: totalOz,
                       l: dims.l,
@@ -910,33 +940,24 @@ function BoxShipping({
                       h: dims.h,
                     });
                     setAutoSave("saved");
+                    const data = (await api({
+                      action: "rates",
+                      boxId: box.id,
+                      signature,
+                      insure,
+                      insuredValue: insure && insureAmt.trim() ? Number(insureAmt) : null,
+                    })) as { rates?: Rate[]; applied?: { signature: boolean; insuredValue: number | null } } | null;
+                    if (data?.rates) setRates(data.rates);
+                    if (data?.applied) setApplied(data.applied);
+                  } finally {
+                    setLoadingRates(false);
                   }
-                  if (!saved || multiBoxActive) return;
-                  const data = (await api({
-                    action: "rates",
-                    boxId: box.id,
-                    signature,
-                    insure,
-                    insuredValue: insure && insureAmt.trim() ? Number(insureAmt) : null,
-                  })) as { rates?: Rate[]; applied?: { signature: boolean; insuredValue: number | null } } | null;
-                  if (data?.rates) setRates(data.rates);
-                  if (data?.applied) setApplied(data.applied);
-                } finally {
-                  setLoadingRates(false);
-                }
-              }}
-              className="h-9 rounded-chip bg-accent px-3 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ink hover:opacity-90 disabled:opacity-40"
-            >
-              {multiBoxActive
-                ? loadingRates || autoSave === "saving"
-                  ? "Saving…"
-                  : autoSave === "saved" || box.weightOz
-                    ? "Saved ✓"
-                    : "Save box"
-                : loadingRates
-                  ? "Quoting…"
-                  : "Get rates"}
-            </button>
+                }}
+                className="h-9 rounded-chip bg-accent px-3 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ink hover:opacity-90 disabled:opacity-40"
+              >
+                {loadingRates ? "Quoting…" : "Get rates"}
+              </button>
+            )}
           </div>
 
           {multiBoxActive ? (
