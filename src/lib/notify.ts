@@ -11,19 +11,21 @@ function schemeFor(host: string): "http" | "https" {
   return /^(localhost|127\.0\.0\.1)(:\d+)?$/.test(host) ? "http" : "https";
 }
 
+// Domain scheme (July 2026): portal.luxesupply.co = buyers, rep. = reps,
+// admin. = admins, ppas. = fulfillment. wholesale.luxesupply.co is retired.
 const BUYER_ORIGIN =
   process.env.BUYER_ORIGIN ||
   process.env.PUBLIC_ORIGIN ||
   (process.env.PUBLIC_HOST
     ? `${schemeFor(process.env.PUBLIC_HOST)}://${process.env.PUBLIC_HOST}`
-    : "https://wholesale.luxesupply.co");
+    : "https://portal.luxesupply.co");
 
 const STAFF_ORIGIN =
   process.env.STAFF_ORIGIN ||
   (process.env.PUBLIC_HOST
     ? `${schemeFor(process.env.PUBLIC_HOST)}://${process.env.PUBLIC_HOST}`
-    : // The domain staff actually use today. Switch via STAFF_ORIGIN env once
-      // rep.luxesupply.co / admin.luxesupply.co DNS is live.
+    : // The domain staff actually use today. Switch via STAFF_ORIGIN env to
+      // rep.luxesupply.co once its Google OAuth callback is authorized.
       "https://luxe-wholesale-portal.web.app");
 
 export function buyerStorefrontOrigin(): string {

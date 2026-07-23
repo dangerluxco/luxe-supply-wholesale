@@ -4,16 +4,21 @@ This app (`luxe-supply-wholesale/`) is the Luxe Supply wholesale **buyer + staff
 
 | Surface | Prod URL | Data |
 | --- | --- | --- |
-| Buyer storefront | https://wholesale.luxesupply.co/ → `/wholesale` | Next → Firestore buyers/catalog/cart/quotes |
-| Staff portal | https://wholesaleportal.luxesupply.co/ → `/wholesaleportal` | Next → Firestore staff/quotes/clients/catalog |
+| Buyer storefront | https://portal.luxesupply.co/ → `/wholesale` | Next → Firestore buyers/catalog/cart/quotes |
+| Staff portal (reps) | https://rep.luxesupply.co/ → `/wholesaleportal` | Next → Firestore staff/quotes/clients/catalog |
+| Staff portal (admins) | https://admin.luxesupply.co/ → `/wholesaleportal` | Same as reps |
+| Fulfillment | https://ppas.luxesupply.co/ | Same Cloud Run service |
 | Legacy Hosting paths (still work) | https://photography-964f5.web.app/wholesale[portal] | Same Cloud Run service |
 
-Custom domains live on **separate** Firebase Hosting sites (same Cloud Run backend):
+Custom domains live on **separate** Firebase Hosting sites (same Cloud Run backend).
+July 2026 scheme: `portal.` = buyers, `rep.` = reps, `admin.` = admins, `ppas.` =
+fulfillment; `wholesale.luxesupply.co` and `wholesaleportal.luxesupply.co` are retired
+(their DNS records were removed; the Firebase customDomain entries still exist).
 
 | Domain | Hosting site |
 | --- | --- |
-| `wholesale.luxesupply.co` | `luxe-wholesale` |
-| `wholesaleportal.luxesupply.co` | `luxe-wholesale-portal` |
+| `portal.luxesupply.co` | `luxe-wholesale` |
+| `rep.luxesupply.co`, `admin.luxesupply.co`, `ppas.luxesupply.co` | `luxe-wholesale-portal` |
 
 ```bash
 cd luxe-supply-wholesale
@@ -50,7 +55,7 @@ gcloud run deploy luxe-wholesale-portal \
   --memory 1Gi \
   --cpu 1 \
   --min-instances 1 \
-  --update-env-vars "GCLOUD_PROJECT=photography-964f5,NODE_ENV=production,BUYER_ORIGIN=https://wholesale.luxesupply.co,STAFF_ORIGIN=https://luxe-wholesale-portal.web.app"
+  --update-env-vars "GCLOUD_PROJECT=photography-964f5,NODE_ENV=production,BUYER_ORIGIN=https://portal.luxesupply.co,STAFF_ORIGIN=https://luxe-wholesale-portal.web.app"
 
 cd ../ItemIQ-Marketing-Website
 firebase deploy --only hosting
@@ -76,8 +81,10 @@ Values live in `.env` (GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET). The
 redirect URI is derived from the request host (`x-forwarded-host`), so every
 user-facing domain's `…/api/auth/callback/google` must be an Authorized redirect
 URI on the OAuth web client in Google Console — including
-`https://luxe-wholesale-portal.web.app/api/auth/callback/google` (staff) and
-`https://wholesale.luxesupply.co/api/auth/callback/google` (buyer).
+`https://luxe-wholesale-portal.web.app/api/auth/callback/google` (staff) plus the
+July-2026 domains: `https://portal.luxesupply.co/...` (buyer),
+`https://rep.luxesupply.co/...`, `https://admin.luxesupply.co/...`, and
+`https://ppas.luxesupply.co/...` (staff/fulfillment).
 
 `--min-instances 1` keeps one warm instance so the first click after idle has no
 cold-start lag (small always-on cost). Keep this flag on redeploys; to apply it
