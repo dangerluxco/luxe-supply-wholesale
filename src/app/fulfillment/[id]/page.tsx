@@ -8,6 +8,8 @@ import { money } from "@/lib/format";
 import { PackStation } from "@/components/PackStation";
 import { shipEngineConfigured } from "@/lib/shipengine";
 import { loadItemImagesBySkus } from "@/lib/firestore/catalog";
+import { requireFulfillmentAccess } from "@/lib/staff-api-auth";
+import { ROLE } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +57,7 @@ async function buildItemMeta(
 
 export default async function PackStationPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const session = await requireFulfillmentAccess();
   let record, invoice;
   try {
     ({ record, invoice } = await getOrCreateFulfillment(String(id || "").trim()));
@@ -154,6 +157,8 @@ export default async function PackStationPage({ params }: { params: Promise<{ id
         initialRecord={record}
         itemMeta={itemMeta}
         shipEngineEnabled={shipEngineConfigured()}
+        signatureDefault={!!buyer?.shippingSignatureRequired}
+        isAdmin={session?.role === ROLE.MANAGER}
       />
     </div>
   );

@@ -49,17 +49,26 @@ export function FulfillmentSidebar({ shipments }: { shipments: SidebarShipment[]
   return (
     <aside className="hidden w-[230px] shrink-0 border-r border-white/10 lg:block">
       <div className="sticky top-0 max-h-screen overflow-y-auto px-3 py-6">
-        <Link
-          href="/fulfillment"
-          className={clsx(
-            "mb-4 block rounded-chip px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] transition",
-            pathname === "/fulfillment"
-              ? "bg-white/10 text-white"
-              : "text-white/60 hover:bg-white/10 hover:text-white",
-          )}
-        >
-          ⬒ Queue overview
-        </Link>
+        <div className="mb-4 space-y-1">
+          {[
+            { href: "/fulfillment", label: "⬒ Queue overview" },
+            { href: "/fulfillment/shipped", label: "➤ Shipped" },
+            { href: "/fulfillment/eod", label: "☰ End of day" },
+          ].map((l) => (
+            <Link
+              key={l.href}
+              href={l.href}
+              className={clsx(
+                "block rounded-chip px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] transition",
+                pathname === l.href
+                  ? "bg-white/10 text-white"
+                  : "text-white/60 hover:bg-white/10 hover:text-white",
+              )}
+            >
+              {l.label}
+            </Link>
+          ))}
+        </div>
 
         <div className="micro-badge mb-2 px-3 text-[9.5px] tracking-[0.14em] text-accent">
           TO SHIP ({open.length})

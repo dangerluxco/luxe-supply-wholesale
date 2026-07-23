@@ -449,3 +449,25 @@ export async function markInvoiceShipped(
   const next = await ref.get();
   return serializeInvoice(next.id, next.data() || {});
 }
+
+/** Admin undo of markInvoiceShipped — clears tracking and flips back to UNFULFILLED. */
+export async function markInvoiceUnshipped(
+  invoiceId: string,
+  updatedBy: string,
+): Promise<PortalInvoice> {
+  const ref = getDb().collection("salesPortalInvoices").doc(invoiceId);
+  const snap = await ref.get();
+  if (!snap.exists) throw new Error("Invoice not found.");
+
+  await ref.update({
+    fulfillmentStatus: FULFILLMENT_STATUS.UNFULFILLED,
+    carrier: null,
+    trackingNumber: null,
+    shippedAt: null,
+    updatedAt: new Date(),
+    updatedBy,
+  });
+
+  const next = await ref.get();
+  return serializeInvoice(next.id, next.data() || {});
+}

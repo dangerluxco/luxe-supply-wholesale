@@ -3,20 +3,51 @@ import { requireFulfillmentAccess } from "@/lib/staff-api-auth";
 import {
   getOrCreateFulfillment,
   markFulfillmentShipped,
+  markFulfillmentUnshipped,
   recordScan,
   removeBox,
   setBoxTracking,
   setBoxParcel,
   attachLabelToBox,
+  clearLabelFromBox,
   fulfillmentReadyToShip,
+  type FulfillmentRecord,
 } from "@/lib/firestore/fulfillment";
-import { markInvoiceShipped } from "@/lib/firestore/invoices";
-import { attachShipmentToQuote } from "@/lib/firestore/quotes";
+import { markInvoiceShipped, markInvoiceUnshipped, type PortalInvoice } from "@/lib/firestore/invoices";
+import { attachShipmentToQuote, clearShipmentFromQuote } from "@/lib/firestore/quotes";
 import { findBuyerByIdentifier, updateBuyerAccountDetails } from "@/lib/firestore/buyers";
-import { getRates, purchaseLabelFromRate, shipEngineConfigured } from "@/lib/shipengine";
+import { getRates, purchaseLabelFromRate, voidLabel, shipEngineConfigured } from "@/lib/shipengine";
 import { logAudit } from "@/lib/firestore/audit";
 import { sendShippedEmail } from "@/lib/notify";
 import { trackingUrlFor, friendlyCarrierName } from "@/lib/tracking";
+import { ROLE } from "@/lib/constants";
+
+/**
+ * Default insured value for a box: the invoice-line prices of the pieces packed
+ * in it. Lot members without their own invoice line fall back to an even share
+ * of the invoice total, so a box of lot pieces is never insured for $0.
+ */
+function boxContentsValue(
+  record: FulfillmentRecord,
+  invoice: PortalInvoice,
+  boxId: string,
+): number {
+  const skus = Object.entries(record.assignments)
+    .filter(([, b]) => b === boxId)
+    .map(([sku]) => sku);
+  const priceBySku = new Map(invoice.items.map((i) => [i.sku.toUpperCase(), i.price]));
+  let value = 0;
+  let unknown = 0;
+  for (const sku of skus) {
+    const p = priceBySku.get(sku.toUpperCase());
+    if (p != null && p > 0) value += p;
+    else unknown++;
+  }
+  if (unknown && record.expectedSkus.length) {
+    value += (invoice.total / record.expectedSkus.length) * unknown;
+  }
+  return Math.round(value);
+}
 
 export const dynamic = "force-dynamic";
 
@@ -49,6 +80,9 @@ export async function POST(
     widthIn?: number | null;
     heightIn?: number | null;
     rateId?: string;
+    signature?: boolean;
+    insure?: boolean;
+    insuredValue?: number | null;
     address?: {
       attn?: string;
       line1?: string;
@@ -121,6 +155,16 @@ export async function POST(
           { status: 400 },
         );
       }
+      // Signature defaults to the buyer's account flag; insurance defaults ON
+      // (one-of-one pieces) at the value of the box's contents. Both change the
+      // quoted price and are baked into whichever rateId gets purchased.
+      const signature = body.signature ?? !!buyer.shippingSignatureRequired;
+      const insuredValue =
+        body.insure === false
+          ? null
+          : Number(body.insuredValue) > 0
+            ? Math.round(Number(body.insuredValue))
+            : boxContentsValue(record, invoice, box.id);
       const rates = await getRates(
         {
           name: buyer.shippingAttn || buyer.displayName || invoice.customerName,
@@ -139,8 +183,13 @@ export async function POST(
           widthIn: box.widthIn,
           heightIn: box.heightIn,
         },
+        { signature, insuredValue },
       );
-      return NextResponse.json({ ok: true, rates: rates.slice(0, 8) });
+      return NextResponse.json({
+        ok: true,
+        rates: rates.slice(0, 8),
+        applied: { signature, insuredValue },
+      });
     }
 
     if (body.action === "ship-address") {
@@ -210,6 +259,66 @@ export async function POST(
           carrier: label.carrier,
           cost: label.cost,
         },
+      });
+      return NextResponse.json({ ok: true, record, readiness: fulfillmentReadyToShip(record) });
+    }
+
+    if (body.action === "void-label") {
+      if (!shipEngineConfigured()) {
+        return NextResponse.json({ error: "ShipEngine isn't configured yet." }, { status: 400 });
+      }
+      const { record: current } = await getOrCreateFulfillment(invoiceId);
+      if (current.status === "shipped") {
+        return NextResponse.json(
+          { error: "Shipment is already marked shipped — unship it first." },
+          { status: 400 },
+        );
+      }
+      const box = current.boxes.find((b) => b.id === body.boxId);
+      if (!box) return NextResponse.json({ error: "Box not found." }, { status: 404 });
+      if (!box.labelId) {
+        return NextResponse.json({ error: "No purchased label on this box." }, { status: 400 });
+      }
+      const result = await voidLabel(box.labelId);
+      if (!result.approved) {
+        return NextResponse.json(
+          { error: result.message || "The carrier declined the void." },
+          { status: 400 },
+        );
+      }
+      const record = await clearLabelFromBox(invoiceId, box.id);
+      await logAudit({
+        actor: session,
+        action: "fulfillment.label_voided",
+        entity: "invoice",
+        entityId: invoiceId,
+        payload: { boxId: box.id, labelId: box.labelId, tracking: box.trackingNumber, cost: box.labelCost },
+      });
+      return NextResponse.json({ ok: true, record, readiness: fulfillmentReadyToShip(record) });
+    }
+
+    if (body.action === "unship") {
+      // Admin-only escape hatch for a mistaken "Mark shipped" — PPAS logins
+      // can't quietly resurrect a shipment the buyer was already emailed about.
+      if (session.role !== ROLE.MANAGER) {
+        return NextResponse.json(
+          { error: "Only an admin can unship — ask a manager." },
+          { status: 403 },
+        );
+      }
+      const record = await markFulfillmentUnshipped(invoiceId, session.email);
+      const invoice = await markInvoiceUnshipped(invoiceId, session.email);
+      if (invoice.quoteId) {
+        await clearShipmentFromQuote(invoice.quoteId).catch((err) =>
+          console.warn("[fulfillment] quote unship write failed:", err instanceof Error ? err.message : err),
+        );
+      }
+      await logAudit({
+        actor: session,
+        action: "fulfillment.unshipped",
+        entity: "invoice",
+        entityId: invoiceId,
+        payload: { invoiceNumber: record.invoiceNumber },
       });
       return NextResponse.json({ ok: true, record, readiness: fulfillmentReadyToShip(record) });
     }

@@ -466,6 +466,15 @@ export async function attachShipmentToQuote(
   });
 }
 
+/** Admin unship: remove the shipment block attachShipmentToQuote wrote. */
+export async function clearShipmentFromQuote(quoteId: string): Promise<void> {
+  await getDb().collection("salesPortalQuotes").doc(quoteId).update({
+    shippedAt: null,
+    shipmentBoxes: [],
+    updatedAt: new Date(),
+  });
+}
+
 /** Record that staff emailed the buyer asking for call times ("Request a call"). */
 export async function markCallRequested(quoteId: string): Promise<void> {
   await getDb().collection("salesPortalQuotes").doc(quoteId).update({

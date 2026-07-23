@@ -8,6 +8,7 @@ import { getDb, toIso } from "./admin";
 import { getLuxesupplyOrg } from "./staff";
 import { getInvoiceById, type PortalInvoice } from "./invoices";
 import { getQuoteById, expandQuoteItemSkus } from "./quotes";
+import { getStaffProductBaseBySku } from "./catalog";
 
 const COLLECTION = "salesPortalFulfillment";
 const MAX_SCANS = 800;
@@ -186,86 +187,120 @@ export async function recordScan(
   const cleaned = String(code || "").trim();
   if (!cleaned) throw new Error("Empty scan.");
 
-  const ref = getDb().collection(COLLECTION).doc(invoiceId);
-  const snap = await ref.get();
-  if (!snap.exists) throw new Error("Open the shipment before scanning.");
-  const data = snap.data() || {};
-  const record = serialize(data);
-  if (record.status === "shipped") throw new Error("This shipment is already marked shipped.");
-
-  const now = new Date();
+  const db = getDb();
+  const ref = db.collection(COLLECTION).doc(invoiceId);
   const upper = cleaned.toUpperCase();
-  const expected = new Set(record.expectedSkus.map((s) => s.toUpperCase()));
-  const matchedSku = record.expectedSkus.find((s) => s.toUpperCase() === upper) || null;
-  const matchedBox = record.boxes.find((b) => b.barcode.toUpperCase() === upper) || null;
 
-  let outcome: ScanResult["outcome"];
-  let message: string;
-  let nextCurrentBoxId = currentBoxId;
-  const scans = [
-    ...record.scans.slice(-(MAX_SCANS - 1)).map((s) => ({ ...s, at: s.at ? new Date(s.at) : now })),
-  ];
-  const boxes = [...record.boxes.map((b) => ({ ...b, createdAt: b.createdAt ? new Date(b.createdAt) : now }))];
-  const assignments = { ...record.assignments };
-
-  if (matchedSku) {
-    const already = assignments[matchedSku];
-    if (!currentBoxId || !boxes.some((b) => b.id === currentBoxId)) {
-      outcome = "error";
-      message = `${matchedSku}: scanned without a box — scan a box barcode first.`;
-      scans.push({ at: now, by, code: cleaned, kind: "error", boxId: null, error: message });
-    } else if (already && already === currentBoxId) {
-      outcome = "error";
-      message = `${matchedSku} is already in this box.`;
-      scans.push({ at: now, by, code: cleaned, kind: "error", boxId: currentBoxId, error: message });
-    } else {
-      const moved = already ? ` (moved from ${boxes.find((b) => b.id === already)?.label || "another box"})` : "";
-      assignments[matchedSku] = currentBoxId;
-      outcome = "item_assigned";
-      message = `${matchedSku} → ${boxes.find((b) => b.id === currentBoxId)?.label || "box"}${moved}`;
-      scans.push({ at: now, by, code: cleaned, kind: "item", boxId: currentBoxId, error: null });
-    }
-  } else if (matchedBox) {
-    nextCurrentBoxId = matchedBox.id;
-    outcome = "box_selected";
-    message = `Box ${matchedBox.label} selected.`;
-    scans.push({ at: now, by, code: cleaned, kind: "box", boxId: matchedBox.id, error: null });
-  } else if (expected.size && upper.length >= 3) {
-    // Unknown code — treat as a new box barcode.
-    const label = `-${boxes.length + 1}`;
-    const box = {
-      id: `box_${boxes.length + 1}_${Math.random().toString(36).slice(2, 8)}`,
-      label,
-      barcode: cleaned,
-      carrier: "",
-      trackingNumber: "",
-      createdAt: now,
-      weightOz: null,
-      lengthIn: null,
-      widthIn: null,
-      heightIn: null,
-      labelId: null,
-      labelPdfUrl: null,
-      labelZplUrl: null,
-      labelCost: null,
-      labelService: null,
-      trackingStatus: null,
-      trackingStatusAt: null,
-    };
-    boxes.push(box);
-    nextCurrentBoxId = box.id;
-    outcome = "box_created";
-    message = `New box ${label} (${cleaned}) — scan items into it.`;
-    scans.push({ at: now, by, code: cleaned, kind: "box", boxId: box.id, error: null });
-  } else {
-    outcome = "error";
-    message = `“${cleaned}” isn't on this shipment.`;
-    scans.push({ at: now, by, code: cleaned, kind: "error", boxId: null, error: message });
+  // Wrong-piece guard (outside the transaction — catalog reads mustn't rerun on
+  // contention): an unknown code that resolves to a real catalog SKU is almost
+  // always the wrong piece on the bench, never a box barcode.
+  const preSnap = await ref.get();
+  if (!preSnap.exists) throw new Error("Open the shipment before scanning.");
+  const pre = serialize(preSnap.data() || {});
+  let unknownIsCatalogSku = false;
+  if (
+    !pre.expectedSkus.some((s) => s.toUpperCase() === upper) &&
+    !pre.boxes.some((b) => b.barcode.toUpperCase() === upper)
+  ) {
+    unknownIsCatalogSku = !!(await getStaffProductBaseBySku(cleaned).catch(() => null));
   }
 
-  await ref.update({ scans, boxes, assignments, updatedAt: now });
+  // Transactional apply — two scan guns (or two stations on one invoice) racing
+  // must not drop each other's assignments.
+  const applied = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new Error("Open the shipment before scanning.");
+    const record = serialize(snap.data() || {});
+    if (record.status === "shipped") throw new Error("This shipment is already marked shipped.");
+
+    const now = new Date();
+    const matchedSku = record.expectedSkus.find((s) => s.toUpperCase() === upper) || null;
+    const matchedBox = record.boxes.find((b) => b.barcode.toUpperCase() === upper) || null;
+
+    let outcome: ScanResult["outcome"];
+    let message: string;
+    let nextCurrentBoxId = currentBoxId;
+    const scans = [
+      ...record.scans.slice(-(MAX_SCANS - 1)).map((s) => ({ ...s, at: s.at ? new Date(s.at) : now })),
+    ];
+    const boxes = [...record.boxes.map((b) => ({ ...b, createdAt: b.createdAt ? new Date(b.createdAt) : now }))];
+    const assignments = { ...record.assignments };
+
+    if (matchedSku) {
+      const already = assignments[matchedSku];
+      if (!currentBoxId || !boxes.some((b) => b.id === currentBoxId)) {
+        outcome = "error";
+        message = `${matchedSku}: scanned without a box — scan a box barcode first.`;
+        scans.push({ at: now, by, code: cleaned, kind: "error", boxId: null, error: message });
+      } else if (already && already === currentBoxId) {
+        outcome = "error";
+        message = `${matchedSku} is already in this box.`;
+        scans.push({ at: now, by, code: cleaned, kind: "error", boxId: currentBoxId, error: message });
+      } else {
+        const moved = already ? ` (moved from ${boxes.find((b) => b.id === already)?.label || "another box"})` : "";
+        assignments[matchedSku] = currentBoxId;
+        outcome = "item_assigned";
+        message = `${matchedSku} → ${boxes.find((b) => b.id === currentBoxId)?.label || "box"}${moved}`;
+        scans.push({ at: now, by, code: cleaned, kind: "item", boxId: currentBoxId, error: null });
+      }
+    } else if (matchedBox) {
+      nextCurrentBoxId = matchedBox.id;
+      outcome = "box_selected";
+      message = `Box ${matchedBox.label} selected.`;
+      scans.push({ at: now, by, code: cleaned, kind: "box", boxId: matchedBox.id, error: null });
+    } else if (unknownIsCatalogSku) {
+      outcome = "error";
+      message = `${cleaned} is not on this shipment — wrong piece.`;
+      scans.push({ at: now, by, code: cleaned, kind: "error", boxId: null, error: message });
+    } else if (record.expectedSkus.length && upper.length >= 3) {
+      // Unknown non-catalog code — treat as a new box barcode. Label is
+      // max-existing + 1, so removing a box never recycles an ordinal.
+      const maxLabel = boxes.reduce(
+        (m, b) => Math.max(m, Math.abs(parseInt(b.label, 10)) || 0),
+        0,
+      );
+      const label = `-${maxLabel + 1}`;
+      const box = {
+        id: `box_${maxLabel + 1}_${Math.random().toString(36).slice(2, 8)}`,
+        label,
+        barcode: cleaned,
+        carrier: "",
+        trackingNumber: "",
+        createdAt: now,
+        weightOz: null,
+        lengthIn: null,
+        widthIn: null,
+        heightIn: null,
+        labelId: null,
+        labelPdfUrl: null,
+        labelZplUrl: null,
+        labelCost: null,
+        labelService: null,
+        trackingStatus: null,
+        trackingStatusAt: null,
+      };
+      boxes.push(box);
+      nextCurrentBoxId = box.id;
+      outcome = "box_created";
+      message = `New box ${label} (${cleaned}) — scan items into it.`;
+      scans.push({ at: now, by, code: cleaned, kind: "box", boxId: box.id, error: null });
+    } else {
+      outcome = "error";
+      message = `“${cleaned}” isn't on this shipment.`;
+      scans.push({ at: now, by, code: cleaned, kind: "error", boxId: null, error: message });
+    }
+
+    tx.update(ref, { scans, boxes, assignments, updatedAt: now });
+    return { outcome, message, nextCurrentBoxId };
+  });
+
   const saved = await ref.get();
-  return { record: serialize(saved.data() || {}), outcome, message, currentBoxId: nextCurrentBoxId };
+  return {
+    record: serialize(saved.data() || {}),
+    outcome: applied.outcome,
+    message: applied.message,
+    currentBoxId: applied.nextCurrentBoxId,
+  };
 }
 
 export async function setBoxTracking(
@@ -392,19 +427,37 @@ export async function attachLabelToBox(
 
 /** Remove an empty box (mis-scan). Boxes with items must be emptied first. */
 export async function removeBox(invoiceId: string, boxId: string): Promise<FulfillmentRecord> {
-  const ref = getDb().collection(COLLECTION).doc(invoiceId);
-  const snap = await ref.get();
-  if (!snap.exists) throw new Error("Shipment not found.");
-  const record = serialize(snap.data() || {});
-  if (Object.values(record.assignments).includes(boxId)) {
-    throw new Error("Box has items in it — move them first.");
-  }
-  const boxes = record.boxes
-    .filter((b) => b.id !== boxId)
-    .map((b) => ({ ...b, createdAt: b.createdAt ? new Date(b.createdAt) : new Date() }));
-  await ref.update({ boxes, updatedAt: new Date() });
+  const db = getDb();
+  const ref = db.collection(COLLECTION).doc(invoiceId);
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new Error("Shipment not found.");
+    const record = serialize(snap.data() || {});
+    if (Object.values(record.assignments).includes(boxId)) {
+      throw new Error("Box has items in it — move them first.");
+    }
+    const boxes = record.boxes
+      .filter((b) => b.id !== boxId)
+      .map((b) => ({ ...b, createdAt: b.createdAt ? new Date(b.createdAt) : new Date() }));
+    tx.update(ref, { boxes, updatedAt: new Date() });
+  });
   const saved = await ref.get();
   return serialize(saved.data() || {});
+}
+
+/** Void support: strip a purchased label (and its tracking) so the box can re-quote. */
+export async function clearLabelFromBox(invoiceId: string, boxId: string): Promise<FulfillmentRecord> {
+  return updateBox(invoiceId, boxId, {
+    carrier: "",
+    trackingNumber: "",
+    labelId: null,
+    labelPdfUrl: null,
+    labelZplUrl: null,
+    labelCost: null,
+    labelService: null,
+    trackingStatus: null,
+    trackingStatusAt: null,
+  });
 }
 
 export function fulfillmentReadyToShip(record: FulfillmentRecord): { ready: boolean; reason: string | null } {
@@ -428,16 +481,74 @@ export async function markFulfillmentShipped(
   invoiceId: string,
   by: string,
 ): Promise<FulfillmentRecord> {
+  const db = getDb();
+  const ref = db.collection(COLLECTION).doc(invoiceId);
+  // Transactional: the readiness check and the flip happen against the same
+  // snapshot, so a concurrent box-remove can't slip a not-ready shipment through.
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new Error("Shipment not found.");
+    const record = serialize(snap.data() || {});
+    if (record.status === "shipped") throw new Error("This shipment is already marked shipped.");
+    const { ready, reason } = fulfillmentReadyToShip(record);
+    if (!ready) throw new Error(reason || "Shipment isn't ready.");
+    const now = new Date();
+    tx.update(ref, { status: "shipped", shippedAt: now, shippedBy: by, updatedAt: now });
+  });
+  const saved = await ref.get();
+  return serialize(saved.data() || {});
+}
+
+/** Admin undo for a mistaken "Mark shipped" — reopens the pack station. */
+export async function markFulfillmentUnshipped(
+  invoiceId: string,
+  by: string,
+): Promise<FulfillmentRecord> {
   const ref = getDb().collection(COLLECTION).doc(invoiceId);
   const snap = await ref.get();
   if (!snap.exists) throw new Error("Shipment not found.");
   const record = serialize(snap.data() || {});
-  const { ready, reason } = fulfillmentReadyToShip(record);
-  if (!ready) throw new Error(reason || "Shipment isn't ready.");
-  const now = new Date();
-  await ref.update({ status: "shipped", shippedAt: now, shippedBy: by, updatedAt: now });
+  if (record.status !== "shipped") throw new Error("Shipment isn't marked shipped.");
+  await ref.update({
+    status: "packing",
+    shippedAt: null,
+    shippedBy: "",
+    unshippedBy: by,
+    updatedAt: new Date(),
+  });
   const saved = await ref.get();
   return serialize(saved.data() || {});
+}
+
+/** Batch-load pack records for a queue of invoices (ids without a record are simply absent). */
+export async function listFulfillmentRecordsByInvoiceIds(
+  ids: string[],
+): Promise<Map<string, FulfillmentRecord>> {
+  const out = new Map<string, FulfillmentRecord>();
+  const unique = [...new Set(ids.map((i) => String(i || "").trim()).filter(Boolean))];
+  if (!unique.length) return out;
+  const db = getDb();
+  for (let i = 0; i < unique.length; i += 100) {
+    const chunk = unique.slice(i, i + 100);
+    const snaps = await db.getAll(...chunk.map((id) => db.collection(COLLECTION).doc(id)));
+    for (const s of snaps) if (s.exists) out.set(s.id, serialize(s.data() || {}));
+  }
+  return out;
+}
+
+/** Shipments marked shipped inside [start, end) — feeds the end-of-day manifest. */
+export async function listFulfillmentShippedBetween(
+  start: Date,
+  end: Date,
+): Promise<FulfillmentRecord[]> {
+  const snap = await getDb()
+    .collection(COLLECTION)
+    .where("shippedAt", ">=", start)
+    .where("shippedAt", "<", end)
+    .get();
+  return snap.docs
+    .map((d) => serialize(d.data() || {}))
+    .sort((a, b) => String(b.shippedAt || "").localeCompare(String(a.shippedAt || "")));
 }
 
 /** Buyer-facing: per-item tracking map for an invoice (null when not packed via fulfillment). */

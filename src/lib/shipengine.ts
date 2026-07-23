@@ -86,7 +86,7 @@ function toApiAddress(to: ShipTo) {
   };
 }
 
-function toApiPackage(parcel: Parcel) {
+function toApiPackage(parcel: Parcel, insuredValue?: number | null) {
   const pkg: Record<string, unknown> = {
     weight: { value: Math.max(1, Math.round(parcel.weightOz)), unit: "ounce" },
   };
@@ -98,8 +98,22 @@ function toApiPackage(parcel: Parcel) {
       height: parcel.heightIn,
     };
   }
+  if (insuredValue && insuredValue > 0) {
+    pkg.insured_value = { currency: "usd", amount: Math.round(insuredValue * 100) / 100 };
+  }
   return pkg;
 }
+
+/**
+ * Shipment-level extras carried from the rate quote into the purchased label:
+ * signature confirmation and carrier-provided insurance on the declared value.
+ * Both change the quoted price, so they're set at /rates time and the chosen
+ * rateId bakes them into the label.
+ */
+export type ShipExtras = {
+  signature?: boolean;
+  insuredValue?: number | null;
+};
 
 async function seFetch(path: string, body: unknown): Promise<Record<string, unknown>> {
   const res = await fetch(`${BASE}${path}`, {
@@ -132,19 +146,26 @@ async function connectedCarrierIds(): Promise<string[]> {
 }
 
 /** Rate-shop a box across all connected carriers. */
-export async function getRates(to: ShipTo, parcel: Parcel): Promise<RateQuote[]> {
+export async function getRates(
+  to: ShipTo,
+  parcel: Parcel,
+  extras: ShipExtras = {},
+): Promise<RateQuote[]> {
   const ship_from = await shipFromAddress();
   const carrier_ids = await connectedCarrierIds();
   if (!carrier_ids.length) {
     throw new Error("No carriers connected on the ShipEngine account yet.");
   }
+  const shipment: Record<string, unknown> = {
+    ship_to: toApiAddress(to),
+    ship_from,
+    packages: [toApiPackage(parcel, extras.insuredValue)],
+  };
+  if (extras.signature) shipment.confirmation = "signature";
+  if (extras.insuredValue && extras.insuredValue > 0) shipment.insurance_provider = "carrier";
   const data = await seFetch("/rates", {
     rate_options: { carrier_ids },
-    shipment: {
-      ship_to: toApiAddress(to),
-      ship_from,
-      packages: [toApiPackage(parcel)],
-    },
+    shipment,
   });
   const rr = (data.rate_response || {}) as Record<string, unknown>;
   const rates = Array.isArray(rr.rates) ? (rr.rates as Array<Record<string, unknown>>) : [];
@@ -288,6 +309,25 @@ export async function getTrackingInfo(opts: {
   }
   trackingCache.set(key, { info, at: Date.now() });
   return info;
+}
+
+/**
+ * Void a purchased label for a refund. ShipEngine returns approved=false when
+ * the carrier refuses (label already scanned, too old, etc.) — surface that
+ * message instead of clearing the box.
+ */
+export async function voidLabel(labelId: string): Promise<{ approved: boolean; message: string }> {
+  const res = await fetch(`${BASE}/labels/${encodeURIComponent(labelId)}/void`, {
+    method: "PUT",
+    headers: headers(),
+  });
+  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!res.ok) {
+    const errs = Array.isArray(data.errors) ? (data.errors as Array<Record<string, unknown>>) : [];
+    const msg = errs.map((e) => String(e.message || "")).filter(Boolean).join("; ");
+    throw new Error(msg || `ShipEngine error ${res.status}`);
+  }
+  return { approved: Boolean(data.approved), message: String(data.message || "") };
 }
 
 /** Buy a label from a previously quoted rate. */

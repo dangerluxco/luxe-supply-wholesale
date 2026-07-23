@@ -10,6 +10,36 @@ const CARRIERS = ["UPS", "FedEx", "USPS", "DHL", "Other"];
 
 type Readiness = { ready: boolean; reason: string | null };
 
+/** Scan feedback tones — packers work by ear, not by watching the feed.
+ *  Short high chirp = good scan; double low buzz = bad scan. */
+function scanBeep(ok: boolean) {
+  try {
+    type AudioWindow = Window & { webkitAudioContext?: typeof AudioContext; __luxeAudio?: AudioContext };
+    const w = window as AudioWindow;
+    const AC = window.AudioContext || w.webkitAudioContext;
+    if (!AC) return;
+    const ctx = (w.__luxeAudio ||= new AC());
+    void ctx.resume?.();
+    const tone = (freq: number, at: number, dur: number) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "square";
+      osc.frequency.value = freq;
+      gain.gain.value = 0.06;
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(ctx.currentTime + at);
+      osc.stop(ctx.currentTime + at + dur);
+    };
+    if (ok) tone(1175, 0, 0.09);
+    else {
+      tone(240, 0, 0.16);
+      tone(240, 0.22, 0.16);
+    }
+  } catch {
+    /* audio unavailable — the visual flash still fires */
+  }
+}
+
 /**
  * Scan-driven pack station. Warehouse flow (barcode scanner types + Enter):
  *   1. scan a box barcode  -> creates/selects that box
@@ -22,12 +52,18 @@ export function PackStation({
   initialRecord,
   itemMeta,
   shipEngineEnabled = false,
+  signatureDefault = false,
+  isAdmin = false,
 }: {
   invoiceId: string;
   initialRecord: FulfillmentRecord;
   itemMeta: Record<string, { title: string; imageUrl: string | null; images?: string[] }>;
   /** When the ShipEngine key is configured: rate-shop + buy labels in-app. */
   shipEngineEnabled?: boolean;
+  /** Buyer's account-level "signature required" flag — seeds the label toggle. */
+  signatureDefault?: boolean;
+  /** Admins (managers) get the unship escape hatch. */
+  isAdmin?: boolean;
 }) {
   const router = useRouter();
   const [record, setRecord] = useState(initialRecord);
@@ -39,7 +75,16 @@ export function PackStation({
   const [error, setError] = useState<string | null>(null);
   const [addressModalOpen, setAddressModalOpen] = useState(false);
   const [gallerySku, setGallerySku] = useState<string | null>(null);
+  const [flash, setFlash] = useState<"ok" | "bad" | null>(null);
   const scanRef = useRef<HTMLInputElement | null>(null);
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function flashScan(ok: boolean) {
+    scanBeep(ok);
+    setFlash(ok ? "ok" : "bad");
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+    flashTimer.current = setTimeout(() => setFlash(null), ok ? 350 : 900);
+  }
 
   // Keep the scanner input focused — barcode guns type into whatever has focus.
   useEffect(() => {
@@ -93,9 +138,14 @@ export function PackStation({
     setScanValue("");
     if (!code) return;
     const data = await api({ action: "scan", code, currentBoxId });
-    if (!data) return;
+    if (!data) {
+      flashScan(false);
+      return;
+    }
     if (data.currentBoxId !== undefined) setCurrentBoxId(data.currentBoxId);
-    setFeed((f) => [{ ok: data.outcome !== "error", text: data.message || code }, ...f].slice(0, 12));
+    const ok = data.outcome !== "error";
+    flashScan(ok);
+    setFeed((f) => [{ ok, text: data.message || code }, ...f].slice(0, 12));
   }
 
   const unpacked = record.expectedSkus.filter((s) => !record.assignments[s]);
@@ -145,13 +195,40 @@ export function PackStation({
         {/* Scan input */}
         <div
           className={clsx(
-            "rounded-card border p-5",
-            shipped ? "border-[#4E9A6A]/50 bg-[#4E9A6A]/10" : "border-accent/50 bg-white/5",
+            "rounded-card border p-5 transition-colors duration-150",
+            shipped
+              ? "border-[#4E9A6A]/50 bg-[#4E9A6A]/10"
+              : flash === "bad"
+                ? "border-[#E5484D] bg-[#E5484D]/20"
+                : flash === "ok"
+                  ? "border-[#4E9A6A] bg-[#4E9A6A]/10"
+                  : "border-accent/50 bg-white/5",
           )}
         >
           {shipped ? (
-            <div className="text-[15px] font-semibold text-[#4E9A6A]">
-              Shipped — all boxes have tracking. Buyer notified.
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="text-[15px] font-semibold text-[#4E9A6A]">
+                Shipped — all boxes have tracking. Buyer notified.
+              </div>
+              {isAdmin ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={async () => {
+                    if (
+                      !window.confirm(
+                        "Unship this invoice? It reopens the pack station and clears tracking from the invoice — the buyer is NOT emailed about the undo.",
+                      )
+                    )
+                      return;
+                    const data = await api({ action: "unship" });
+                    if (data) router.refresh();
+                  }}
+                  className="rounded-chip border border-[#E5484D]/50 px-3 py-1.5 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-[#E5484D] hover:bg-[#E5484D]/10 disabled:opacity-40"
+                >
+                  Unship (admin)
+                </button>
+              ) : null}
             </div>
           ) : (
             <>
@@ -314,12 +391,24 @@ export function PackStation({
                   box={box}
                   disabled={shipped}
                   shipEngineEnabled={shipEngineEnabled}
+                  signatureDefault={signatureDefault}
                   api={api}
                 />
               </div>
             );
           })
         )}
+
+        {record.boxes.length > 0 ? (
+          <a
+            href={`/fulfillment/${invoiceId}/slips`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block rounded-card border border-white/15 px-5 py-3 text-center text-[11px] font-semibold uppercase tracking-[0.12em] text-white/70 transition hover:border-accent hover:text-white"
+          >
+            🖨 Print packing slips ({record.boxes.length} box{record.boxes.length === 1 ? "" : "es"})
+          </a>
+        ) : null}
 
         {!shipped ? (
           <div className="rounded-card border border-white/15 p-5">
@@ -363,6 +452,7 @@ type BoxShape = {
   lengthIn: number | null;
   widthIn: number | null;
   heightIn: number | null;
+  labelId: string | null;
   labelPdfUrl: string | null;
   labelZplUrl: string | null;
   labelCost: number | null;
@@ -382,40 +472,90 @@ function saveParcelDefaults(weight: string, dims: { l: string; w: string; h: str
   }
 }
 
+/** Named box presets ("Handbag 12×10×6") saved at this station — one tap fills
+ *  dims + typical weight instead of re-keying the same numbers all day. */
+const BOX_PRESETS_KEY = "luxe-packstation-box-presets";
+
+type BoxPreset = { name: string; weight: string; l: string; w: string; h: string };
+
+function loadBoxPresets(): BoxPreset[] {
+  try {
+    const raw = localStorage.getItem(BOX_PRESETS_KEY);
+    const arr = raw ? (JSON.parse(raw) as unknown) : [];
+    return Array.isArray(arr)
+      ? arr
+          .filter((p): p is BoxPreset => !!p && typeof (p as BoxPreset).name === "string")
+          .slice(0, 20)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveBoxPresets(presets: BoxPreset[]) {
+  try {
+    localStorage.setItem(BOX_PRESETS_KEY, JSON.stringify(presets.slice(0, 20)));
+  } catch {
+    /* private mode etc. */
+  }
+}
+
+/** Split a total-oz value into whole lb + remaining oz for display. */
+function splitOz(totalOz: number): { lb: string; oz: string } {
+  if (!Number.isFinite(totalOz) || totalOz <= 0) return { lb: "", oz: "" };
+  const lb = Math.floor(totalOz / 16);
+  const oz = Math.round(totalOz - lb * 16);
+  return { lb: lb ? String(lb) : "", oz: oz ? String(oz) : lb ? "0" : "" };
+}
+
 function BoxShipping({
   box,
   disabled,
   shipEngineEnabled,
+  signatureDefault,
   api,
 }: {
   box: BoxShape;
   disabled: boolean;
   shipEngineEnabled: boolean;
+  signatureDefault: boolean;
   api: (body: Record<string, unknown>) => Promise<unknown>;
 }) {
   const [carrier, setCarrier] = useState(box.carrier || "UPS");
   const [tracking, setTracking] = useState(box.trackingNumber);
-  const [weight, setWeight] = useState(box.weightOz ? String(box.weightOz) : "");
+  const initialWeight = splitOz(box.weightOz || 0);
+  const [wLb, setWLb] = useState(initialWeight.lb);
+  const [wOz, setWOz] = useState(initialWeight.oz);
   const [dims, setDims] = useState({
     l: box.lengthIn ? String(box.lengthIn) : "",
     w: box.widthIn ? String(box.widthIn) : "",
     h: box.heightIn ? String(box.heightIn) : "",
   });
   const [rates, setRates] = useState<Rate[] | null>(null);
+  const [applied, setApplied] = useState<{ signature: boolean; insuredValue: number | null } | null>(null);
   const [loadingRates, setLoadingRates] = useState(false);
   const [buyingRateId, setBuyingRateId] = useState<string | null>(null);
   const [manual, setManual] = useState(!shipEngineEnabled);
+  const [signature, setSignature] = useState(signatureDefault);
+  const [insure, setInsure] = useState(true);
+  const [insureAmt, setInsureAmt] = useState("");
+  const [presets, setPresets] = useState<BoxPreset[]>([]);
+  const [voiding, setVoiding] = useState(false);
   const dirty = carrier !== (box.carrier || "UPS") || tracking !== box.trackingNumber;
+  const totalOz = (Number(wLb) || 0) * 16 + (Number(wOz) || 0);
 
   // Prefill an untouched box from the station's remembered parcel defaults
   // (after mount — localStorage isn't available during server render).
   useEffect(() => {
+    setPresets(loadBoxPresets());
     if (box.weightOz || box.lengthIn || box.widthIn || box.heightIn) return;
     try {
       const raw = localStorage.getItem(PARCEL_DEFAULTS_KEY);
       if (!raw) return;
       const d = JSON.parse(raw) as { weight?: string; l?: string; w?: string; h?: string };
-      setWeight((cur) => cur || d.weight || "");
+      const w = splitOz(Number(d.weight) || 0);
+      setWLb((cur) => cur || w.lb);
+      setWOz((cur) => cur || w.oz);
       setDims((cur) => ({
         l: cur.l || d.l || "",
         w: cur.w || d.w || "",
@@ -427,7 +567,27 @@ function BoxShipping({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Label already purchased: show it — carrier/tracking are locked in.
+  function applyPreset(name: string) {
+    const p = presets.find((x) => x.name === name);
+    if (!p) return;
+    const w = splitOz(Number(p.weight) || 0);
+    setWLb(w.lb);
+    setWOz(w.oz);
+    setDims({ l: p.l, w: p.w, h: p.h });
+  }
+
+  function savePreset() {
+    const name = window.prompt('Preset name (e.g. "Handbag 12×10×6"):', "");
+    if (!name?.trim()) return;
+    const next = [
+      { name: name.trim().slice(0, 40), weight: String(totalOz || ""), ...dims },
+      ...presets.filter((p) => p.name !== name.trim()),
+    ];
+    setPresets(next);
+    saveBoxPresets(next);
+  }
+
+  // Label already purchased: show it — carrier/tracking are locked in unless voided.
   if (box.labelPdfUrl) {
     return (
       <div className="rounded-chip border border-[#4E9A6A]/40 bg-[#4E9A6A]/10 px-3 py-2.5">
@@ -440,7 +600,7 @@ function BoxShipping({
             <span className="font-mono text-[11px] text-white/50">${box.labelCost.toFixed(2)}</span>
           ) : null}
         </div>
-        <div className="mt-2 flex gap-2">
+        <div className="mt-2 flex flex-wrap items-center gap-2">
           <a
             href={box.labelPdfUrl}
             target="_blank"
@@ -459,6 +619,29 @@ function BoxShipping({
               ZPL
             </a>
           ) : null}
+          {!disabled && box.labelId ? (
+            <button
+              type="button"
+              disabled={voiding}
+              onClick={async () => {
+                if (
+                  !window.confirm(
+                    "Void this label for a refund? The tracking number dies and the box will need a new label.",
+                  )
+                )
+                  return;
+                setVoiding(true);
+                try {
+                  await api({ action: "void-label", boxId: box.id });
+                } finally {
+                  setVoiding(false);
+                }
+              }}
+              className="ml-auto h-8 rounded-chip border border-[#E5484D]/40 px-3 text-[10.5px] font-semibold uppercase leading-8 tracking-[0.1em] text-[#E5484D]/80 hover:bg-[#E5484D]/10 hover:text-[#E5484D] disabled:opacity-40"
+            >
+              {voiding ? "Voiding…" : "Void label"}
+            </button>
+          ) : null}
         </div>
       </div>
     );
@@ -468,14 +651,46 @@ function BoxShipping({
     <div className="space-y-2">
       {shipEngineEnabled && !manual && !disabled ? (
         <>
-          {/* Parcel details -> rates -> buy */}
+          {/* Box preset -> parcel details -> rates -> buy */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            {presets.length ? (
+              <select
+                value=""
+                onChange={(e) => applyPreset(e.target.value)}
+                className="h-9 max-w-[150px] rounded-chip border border-white/20 bg-[#1c1c20] px-2 text-[11.5px] text-white/80 outline-none focus:border-accent"
+              >
+                <option value="">Box preset…</option>
+                {presets.map((p) => (
+                  <option key={p.name} value={p.name}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+            <button
+              type="button"
+              onClick={savePreset}
+              disabled={!totalOz && !dims.l}
+              title="Save these dims + weight as a named preset"
+              className="h-9 rounded-chip border border-white/20 px-2.5 text-[10px] uppercase tracking-[0.08em] text-white/50 hover:border-accent hover:text-white disabled:opacity-40"
+            >
+              ＋ preset
+            </button>
+          </div>
           <div className="flex flex-wrap items-center gap-1.5">
             <input
               inputMode="numeric"
-              value={weight}
-              onChange={(e) => setWeight(e.target.value)}
-              placeholder="Weight oz"
-              className="h-9 w-[86px] rounded-chip border border-white/20 bg-[#1c1c20] px-2.5 font-mono text-[12px] text-white outline-none focus:border-accent"
+              value={wLb}
+              onChange={(e) => setWLb(e.target.value)}
+              placeholder="lb"
+              className="h-9 w-[54px] rounded-chip border border-white/20 bg-[#1c1c20] px-2 font-mono text-[12px] text-white outline-none focus:border-accent"
+            />
+            <input
+              inputMode="numeric"
+              value={wOz}
+              onChange={(e) => setWOz(e.target.value)}
+              placeholder="oz"
+              className="h-9 w-[54px] rounded-chip border border-white/20 bg-[#1c1c20] px-2 font-mono text-[12px] text-white outline-none focus:border-accent"
             />
             {(["l", "w", "h"] as const).map((k) => (
               <input
@@ -489,24 +704,31 @@ function BoxShipping({
             ))}
             <button
               type="button"
-              disabled={!weight.trim() || loadingRates}
+              disabled={totalOz <= 0 || loadingRates}
               onClick={async () => {
                 setLoadingRates(true);
                 setRates(null);
-                saveParcelDefaults(weight, dims);
+                setApplied(null);
+                saveParcelDefaults(String(totalOz), dims);
                 try {
-                  await api({
+                  const saved = await api({
                     action: "parcel",
                     boxId: box.id,
-                    weightOz: Number(weight),
+                    weightOz: totalOz,
                     lengthIn: dims.l ? Number(dims.l) : null,
                     widthIn: dims.w ? Number(dims.w) : null,
                     heightIn: dims.h ? Number(dims.h) : null,
                   });
-                  const data = (await api({ action: "rates", boxId: box.id })) as {
-                    rates?: Rate[];
-                  } | null;
+                  if (!saved) return;
+                  const data = (await api({
+                    action: "rates",
+                    boxId: box.id,
+                    signature,
+                    insure,
+                    insuredValue: insure && insureAmt.trim() ? Number(insureAmt) : null,
+                  })) as { rates?: Rate[]; applied?: { signature: boolean; insuredValue: number | null } } | null;
                   if (data?.rates) setRates(data.rates);
+                  if (data?.applied) setApplied(data.applied);
                 } finally {
                   setLoadingRates(false);
                 }
@@ -517,11 +739,53 @@ function BoxShipping({
             </button>
           </div>
 
+          {/* Signature + insurance carried into whichever rate gets bought */}
+          <div className="flex flex-wrap items-center gap-3 text-[11.5px] text-white/70">
+            <label className="flex cursor-pointer items-center gap-1.5">
+              <input
+                type="checkbox"
+                checked={signature}
+                onChange={(e) => setSignature(e.target.checked)}
+                className="h-3.5 w-3.5 accent-[#B08D3E]"
+              />
+              Signature
+              {signatureDefault ? <span className="text-[10px] text-accent">(client default)</span> : null}
+            </label>
+            <label className="flex cursor-pointer items-center gap-1.5">
+              <input
+                type="checkbox"
+                checked={insure}
+                onChange={(e) => setInsure(e.target.checked)}
+                className="h-3.5 w-3.5 accent-[#B08D3E]"
+              />
+              Insure
+            </label>
+            {insure ? (
+              <input
+                inputMode="numeric"
+                value={insureAmt}
+                onChange={(e) => setInsureAmt(e.target.value)}
+                placeholder="$ auto"
+                title="Declared value — blank insures for the box contents' invoice value"
+                className="h-8 w-[76px] rounded-chip border border-white/20 bg-[#1c1c20] px-2 font-mono text-[11.5px] text-white outline-none focus:border-accent"
+              />
+            ) : null}
+          </div>
+
           {rates ? (
             rates.length === 0 ? (
               <p className="text-[11.5px] text-white/50">No rates returned — check the address/weight.</p>
             ) : (
               <div className="space-y-1">
+                {applied ? (
+                  <p className="text-[10.5px] text-white/45">
+                    Quotes include{applied.signature ? " signature confirmation" : ""}
+                    {applied.signature && applied.insuredValue ? " ·" : ""}
+                    {applied.insuredValue ? ` $${applied.insuredValue.toLocaleString()} insurance` : ""}
+                    {!applied.signature && !applied.insuredValue ? " no signature or insurance" : ""}
+                    .
+                  </p>
+                ) : null}
                 {rates.map((r) => (
                   <button
                     key={r.rateId}
