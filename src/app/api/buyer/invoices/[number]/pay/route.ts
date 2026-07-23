@@ -4,6 +4,7 @@ import { getInvoiceByNumber } from "@/lib/firestore/invoices";
 import { publicOrigin } from "@/lib/auth-session";
 import {
   getStripe,
+  getStripePaymentMethodConfiguration,
   isStripeConfigured,
   STRIPE_INTEGRATION_IDENTIFIER,
 } from "@/lib/stripe";
@@ -88,6 +89,8 @@ export async function POST(
       cancel_url: invoiceUrl,
       integration_identifier: STRIPE_INTEGRATION_IDENTIFIER,
     };
+    const pmc = getStripePaymentMethodConfiguration();
+    if (pmc) checkoutParams.payment_method_configuration = pmc;
     const checkout = await stripe.checkout.sessions.create(
       checkoutParams as unknown as Parameters<typeof stripe.checkout.sessions.create>[0],
     );

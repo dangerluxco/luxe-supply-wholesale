@@ -35,3 +35,13 @@ export function getStripe(): Stripe {
 export function getStripeWebhookSecret(): string {
   return String(process.env.STRIPE_WEBHOOK_SECRET || "").trim();
 }
+
+/**
+ * Optional payment method configuration (pmc_...) applied to invoice Checkout
+ * Sessions — currently an ACH-only config, chosen for wholesale invoice sizes
+ * (0.8% capped at $5 vs ~2.9% for cards). Unset = Dashboard defaults. Never
+ * pass payment_method_types; this is the supported way to restrict methods.
+ */
+export function getStripePaymentMethodConfiguration(): string | null {
+  return String(process.env.STRIPE_PAYMENT_METHOD_CONFIGURATION || "").trim() || null;
+}
