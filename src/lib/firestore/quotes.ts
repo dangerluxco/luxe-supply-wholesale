@@ -458,6 +458,41 @@ export async function updateQuoteItems(
   return serializeQuote(next.id, next.data() || {});
 }
 
+/**
+ * Staff edit of the shipping method — stores the repriced charge (and comp
+ * snapshot, when the free-shipping threshold zeroes it) the API route computed
+ * from the org's shipping rules. Becomes the "agreed fee" invoice generation
+ * re-checks via reevaluateInvoiceShipping.
+ */
+export async function updateQuoteShipping(
+  quoteId: string,
+  shipping: {
+    methodId: string;
+    label: string;
+    amount: number;
+    comp: ShippingComp | null;
+  },
+  updatedBy: string,
+): Promise<PortalQuote> {
+  const ref = getDb().collection("salesPortalQuotes").doc(quoteId);
+  const snap = await ref.get();
+  if (!snap.exists) throw new Error("Order request not found.");
+
+  await ref.update({
+    shippingMethodId: shipping.methodId,
+    shippingLabel: shipping.label,
+    shipping: Math.max(0, Math.round(shipping.amount)),
+    shippingComp: shipping.comp
+      ? { applied: true, threshold: shipping.comp.threshold, baseFee: shipping.comp.baseFee }
+      : null,
+    updatedAt: new Date(),
+    updatedBy,
+  });
+
+  const next = await ref.get();
+  return serializeQuote(next.id, next.data() || {});
+}
+
 /** Link an invoice request to the formal invoice generated from it. */
 export async function linkQuoteToInvoice(
   quoteId: string,

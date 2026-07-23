@@ -8,6 +8,7 @@ export type QuoteActivityType =
   | "status_change"
   | "claim"
   | "items_edited"
+  | "shipping_edited"
   | "invoice_generated"
   | "call_requested";
 

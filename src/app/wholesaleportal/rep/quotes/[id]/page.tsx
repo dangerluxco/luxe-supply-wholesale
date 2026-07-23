@@ -17,6 +17,8 @@ import { QuoteActivityThread } from "@/components/QuoteActivityThread";
 import { listQuoteActivities } from "@/lib/firestore/quoteActivities";
 import { QuoteItemsEditor } from "@/components/QuoteItemsEditor";
 import { QuoteClaimControls } from "@/components/QuoteClaimControls";
+import { QuoteShippingEditor } from "@/components/QuoteShippingEditor";
+import { getShippingRules } from "@/lib/firestore/settings";
 import { GenerateInvoiceButton } from "@/components/GenerateInvoiceButton";
 import { BookCallButton } from "@/components/BookCallButton";
 import { RequestCallButton } from "@/components/RequestCallButton";
@@ -111,10 +113,11 @@ export default async function StaffQuoteDetailPage({
   const { id } = await params;
   const quote = await getQuoteById(id);
   if (!quote) notFound();
-  const [activities, account, lineContext] = await Promise.all([
+  const [activities, account, lineContext, shippingRules] = await Promise.all([
     listQuoteActivities(quote.id).catch(() => []),
     loadBuyerAccountContext(quote.portalUsername),
     loadLineContext(quote.items, quote.portalUsername),
+    getShippingRules().catch(() => null),
   ]);
 
   const initialCurationUrl = quote.curationToken
@@ -273,12 +276,31 @@ export default async function StaffQuoteDetailPage({
                 label="Merchandise"
                 value={quote.cartTotal != null ? money(Math.round(quote.cartTotal)) : "—"}
               />
-              <Row
-                label={quote.shippingLabel ? `Shipping · ${quote.shippingLabel}` : "Shipping"}
-                value={
-                  quote.shippingComp ? "Free · comped" : money(Math.round(quote.shipping || 0))
-                }
-              />
+              {shippingRules ? (
+                <QuoteShippingEditor
+                  quoteId={quote.id}
+                  shippingLabel={quote.shippingLabel}
+                  shipping={quote.shipping || 0}
+                  comped={!!quote.shippingComp}
+                  cartTotal={Math.round(quote.cartTotal || 0)}
+                  methods={shippingRules.methods.map((m) => ({
+                    id: m.id,
+                    label: m.label,
+                    price: m.price,
+                    compEligible: m.compEligible,
+                    enabled: m.enabled,
+                  }))}
+                  freeShippingThreshold={shippingRules.freeShippingThreshold}
+                  locked={!!quote.invoiceId}
+                />
+              ) : (
+                <Row
+                  label={quote.shippingLabel ? `Shipping · ${quote.shippingLabel}` : "Shipping"}
+                  value={
+                    quote.shippingComp ? "Free · comped" : money(Math.round(quote.shipping || 0))
+                  }
+                />
+              )}
               <Row
                 label="Order total"
                 value={

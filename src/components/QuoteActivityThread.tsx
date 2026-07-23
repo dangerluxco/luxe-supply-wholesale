@@ -10,6 +10,7 @@ const TYPE_LABEL: Record<string, string> = {
   status_change: "Status",
   claim: "Claim",
   items_edited: "Items",
+  shipping_edited: "Shipping",
   invoice_generated: "Invoice",
   call_requested: "Call",
 };
