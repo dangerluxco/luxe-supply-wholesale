@@ -174,6 +174,11 @@ export function PackStation({
   const currentBox = record.boxes.find((b) => b.id === currentBoxId) || null;
   const shipped = record.status === "shipped";
   const errorScans = record.scans.filter((s) => s.kind === "error");
+  // Whole-order rating: with 2+ packed label-less boxes, the per-box rate flow
+  // collapses to weight/dims entry and rating happens once in the combined card.
+  const packedBoxIds = new Set(Object.values(record.assignments));
+  const rateAllBoxes = record.boxes.filter((b) => packedBoxIds.has(b.id) && !b.labelId);
+  const multiBoxActive = shipEngineEnabled && !shipped && rateAllBoxes.length >= 2;
 
   function boxItems(boxId: string): string[] {
     return Object.entries(record.assignments)
@@ -452,6 +457,7 @@ export function PackStation({
                   disabled={shipped}
                   shipEngineEnabled={shipEngineEnabled}
                   signatureDefault={signatureDefault}
+                  multiBoxActive={multiBoxActive}
                   api={api}
                 />
               </div>
@@ -459,17 +465,9 @@ export function PackStation({
           })
         )}
 
-        {(() => {
-          const usedBoxIds = new Set(Object.values(record.assignments));
-          const rateAllBoxes = record.boxes.filter((b) => usedBoxIds.has(b.id) && !b.labelId);
-          return shipEngineEnabled && !shipped && rateAllBoxes.length >= 2 ? (
-            <MultiBoxShipping
-              boxes={rateAllBoxes}
-              signatureDefault={signatureDefault}
-              api={api}
-            />
-          ) : null;
-        })()}
+        {multiBoxActive ? (
+          <MultiBoxShipping boxes={rateAllBoxes} signatureDefault={signatureDefault} api={api} />
+        ) : null}
 
         {record.boxes.length > 0 ? (
           <div className="grid grid-cols-2 gap-3">
@@ -607,12 +605,15 @@ function BoxShipping({
   disabled,
   shipEngineEnabled,
   signatureDefault,
+  multiBoxActive = false,
   api,
 }: {
   box: BoxShape;
   disabled: boolean;
   shipEngineEnabled: boolean;
   signatureDefault: boolean;
+  /** Whole-order rating card is showing — this box only collects weight/dims here. */
+  multiBoxActive?: boolean;
   api: (body: Record<string, unknown>) => Promise<unknown>;
 }) {
   const [carrier, setCarrier] = useState(box.carrier || "UPS");
@@ -813,7 +814,7 @@ function BoxShipping({
                     widthIn: dims.w ? Number(dims.w) : null,
                     heightIn: dims.h ? Number(dims.h) : null,
                   });
-                  if (!saved) return;
+                  if (!saved || multiBoxActive) return;
                   const data = (await api({
                     action: "rates",
                     boxId: box.id,
@@ -829,12 +830,31 @@ function BoxShipping({
               }}
               className="h-9 rounded-chip bg-accent px-3 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ink hover:opacity-90 disabled:opacity-40"
             >
-              {loadingRates ? "Quoting…" : "Get rates"}
+              {multiBoxActive
+                ? loadingRates
+                  ? "Saving…"
+                  : box.weightOz
+                    ? "Saved ✓ — resave"
+                    : "Save box"
+                : loadingRates
+                  ? "Quoting…"
+                  : "Get rates"}
             </button>
           </div>
 
+          {multiBoxActive ? (
+            <p className="text-[10.5px] text-white/45">
+              Rates for the whole order are in the “Ship all boxes together” card below.
+            </p>
+          ) : null}
+
           {/* Signature + insurance carried into whichever rate gets bought */}
-          <div className="flex flex-wrap items-center gap-3 text-[11.5px] text-white/70">
+          <div
+            className={clsx(
+              "flex flex-wrap items-center gap-3 text-[11.5px] text-white/70",
+              multiBoxActive && "hidden",
+            )}
+          >
             <label className="flex cursor-pointer items-center gap-1.5">
               <input
                 type="checkbox"
@@ -866,7 +886,7 @@ function BoxShipping({
             ) : null}
           </div>
 
-          {rates ? (
+          {rates && !multiBoxActive ? (
             rates.length === 0 ? (
               <p className="text-[11.5px] text-white/50">No rates returned — check the address/weight.</p>
             ) : (
