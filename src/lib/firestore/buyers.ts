@@ -196,17 +196,25 @@ export async function updateBuyerCartLimits(
   return serializeBuyer(saved.id, saved.data() || {});
 }
 
+export function cartItemsLimitMessage(maxCartItems: number): string {
+  return `Order limit is ${maxCartItems} items. Remove something or ask your rep to raise your limit.`;
+}
+
+export function cartValueLimitMessage(maxCartValue: number): string {
+  return `Order limit is $${maxCartValue.toLocaleString("en-US")}. Remove something or ask your rep to raise your limit.`;
+}
+
 /** Returns an error message if cart lines exceed the buyer's hold caps, else null. */
 export function cartLimitError(
   items: CartItem[],
   buyer: Pick<PortalBuyer, "maxCartItems" | "maxCartValue">,
 ): string | null {
   if (items.length > buyer.maxCartItems) {
-    return `Order limit is ${buyer.maxCartItems} items. Remove something or ask your rep to raise your limit.`;
+    return cartItemsLimitMessage(buyer.maxCartItems);
   }
   const total = items.reduce((s, i) => s + (Number(i.price) || 0), 0);
   if (total > buyer.maxCartValue) {
-    return `Order limit is $${buyer.maxCartValue.toLocaleString("en-US")}. Remove something or ask your rep to raise your limit.`;
+    return cartValueLimitMessage(buyer.maxCartValue);
   }
   return null;
 }

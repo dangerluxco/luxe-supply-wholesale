@@ -208,6 +208,7 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
     brand: p.brand,
     hostCompAvgUsd: p.hostCompAvgUsd,
     heldByYou: p.heldByYou,
+    pendingRequest: p.pendingRequest,
     heldUntil: p.heldUntil,
   }));
 

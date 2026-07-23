@@ -21,6 +21,7 @@ type AddCartResult = {
   ok?: boolean;
   cartCount?: number;
   cartTotal?: number;
+  limitNote?: string;
 };
 
 async function postAddToCart(skus: string[]): Promise<AddCartResult> {
@@ -115,6 +116,7 @@ export function CatalogProductGrid({
           (p) =>
             p.status !== PRODUCT_STATUS.ON_HOLD &&
             p.status !== PRODUCT_STATUS.SOLD &&
+            !p.pendingRequest &&
             !inCart(p.sku),
         )
         .map((p) => p.sku),
@@ -227,7 +229,9 @@ export function CatalogProductGrid({
       }
       setMessage({
         text: res.skipped
-          ? `Added ${res.added ?? 0} · ${res.skipped} skipped`
+          ? `Added ${res.added ?? 0} · ${res.skipped} skipped${
+              res.limitNote ? ` — ${res.limitNote}` : ""
+            }`
           : `Added ${res.added ?? selectedList.length} to your order`,
         kind: "success",
         showCheckout: true,
@@ -300,6 +304,7 @@ export function CatalogProductGrid({
             selectable={
               p.status !== PRODUCT_STATUS.ON_HOLD &&
               p.status !== PRODUCT_STATUS.SOLD &&
+              !p.pendingRequest &&
               !inCart(p.sku)
             }
             onToggleSelect={toggle}

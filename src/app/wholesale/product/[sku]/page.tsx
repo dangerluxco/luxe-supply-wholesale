@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { getCatalogProductBySku } from "@/lib/firestore/catalog";
+import { cartHoldSkus, getBuyerCart } from "@/lib/firestore/buyers";
 import { getSession } from "@/lib/auth";
 import { ROLE, PRODUCT_STATUS } from "@/lib/constants";
 import { ProductPdpGallery } from "@/components/ProductPdpGallery";
@@ -41,10 +42,16 @@ export default async function ProductPage({
   const buyerUsername = pricesVisible ? session?.username : null;
 
   let product: Awaited<ReturnType<typeof getCatalogProductBySku>> = null;
+  let cartSkus: string[] = [];
   try {
-    product = await getCatalogProductBySku(decodedSku, {
-      buyerUsername,
-    });
+    const [productResult, cartResult] = await Promise.all([
+      getCatalogProductBySku(decodedSku, {
+        buyerUsername,
+      }),
+      pricesVisible && session?.id ? getBuyerCart(session.id).catch(() => []) : Promise.resolve([]),
+    ]);
+    product = productResult;
+    cartSkus = cartHoldSkus(cartResult);
   } catch (err) {
     console.warn("[wholesale product] Firestore unavailable:", err instanceof Error ? err.message : err);
   }
@@ -52,6 +59,7 @@ export default async function ProductPage({
 
   const price = Math.round(product.price ?? 0);
   const unavailable = product.held || product.price == null;
+  const inCart = cartSkus.some((s) => s.toUpperCase() === product!.sku.toUpperCase());
 
   return (
     <div className="px-8 pb-16 pt-6">
@@ -109,7 +117,13 @@ export default async function ProductPage({
           <div className="mt-8 space-y-3">
             {pricesVisible ? (
               <>
-                <AddToOrderButton sku={product.sku} price={price} disabled={unavailable} />
+                <AddToOrderButton
+                  sku={product.sku}
+                  price={price}
+                  disabled={unavailable}
+                  inCart={inCart}
+                  pendingRequest={product.pendingRequest}
+                />
                 <RequestPieceCallButton
                   sku={product.sku}
                   title={product.title}
@@ -146,6 +160,14 @@ export default async function ProductPage({
                 </div>
               ) : null}
             </>
+          ) : product.pendingRequest ? (
+            <p className="mt-3 text-[12px] text-muted">
+              On your pending invoice request — held for you
+              {product.heldUntil
+                ? ` until ${new Date(product.heldUntil).toLocaleString()}`
+                : ""}
+              .
+            </p>
           ) : product.heldByYou ? (
             <p className="mt-3 text-[12px] text-muted">
               Soft-held for you

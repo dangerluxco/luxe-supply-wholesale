@@ -11,7 +11,9 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 
-const POLL_MS = 2500;
+// The server snapshot behind /api/bundled-skus is cached ~15s (AVAILABILITY_TTL_MS),
+// so polling faster than this mostly re-reads the same cache while flooding logs.
+const POLL_MS = 10_000;
 
 type AvailabilityCtx = {
   /** Uppercase SKUs currently locked in an active suggested lot. */

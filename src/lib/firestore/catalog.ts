@@ -25,6 +25,8 @@ export type CatalogProduct = {
   held: boolean;
   /** Soft-held by the current signed-in buyer. */
   heldByYou: boolean;
+  /** Held by the current buyer for a submitted invoice request (blocks re-adding). */
+  pendingRequest: boolean;
   heldUntil: string | null;
   condition: string;
   material: string;
@@ -618,6 +620,7 @@ function toCatalogProduct(
       soldOut,
       held: heldByOther,
       heldByYou,
+      pendingRequest: heldByYou && hold?.reason === "quote",
       heldUntil: hold?.heldUntil || null,
       condition,
       material,

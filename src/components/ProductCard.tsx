@@ -7,7 +7,12 @@ import { Placeholder, OneOfOneBadge } from "./Placeholder";
 import { MicroBadge } from "./badges";
 import { money } from "@/lib/format";
 import { formatMargin, marginFor, marginTone, marginToneClass } from "@/lib/pricing";
-import { PRODUCT_STATUS } from "@/lib/constants";
+import { HOLD_HOURS, PRODUCT_STATUS } from "@/lib/constants";
+
+// Badge copy derives from the real hold TTL (7 days) — this was once
+// hard-coded "HOLD · 24H" while the cart said 7 days.
+const HOLD_BADGE =
+  HOLD_HOURS % 24 === 0 ? `HOLD · ${HOLD_HOURS / 24}D` : `HOLD · ${HOLD_HOURS}H`;
 import { ProductGallery } from "./ProductGallery";
 import { BrandedLoader } from "./BrandedLoader";
 import { Logo } from "./Logo";
@@ -29,6 +34,8 @@ export type CatalogProduct = {
   brand?: string | null;
   hostCompAvgUsd?: number | null;
   heldByYou?: boolean;
+  /** Held for this buyer's submitted invoice request — can't be re-added. */
+  pendingRequest?: boolean;
   heldUntil?: string | null;
 };
 
@@ -74,7 +81,8 @@ export function ProductCard({
   const onHold = p.status === PRODUCT_STATUS.ON_HOLD;
   const soldOut = p.status === PRODUCT_STATUS.SOLD;
   const heldByYou = !!p.heldByYou;
-  const canSelect = selectable && !onHold && !soldOut && !inCart;
+  const pendingRequest = !!p.pendingRequest;
+  const canSelect = selectable && !onHold && !soldOut && !inCart && !pendingRequest;
   // Brand is already in the title — only show non-empty era/material with clean separators.
   const metaBits = [p.era, p.material]
     .map((x) => String(x || "").trim())
@@ -246,13 +254,17 @@ export function ProductCard({
               <MicroBadge tone="solid-dark" className="absolute bottom-2.5 left-2.5">
                 IN CART
               </MicroBadge>
+            ) : pendingRequest ? (
+              <MicroBadge tone="solid-gold" className="absolute bottom-2.5 left-2.5">
+                REQUESTED
+              </MicroBadge>
             ) : heldByYou ? (
               <MicroBadge tone="solid-gold" className="absolute bottom-2.5 left-2.5">
                 HELD FOR YOU
               </MicroBadge>
             ) : onHold ? (
               <MicroBadge tone="solid-gold" className="absolute bottom-2.5 left-2.5">
-                HOLD · 24H
+                {HOLD_BADGE}
               </MicroBadge>
             ) : null}
             {urls.length > 0 ? (
@@ -318,11 +330,13 @@ export function ProductCard({
             >
               {inCart
                 ? "In cart"
-                : quickAddPending
-                  ? "Adding…"
-                  : pricesVisible
-                    ? "Add to cart"
-                    : "Sign in to add"}
+                : pendingRequest
+                  ? "Requested"
+                  : quickAddPending
+                    ? "Adding…"
+                    : pricesVisible
+                      ? "Add to cart"
+                      : "Sign in to add"}
             </button>
           ) : null}
         </div>
