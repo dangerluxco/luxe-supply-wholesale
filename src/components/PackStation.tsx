@@ -88,14 +88,23 @@ export function PackStation({
   }
 
   // Keep the scanner input focused — barcode guns type into whatever has focus.
+  // Only while there's still something to scan: once every piece is boxed the
+  // packer is picking shipping methods, and stealing focus breaks the dropdowns.
+  const stillPacking = record.expectedSkus.some((s) => !record.assignments[s]);
   useEffect(() => {
+    if (!stillPacking || record.status === "shipped") return;
     const t = setInterval(() => {
       const active = document.activeElement;
-      const isTyping = active instanceof HTMLInputElement && active !== scanRef.current;
-      if (!isTyping && record.status !== "shipped") scanRef.current?.focus();
+      const interacting =
+        (active instanceof HTMLInputElement ||
+          active instanceof HTMLSelectElement ||
+          active instanceof HTMLTextAreaElement ||
+          active instanceof HTMLButtonElement) &&
+        active !== scanRef.current;
+      if (!interacting) scanRef.current?.focus();
     }, 1500);
     return () => clearInterval(t);
-  }, [record.status]);
+  }, [record.status, stillPacking]);
 
   async function api(body: Record<string, unknown>) {
     setBusy(true);
@@ -175,10 +184,14 @@ export function PackStation({
   const shipped = record.status === "shipped";
   const errorScans = record.scans.filter((s) => s.kind === "error");
   // Whole-order rating: with 2+ packed label-less boxes, the per-box rate flow
-  // collapses to weight/dims entry and rating happens once in the combined card.
+  // collapses to weight/dims entry and rating happens once in the combined card —
+  // unless the packer opts into per-box rating (mixed speeds, e.g. the expensive
+  // piece overnight and the rest ground).
   const packedBoxIds = new Set(Object.values(record.assignments));
   const rateAllBoxes = record.boxes.filter((b) => packedBoxIds.has(b.id) && !b.labelId);
-  const multiBoxActive = shipEngineEnabled && !shipped && rateAllBoxes.length >= 2;
+  const multiBoxEligible = shipEngineEnabled && !shipped && rateAllBoxes.length >= 2;
+  const [perBoxRating, setPerBoxRating] = useState(false);
+  const multiBoxActive = multiBoxEligible && !perBoxRating;
 
   function boxItems(boxId: string): string[] {
     return Object.entries(record.assignments)
@@ -476,7 +489,25 @@ export function PackStation({
         )}
 
         {multiBoxActive ? (
-          <MultiBoxShipping boxes={rateAllBoxes} signatureDefault={signatureDefault} api={api} />
+          <MultiBoxShipping
+            boxes={rateAllBoxes}
+            signatureDefault={signatureDefault}
+            api={api}
+            onSwitchToPerBox={() => setPerBoxRating(true)}
+          />
+        ) : multiBoxEligible && perBoxRating ? (
+          <div className="rounded-card border border-white/15 px-5 py-3 text-center">
+            <span className="text-[11.5px] text-white/60">
+              Rating each box on its own — mix speeds as needed.
+            </span>{" "}
+            <button
+              type="button"
+              onClick={() => setPerBoxRating(false)}
+              className="text-[11px] font-semibold uppercase tracking-[0.1em] text-accent hover:opacity-80"
+            >
+              ← Ship all boxes together instead
+            </button>
+          </div>
         ) : null}
 
         {record.boxes.length > 0 ? (
@@ -648,6 +679,53 @@ function BoxShipping({
   const [voiding, setVoiding] = useState(false);
   const dirty = carrier !== (box.carrier || "UPS") || tracking !== box.trackingNumber;
   const totalOz = (Number(wLb) || 0) * 16 + (Number(wOz) || 0);
+  const [autoSave, setAutoSave] = useState<"idle" | "saving" | "saved">(
+    box.weightOz ? "saved" : "idle",
+  );
+  const savedSnapRef = useRef(
+    JSON.stringify({
+      w: box.weightOz || 0,
+      l: box.lengthIn ? String(box.lengthIn) : "",
+      wd: box.widthIn ? String(box.widthIn) : "",
+      h: box.heightIn ? String(box.heightIn) : "",
+    }),
+  );
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Only auto-save after the packer actually touches the fields — the
+  // localStorage prefill alone must not silently write weights to a box.
+  const touchedRef = useRef(false);
+
+  // Auto-save weight/dims as they're entered (debounced) — packers shouldn't
+  // have to click Save per box; once the last piece is boxed, everything is
+  // already persisted and whole-order rating works immediately.
+  useEffect(() => {
+    if (!touchedRef.current || disabled || box.labelPdfUrl || totalOz <= 0) return;
+    const snap = JSON.stringify({ w: totalOz, l: dims.l, wd: dims.w, h: dims.h });
+    if (snap === savedSnapRef.current) return;
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(async () => {
+      setAutoSave("saving");
+      saveParcelDefaults(String(totalOz), dims);
+      const ok = await api({
+        action: "parcel",
+        boxId: box.id,
+        weightOz: totalOz,
+        lengthIn: dims.l ? Number(dims.l) : null,
+        widthIn: dims.w ? Number(dims.w) : null,
+        heightIn: dims.h ? Number(dims.h) : null,
+      });
+      if (ok) {
+        savedSnapRef.current = snap;
+        setAutoSave("saved");
+      } else {
+        setAutoSave("idle");
+      }
+    }, 900);
+    return () => {
+      if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totalOz, dims.l, dims.w, dims.h, disabled, box.labelPdfUrl]);
 
   // Prefill an untouched box from the station's remembered parcel defaults
   // (after mount — localStorage isn't available during server render).
@@ -786,14 +864,14 @@ function BoxShipping({
             <input
               inputMode="numeric"
               value={wLb}
-              onChange={(e) => setWLb(e.target.value)}
+              onChange={(e) => { touchedRef.current = true; setWLb(e.target.value); }}
               placeholder="lb"
               className="h-9 w-[54px] rounded-chip border border-white/20 bg-[#1c1c20] px-2 font-mono text-[12px] text-white outline-none focus:border-accent"
             />
             <input
               inputMode="numeric"
               value={wOz}
-              onChange={(e) => setWOz(e.target.value)}
+              onChange={(e) => { touchedRef.current = true; setWOz(e.target.value); }}
               placeholder="oz"
               className="h-9 w-[54px] rounded-chip border border-white/20 bg-[#1c1c20] px-2 font-mono text-[12px] text-white outline-none focus:border-accent"
             />
@@ -802,7 +880,7 @@ function BoxShipping({
                 key={k}
                 inputMode="numeric"
                 value={dims[k]}
-                onChange={(e) => setDims((d) => ({ ...d, [k]: e.target.value }))}
+                onChange={(e) => { touchedRef.current = true; setDims((d) => ({ ...d, [k]: e.target.value })); }}
                 placeholder={`${k.toUpperCase()}"`}
                 className="h-9 w-[52px] rounded-chip border border-white/20 bg-[#1c1c20] px-2 font-mono text-[12px] text-white outline-none focus:border-accent"
               />
@@ -824,6 +902,15 @@ function BoxShipping({
                     widthIn: dims.w ? Number(dims.w) : null,
                     heightIn: dims.h ? Number(dims.h) : null,
                   });
+                  if (saved) {
+                    savedSnapRef.current = JSON.stringify({
+                      w: totalOz,
+                      l: dims.l,
+                      wd: dims.w,
+                      h: dims.h,
+                    });
+                    setAutoSave("saved");
+                  }
                   if (!saved || multiBoxActive) return;
                   const data = (await api({
                     action: "rates",
@@ -841,10 +928,10 @@ function BoxShipping({
               className="h-9 rounded-chip bg-accent px-3 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ink hover:opacity-90 disabled:opacity-40"
             >
               {multiBoxActive
-                ? loadingRates
+                ? loadingRates || autoSave === "saving"
                   ? "Saving…"
-                  : box.weightOz
-                    ? "Saved ✓ — resave"
+                  : autoSave === "saved" || box.weightOz
+                    ? "Saved ✓"
                     : "Save box"
                 : loadingRates
                   ? "Quoting…"
@@ -1007,6 +1094,7 @@ function MultiBoxShipping({
   boxes,
   signatureDefault,
   api,
+  onSwitchToPerBox,
 }: {
   boxes: Array<BoxShape & { label: string }>;
   signatureDefault: boolean;
@@ -1015,6 +1103,8 @@ function MultiBoxShipping({
     warning?: string;
     boxCount?: number;
   } | null>;
+  /** Opt out into per-box rating (mixed speeds across boxes). */
+  onSwitchToPerBox: () => void;
 }) {
   const [options, setOptions] = useState<RateAllOption[] | null>(null);
   const [selectedKey, setSelectedKey] = useState<string>("");
@@ -1162,6 +1252,13 @@ function MultiBoxShipping({
           {notice ? <p className="mt-2 text-[11.5px] text-[#E5484D]">{notice}</p> : null}
         </>
       )}
+      <button
+        type="button"
+        onClick={onSwitchToPerBox}
+        className="mt-2 text-[10px] uppercase tracking-[0.08em] text-white/40 hover:text-white/70"
+      >
+        different speeds per box? rate boxes individually instead
+      </button>
     </div>
   );
 }
