@@ -54,3 +54,29 @@ export function formatMargin(margin: Margin): string {
   if (margin.amount == null || margin.percent == null) return "—";
   return `${money(margin.amount)} (${margin.percent}%)`;
 }
+
+/**
+ * Buyer-facing comp-average line — a selling tool, so it only renders when the
+ * comp genuinely flatters the asking price (comps at/below asking argue AGAINST
+ * the deal and used to be shown anyway). Returns e.g. "38% below comp avg
+ * $3,713", or null when the comparison is unfavorable/unknown. Staff surfaces
+ * should keep showing the raw comp regardless — they need the anchor either way.
+ */
+export function favorableCompLine(
+  price: number | null,
+  compAvg: number | null,
+): string | null {
+  if (
+    price == null ||
+    compAvg == null ||
+    !Number.isFinite(price) ||
+    !Number.isFinite(compAvg) ||
+    price <= 0
+  ) {
+    return null;
+  }
+  const belowPct = Math.round(((compAvg - price) / compAvg) * 100);
+  // Under 5% below comp isn't a story worth telling — skip marginal cases too.
+  if (belowPct < 5) return null;
+  return `${belowPct}% below comp avg ${money(Math.round(compAvg))}`;
+}

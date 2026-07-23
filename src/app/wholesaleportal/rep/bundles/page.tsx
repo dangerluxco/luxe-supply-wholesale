@@ -9,8 +9,19 @@ import { listCatalogProducts } from "@/lib/firestore/catalog";
 import { listBuyers } from "@/lib/firestore/buyers";
 import { listSuggestedLots } from "@/lib/firestore/suggestedLots";
 import { ArchiveLotButton } from "@/components/ArchiveLotButton";
+import { BUNDLE_AUTO_EXPIRE_DAYS } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
+
+/** Days until the nightly cron auto-archives this lot (clock resets on edit). */
+function lotDaysLeft(lot: { updatedAt: string | null; createdAt: string | null }): number | null {
+  const anchor = lot.updatedAt || lot.createdAt;
+  if (!anchor) return null;
+  const ts = Date.parse(anchor);
+  if (!Number.isFinite(ts)) return null;
+  const dayMs = 24 * 60 * 60 * 1000;
+  return Math.ceil((ts + BUNDLE_AUTO_EXPIRE_DAYS * dayMs - Date.now()) / dayMs);
+}
 
 function uniqueCatalogItems(
   products: {
@@ -100,19 +111,29 @@ export default async function BundlesPage({
         <h2 className="mb-4 flex items-center gap-2 text-[18px] font-semibold text-ink">
           Active lots
           <InfoTip label="Active lot visibility">
-            SKUs in these lots stay off the regular catalog until the lot is archived
-            (manually or after 14 days).
+            SKUs in these lots stay off the regular catalog until the lot is archived —
+            manually, or automatically {BUNDLE_AUTO_EXPIRE_DAYS} days after its last edit
+            (editing a lot resets its clock).
           </InfoTip>
         </h2>
         {existing.length === 0 ? (
           <p className="text-[13px] text-muted">No active suggested lots yet.</p>
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {existing.map((b) => (
+            {existing.map((b) => {
+              const daysLeft = lotDaysLeft(b);
+              return (
               <div key={b.id} className="rounded-card border border-border bg-surface p-4">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[15px] font-semibold text-ink">{b.title}</span>
-                  <MicroBadge tone="solid-green">ACTIVE</MicroBadge>
+                  <div className="flex items-center gap-1.5">
+                    {daysLeft != null && daysLeft <= 3 ? (
+                      <MicroBadge tone="solid-gold">
+                        {daysLeft <= 0 ? "EXPIRES TONIGHT" : `EXPIRES IN ${daysLeft}D`}
+                      </MicroBadge>
+                    ) : null}
+                    <MicroBadge tone="solid-green">ACTIVE</MicroBadge>
+                  </div>
                 </div>
                 <div className="mt-1.5 text-[11.5px] text-muted">
                   {b.items.length || b.itemCount} pieces ·{" "}
@@ -123,6 +144,9 @@ export default async function BundlesPage({
                           ? ` · ${b.buyerDisplayName}`
                           : ""
                       }`}
+                  {daysLeft != null
+                    ? ` · auto-archives in ${Math.max(0, daysLeft)}d (editing resets the clock)`
+                    : ""}
                 </div>
 
                 {b.items.length > 0 ? (
@@ -160,7 +184,8 @@ export default async function BundlesPage({
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

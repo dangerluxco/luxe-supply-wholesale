@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ProductCard, type CatalogProduct } from "@/components/ProductCard";
 import { CatalogLoadMore } from "@/components/CatalogLoadMore";
 import { PaginationControls } from "@/components/PaginationControls";
@@ -34,6 +35,30 @@ export function StaffCatalogGrid({
   perPage?: number;
 }) {
   const [showCost, setShowCost] = useState(true);
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const findParam = params.get("find") ?? "";
+  const [find, setFind] = useState(findParam);
+
+  useEffect(() => {
+    setFind(findParam);
+  }, [findParam]);
+
+  // Debounced ?find= sync — the server filters the full loaded list (not just
+  // this page slice), so results stay consistent with pagination.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (find === findParam) return;
+      const sp = new URLSearchParams(params.toString());
+      if (find.trim()) sp.set("find", find.trim());
+      else sp.delete("find");
+      sp.delete("page");
+      router.replace(`${pathname}?${sp.toString()}`, { scroll: false });
+    }, 250);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [find]);
 
   useEffect(() => {
     try {
@@ -56,6 +81,15 @@ export function StaffCatalogGrid({
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center gap-3">
+        <input
+          type="search"
+          value={find}
+          onChange={(e) => setFind(e.target.value)}
+          placeholder="Find in catalog — title, SKU, brand…"
+          className="h-9 w-full max-w-[300px] rounded-chip border border-border bg-surface px-3 text-[12.5px] text-ink outline-none focus:border-accent"
+          autoComplete="off"
+          enterKeyHint="search"
+        />
         <label className="flex items-center gap-1.5 text-[12px] text-secondary">
           <input
             type="checkbox"

@@ -29,7 +29,8 @@ export default async function BuyerInvoicesPage() {
           className="mt-8"
         />
       ) : (
-        <div className="mt-8 overflow-hidden rounded-card border border-border bg-surface">
+        <div className="mt-8 overflow-x-auto rounded-card border border-border bg-surface">
+          <div className="min-w-[680px]">
           <div className="grid grid-cols-[110px_1fr_90px_100px_110px_120px] gap-x-4 border-b border-border px-5 py-3 font-mono text-[10px] uppercase tracking-[0.12em] text-muted">
             <span>Invoice</span>
             <span>Issued</span>
@@ -56,6 +57,7 @@ export default async function BuyerInvoicesPage() {
               </span>
             </Link>
           ))}
+          </div>
         </div>
       )}
     </div>

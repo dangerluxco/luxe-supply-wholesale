@@ -6,7 +6,13 @@ import { useEffect, useRef, useState } from "react";
 import { Placeholder, OneOfOneBadge } from "./Placeholder";
 import { MicroBadge } from "./badges";
 import { money } from "@/lib/format";
-import { formatMargin, marginFor, marginTone, marginToneClass } from "@/lib/pricing";
+import {
+  favorableCompLine,
+  formatMargin,
+  marginFor,
+  marginTone,
+  marginToneClass,
+} from "@/lib/pricing";
 import { HOLD_HOURS, PRODUCT_STATUS } from "@/lib/constants";
 
 // Badge copy derives from the real hold TTL (7 days) — this was once
@@ -148,11 +154,23 @@ export function ProductCard({
           </span>
         )}
       </div>
-      {pricesVisible && p.hostCompAvgUsd != null && Number.isFinite(p.hostCompAvgUsd) ? (
-        <div className="mt-0.5 font-mono text-[11px] text-muted">
-          Comp avg ${Math.round(p.hostCompAvgUsd)}
-        </div>
-      ) : null}
+      {pricesVisible
+        ? (() => {
+            // Staff cards (margin visible) keep the raw comp as a pricing anchor;
+            // buyer cards only get the comp when it sells FOR us.
+            if (margin) {
+              return p.hostCompAvgUsd != null && Number.isFinite(p.hostCompAvgUsd) ? (
+                <div className="mt-0.5 font-mono text-[11px] text-muted">
+                  Comp avg {money(Math.round(p.hostCompAvgUsd))}
+                </div>
+              ) : null;
+            }
+            const compLine = favorableCompLine(p.wholesalePrice, p.hostCompAvgUsd ?? null);
+            return compLine ? (
+              <div className="mt-0.5 font-mono text-[11px] text-[#4E9A6A]">{compLine}</div>
+            ) : null;
+          })()
+        : null}
       {metaBits.length ? (
         <div className="mt-1 font-mono text-[11px] uppercase text-muted">
           {metaBits.join(" · ")}
@@ -268,7 +286,8 @@ export function ProductCard({
               </MicroBadge>
             ) : null}
             {urls.length > 0 ? (
-              <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-ink/65 py-1 text-center font-mono text-[9px] tracking-[0.1em] text-[#C9C7BE] opacity-0 transition group-hover:opacity-100">
+              // Always visible on touch (no hover); hover-reveal from lg up.
+              <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-ink/65 py-1 text-center font-mono text-[9px] tracking-[0.1em] text-[#C9C7BE] opacity-100 transition lg:opacity-0 lg:group-hover:opacity-100">
                 {urls.length > 1 ? `${urls.length} PHOTOS` : "VIEW"}
               </span>
             ) : null}

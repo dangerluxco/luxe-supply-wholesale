@@ -30,7 +30,10 @@ export default async function OrdersPage() {
           className="mt-8"
         />
       ) : (
-        <div className="mt-8 overflow-hidden rounded-card border border-border bg-surface">
+        // min-w + overflow-x: the table scrolls inside its own card on phones
+        // instead of forcing the whole page to overflow.
+        <div className="mt-8 overflow-x-auto rounded-card border border-border bg-surface">
+          <div className="min-w-[760px]">
           <div className="grid grid-cols-[110px_1fr_80px_100px_140px_120px_70px] gap-x-4 border-b border-border px-5 py-3 font-mono text-[10px] uppercase tracking-[0.12em] text-muted">
             <span>Date</span>
             <span>Request</span>
@@ -74,6 +77,7 @@ export default async function OrdersPage() {
               </span>
             </Link>
           ))}
+          </div>
         </div>
       )}
     </div>

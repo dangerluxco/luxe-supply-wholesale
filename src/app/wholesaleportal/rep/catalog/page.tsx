@@ -1,4 +1,5 @@
 import { listCatalogProducts, getCatalogSettingsState } from "@/lib/firestore/catalog";
+import { matchesKeywords } from "@/lib/search";
 import { CatalogSettingsForm } from "@/components/CatalogSettingsForm";
 import { StaffCatalogGrid, type StaffCatalogCard } from "@/components/StaffCatalogGrid";
 import { PRODUCT_STATUS } from "@/lib/constants";
@@ -33,6 +34,16 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
     settings = settingsResult;
   } catch (err) {
     console.warn("[rep catalog] Firestore unavailable:", err instanceof Error ? err.message : err);
+  }
+
+  // In-page find over the Browse grid (?find=) — same order-independent keyword
+  // matcher as the storefront, so "keepall gray" works here too.
+  const find = one(sp.find).trim();
+  const loadedCount = products.length;
+  if (find) {
+    products = products.filter((p) =>
+      matchesKeywords([p.title, p.sku, p.brand].filter(Boolean).join(" "), find),
+    );
   }
 
   const totalPages = Math.max(1, Math.ceil(products.length / PER_PAGE));
@@ -77,11 +88,29 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
 
       <div className="mt-10 mb-4 flex items-baseline gap-3">
         <h2 className="text-[16px] font-semibold text-ink">Complete catalog</h2>
-        <span className="text-[12px] text-muted">{products.length} loaded · click any item to edit</span>
+        <span className="text-[12px] text-muted">
+          {find
+            ? `${products.length} of ${loadedCount} match "${find}"`
+            : `${products.length} loaded`}{" "}
+          · click any item to edit
+        </span>
       </div>
 
       {products.length === 0 ? (
-        <EmptyState title="No products found." hint="Check uploadDirectory luxesupply in uploadHistory." />
+        find ? (
+          <>
+            <StaffCatalogGrid
+              products={[]}
+              currentLimit={pageLimit}
+              hasMore={false}
+              page={1}
+              totalPages={1}
+            />
+            <EmptyState title={`No items match "${find}".`} hint="Try fewer keywords." />
+          </>
+        ) : (
+          <EmptyState title="No products found." hint="Check uploadDirectory luxesupply in uploadHistory." />
+        )
       ) : (
         <StaffCatalogGrid
           products={cards}

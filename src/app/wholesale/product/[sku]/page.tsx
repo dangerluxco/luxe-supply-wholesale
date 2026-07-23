@@ -1,12 +1,15 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
-import { getCatalogProductBySku } from "@/lib/firestore/catalog";
+import { findSimilarCatalogItems, getCatalogProductBySku } from "@/lib/firestore/catalog";
+import { getProductOverrides, type ProductOverrides } from "@/lib/firestore/productOverrides";
 import { cartHoldSkus, getBuyerCart } from "@/lib/firestore/buyers";
+import { Placeholder } from "@/components/Placeholder";
 import { getSession } from "@/lib/auth";
 import { ROLE, PRODUCT_STATUS } from "@/lib/constants";
 import { ProductPdpGallery } from "@/components/ProductPdpGallery";
 import { money } from "@/lib/format";
+import { favorableCompLine } from "@/lib/pricing";
 import { AddToOrderButton } from "@/components/AddToOrderButton";
 import { RequestPieceCallButton } from "@/components/RequestPieceCallButton";
 import { BackButton } from "@/components/BackButton";
@@ -15,6 +18,57 @@ import { LiveBundledSkuGuard } from "@/components/StorefrontAvailability";
 import { getHoldAlertForBuyerSku } from "@/lib/firestore/holdAlerts";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * Streams after the shell: "similar pieces" scored by brand/material/era/price
+ * (lib/recommend.ts) — the same engine staff already use on order requests, now
+ * finally surfaced to the buyer who's actually shopping. Excludes cart items.
+ */
+async function SimilarPiecesSlot({
+  sku,
+  cartSkus,
+  pricesVisible,
+}: {
+  sku: string;
+  cartSkus: string[];
+  pricesVisible: boolean;
+}) {
+  const similar = await findSimilarCatalogItems(sku, cartSkus, 4).catch(() => []);
+  if (!similar.length) return null;
+  return (
+    <div className="mt-14">
+      <h2 className="mb-4 text-[16px] font-semibold tracking-tight text-ink">Similar pieces</h2>
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+        {similar.map((item) => (
+          <Link
+            key={item.sku}
+            href={`/wholesale/product/${encodeURIComponent(item.sku)}`}
+            className="group overflow-hidden rounded-card border border-border bg-surface transition hover:border-accent"
+          >
+            <Placeholder
+              imageSrc={item.imageUrl}
+              alt={item.title}
+              className="aspect-square w-full"
+            />
+            <div className="space-y-1 px-3 py-3">
+              <div className="line-clamp-2 text-[12.5px] font-medium text-ink">{item.title}</div>
+              <div className="flex items-baseline justify-between gap-2">
+                {pricesVisible && item.price != null ? (
+                  <span className="font-mono text-[12.5px] text-ink">
+                    {money(Math.round(item.price))}
+                  </span>
+                ) : (
+                  <span />
+                )}
+                <span className="font-mono text-[10px] text-muted">{item.match}% match</span>
+              </div>
+            </div>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 /** Streams after the main PDP shell so hold-alert lookup never blocks first paint. */
 async function HoldAlertSlot({
@@ -43,19 +97,37 @@ export default async function ProductPage({
 
   let product: Awaited<ReturnType<typeof getCatalogProductBySku>> = null;
   let cartSkus: string[] = [];
+  let details: ProductOverrides | null = null;
   try {
-    const [productResult, cartResult] = await Promise.all([
+    const [productResult, cartResult, detailsResult] = await Promise.all([
       getCatalogProductBySku(decodedSku, {
         buyerUsername,
       }),
       pricesVisible && session?.id ? getBuyerCart(session.id).catch(() => []) : Promise.resolve([]),
+      // Staff-entered details (description, provenance, marks, dimensions…) —
+      // captured on the product edit page but previously never shown to buyers.
+      getProductOverrides(decodedSku).catch(() => null),
     ]);
     product = productResult;
     cartSkus = cartHoldSkus(cartResult);
+    details = detailsResult;
   } catch (err) {
     console.warn("[wholesale product] Firestore unavailable:", err instanceof Error ? err.message : err);
   }
   if (!product || product.soldOut) notFound();
+
+  const detailRows: Array<[string, string]> = details
+    ? (
+        [
+          ["Category", details.category],
+          ["Origin", details.origin],
+          ["Dimensions", details.dimensions],
+          ["Marks", details.marks],
+          ["Provenance", details.provenance],
+        ] as Array<[string, string | null]>
+      )
+        .filter((r): r is [string, string] => !!r[1] && r[1].trim() !== "")
+    : [];
 
   const price = Math.round(product.price ?? 0);
   const unavailable = product.held || product.price == null;
@@ -95,11 +167,12 @@ export default async function ProductPage({
               <div className="mt-5 font-mono text-[22px] font-semibold text-ink">
                 {product.price != null ? money(price) : "—"}
               </div>
-              {product.hostCompAvgUsd != null ? (
-                <div className="mt-1 font-mono text-[12px] text-muted">
-                  Comp avg {money(Math.round(product.hostCompAvgUsd))}
-                </div>
-              ) : null}
+              {(() => {
+                const compLine = favorableCompLine(product.price, product.hostCompAvgUsd);
+                return compLine ? (
+                  <div className="mt-1 font-mono text-[12px] text-[#4E9A6A]">{compLine}</div>
+                ) : null;
+              })()}
             </>
           ) : (
             <div className="mt-5 rounded-card border border-border bg-surface px-4 py-3">
@@ -113,6 +186,28 @@ export default async function ProductPage({
           )}
 
           <div className="mt-2 text-[12px] text-secondary">Condition · {product.condition}</div>
+
+          {details?.description ? (
+            <p className="mt-4 max-w-prose whitespace-pre-wrap text-[13px] leading-relaxed text-secondary">
+              {details.description}
+            </p>
+          ) : null}
+
+          {detailRows.length > 0 ? (
+            <div className="mt-5 overflow-hidden rounded-card border border-border">
+              {detailRows.map(([label, value]) => (
+                <div
+                  key={label}
+                  className="grid grid-cols-[110px_1fr] gap-3 border-b border-border/60 bg-surface px-4 py-2.5 text-[12.5px] last:border-b-0"
+                >
+                  <span className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-muted">
+                    {label}
+                  </span>
+                  <span className="whitespace-pre-wrap text-ink">{value}</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
 
           <div className="mt-8 space-y-3">
             {pricesVisible ? (
@@ -179,6 +274,14 @@ export default async function ProductPage({
           ) : null}
         </div>
       </div>
+
+      <Suspense fallback={null}>
+        <SimilarPiecesSlot
+          sku={product.sku}
+          cartSkus={cartSkus}
+          pricesVisible={pricesVisible}
+        />
+      </Suspense>
     </div>
   );
 }

@@ -95,17 +95,19 @@ export function BuyerTopbar({
 
   return (
     <>
-      <header className="sticky top-0 z-40 flex h-[60px] items-center gap-8 border-b border-border bg-surface/95 px-8 backdrop-blur-sm print:hidden">
+      {/* Phones: nav scrolls horizontally, search collapses to its icon, name and
+          sign-out text drop — no fixed widths left to force page overflow. */}
+      <header className="sticky top-0 z-40 flex h-[60px] items-center gap-3 border-b border-border bg-surface/95 px-4 backdrop-blur-sm sm:px-8 lg:gap-8 print:hidden">
         <Link href="/wholesale" className="flex shrink-0 items-center">
           <Logo height={26} priority />
         </Link>
-        <nav className="flex gap-1 text-[12.5px] font-medium text-secondary">
+        <nav className="flex min-w-0 flex-1 gap-1 overflow-x-auto text-[12.5px] font-medium text-secondary lg:flex-none lg:overflow-visible">
           {nav.map((n) => (
             <Link
               key={n.href}
               href={n.href}
               className={clsx(
-                "flex items-center gap-1.5 rounded-chip px-3 py-1.5 transition",
+                "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-chip px-3 py-1.5 transition",
                 isActive(n.href) ? "bg-[#F0EFEA] text-ink" : "hover:text-ink",
               )}
             >
@@ -118,14 +120,15 @@ export function BuyerTopbar({
             </Link>
           ))}
         </nav>
-        <div className="flex-1" />
+        <div className="hidden flex-1 lg:block" />
         <button
           onClick={() => setOpen(true)}
-          className="flex h-9 w-[300px] items-center gap-2 rounded-chip border border-border bg-ground px-3 text-[12.5px] text-muted transition hover:border-accent"
+          aria-label="Search the collection"
+          className="flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-chip border border-border bg-ground px-0 text-[12.5px] text-muted transition hover:border-accent lg:w-[300px] lg:justify-start lg:px-3"
         >
           <SearchIcon className="h-4 w-4 shrink-0" />
-          <span>Search the collection…</span>
-          <span className="ml-auto rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-[10.5px] text-muted">
+          <span className="hidden lg:inline">Search the collection…</span>
+          <span className="ml-auto hidden rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-[10.5px] text-muted lg:inline">
             ⌘K
           </span>
         </button>
@@ -141,15 +144,20 @@ export function BuyerTopbar({
                 <span className="rounded-chip border border-border px-2.5 py-1.5">Cart</span>
               </Link>
             )}
-            <div className="flex items-center gap-2 text-[12px] text-secondary">
+            {/* Avatar links to Account so sign-out stays reachable where the
+                text button is hidden (xs screens). */}
+            <Link
+              href="/wholesale/account"
+              className="flex shrink-0 items-center gap-2 text-[12px] text-secondary"
+            >
               <div className="flex h-7 w-7 items-center justify-center rounded-chip bg-ink text-[10px] font-semibold text-ground">
                 {user.initials}
               </div>
-              {user.name.split(" ")[0]}
-            </div>
+              <span className="hidden md:inline">{user.name.split(" ")[0]}</span>
+            </Link>
             <a
               href="/api/logout?area=buyer"
-              className="pressable rounded-chip border border-border px-2.5 py-1.5 text-[11px] text-secondary hover:border-accent hover:text-ink"
+              className="pressable shrink-0 rounded-chip border border-border px-2.5 py-1.5 text-[11px] text-secondary hover:border-accent hover:text-ink"
             >
               Sign out
             </a>

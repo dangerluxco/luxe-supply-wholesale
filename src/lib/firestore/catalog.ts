@@ -146,6 +146,72 @@ function resolveBrand(
   );
 }
 
+/**
+ * Last-resort brand recognition from the listing title. Much of the live
+ * inventory carries no brand field anywhere — the brand only exists as the
+ * first words of the title ("Louis Vuitton Keepall …") — which left the
+ * storefront brand filter/facets permanently empty. Titles conventionally
+ * lead with the brand, so a known-maker prefix match is reliable; a
+ * word-boundary contains-match covers the stragglers.
+ */
+const KNOWN_BRANDS = [
+  "Louis Vuitton",
+  "Chanel",
+  "Gucci",
+  "Prada",
+  "Fendi",
+  "Dior",
+  "Christian Dior",
+  "Hermès",
+  "Hermes",
+  "Celine",
+  "Céline",
+  "Bottega Veneta",
+  "Balenciaga",
+  "Burberry",
+  "Saint Laurent",
+  "Yves Saint Laurent",
+  "YSL",
+  "Givenchy",
+  "Loewe",
+  "Goyard",
+  "Valentino",
+  "Versace",
+  "Salvatore Ferragamo",
+  "Ferragamo",
+  "Miu Miu",
+  "Coach",
+  "Chloé",
+  "Chloe",
+  "Cartier",
+  "Bvlgari",
+  "Bulgari",
+  "Dolce & Gabbana",
+  "Alexander McQueen",
+  "Balmain",
+  "Longchamp",
+  "MCM",
+  "Tory Burch",
+  "Michael Kors",
+].sort((a, b) => b.length - a.length);
+
+export function brandFromTitle(titleRaw: string): string {
+  const title = String(titleRaw || "").trim();
+  if (!title) return "";
+  const lower = title.toLowerCase();
+  for (const brand of KNOWN_BRANDS) {
+    if (lower.startsWith(brand.toLowerCase())) return brand;
+  }
+  for (const brand of KNOWN_BRANDS) {
+    const idx = lower.indexOf(brand.toLowerCase());
+    if (idx === -1) continue;
+    const before = idx === 0 ? " " : lower[idx - 1]!;
+    const after = idx + brand.length >= lower.length ? " " : lower[idx + brand.length]!;
+    if (!/[a-z0-9]/.test(before) && !/[a-z0-9]/.test(after)) return brand;
+  }
+  return "";
+}
+
 /** Match the legacy sales portal's title chain so thumbnails never fall back to SKU too early. */
 export function resolveTitle(
   upload: UploadGroup | null | undefined,
@@ -586,8 +652,11 @@ function toCatalogProduct(
     overrideTitle && overrideTitle.toLowerCase() !== sku.toLowerCase()
       ? overrideTitle
       : liveTitle || sku;
-  // Prefer a non-empty staff/saved override; otherwise run the full ask→iiq→upload chain.
-  const brand = takeText(overrides?.brand) || resolveBrand(group, iiq, ask);
+  // Prefer a non-empty staff/saved override; otherwise run the full ask→iiq→upload
+  // chain; finally recognize the brand from the title (much of the live inventory
+  // has no brand field at all — see brandFromTitle).
+  const brand =
+    takeText(overrides?.brand) || resolveBrand(group, iiq, ask) || brandFromTitle(title);
   const soldOut = !!(iiq && (iiq.sold === true || iiq.Sold === true));
   const condition = String((iiq && (iiq.Condition || iiq.condition)) || "").trim() || "—";
   const material = String((iiq && (iiq.Material || iiq.material)) || "").trim() || "—";
@@ -734,7 +803,7 @@ export async function resolveCuratedDraftItems(
     const inDb = !!group || !!iiq;
     const resolvedSku = group?.sku || sku;
     const title = resolveTitle(group, iiq, ask, resolvedSku);
-    const brand = resolveBrand(group, iiq, ask);
+    const brand = resolveBrand(group, iiq, ask) || brandFromTitle(title);
     const imageUrl = group?.imageUrls[0] || null;
     const iiqCost =
       iiq && typeof iiq.cost === "number" && Number.isFinite(iiq.cost as number)
@@ -804,7 +873,7 @@ export async function resolveCurationItems(
     const inDb = !!group || !!iiq;
     const resolvedSku = group?.sku || sku;
     const title = resolveTitle(group, iiq, ask, resolvedSku);
-    const brand = resolveBrand(group, iiq, ask);
+    const brand = resolveBrand(group, iiq, ask) || brandFromTitle(title);
     const condition = String((iiq && (iiq.Condition || iiq.condition)) || "").trim();
     const imageUrls = group?.imageUrls || [];
     const iiqCost =
@@ -1267,7 +1336,9 @@ export async function getStaffProductBaseBySku(skuRaw: string): Promise<StaffPro
     sku: resolvedSku,
     inDb: true,
     title: resolveTitle(group, iiq, ask, resolvedSku),
-    brand: resolveBrand(group, iiq, ask),
+    brand:
+      resolveBrand(group, iiq, ask) ||
+      brandFromTitle(resolveTitle(group, iiq, ask, resolvedSku)),
     cost: group?.inventoryCost ?? iiqCost ?? null,
     imageUrls: group?.imageUrls || [],
     era: String((iiq && (iiq.Era || iiq.era || iiq.Period)) || "").trim(),

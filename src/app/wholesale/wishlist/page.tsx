@@ -56,7 +56,8 @@ export default async function WishlistPage() {
           className="mt-8"
         />
       ) : (
-        <div className="mt-8 overflow-hidden rounded-card border border-border bg-surface">
+        <div className="mt-8 overflow-x-auto rounded-card border border-border bg-surface">
+          <div className="min-w-[760px]">
           <div className="flex items-center gap-4 border-b border-border bg-ground px-5 py-2.5 font-mono text-[10px] uppercase tracking-[0.1em] text-muted">
             <span className={COL.image} />
             <span className={COL.item}>Item</span>
@@ -120,6 +121,7 @@ export default async function WishlistPage() {
               </div>
             );
           })}
+          </div>
         </div>
       )}
     </div>

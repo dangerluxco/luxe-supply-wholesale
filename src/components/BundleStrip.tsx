@@ -86,7 +86,7 @@ export function BundleStrip({ lot, inCart = false }: { lot: LotForStrip; inCart?
                     label={p.sku}
                     className="h-[84px] w-[84px] items-end pb-1 text-[8.5px]"
                   />
-                  <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-ink/70 py-0.5 text-center font-mono text-[8px] tracking-[0.08em] text-[#C9C7BE] opacity-0 transition group-hover:opacity-100">
+                  <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-ink/70 py-0.5 text-center font-mono text-[8px] tracking-[0.08em] text-[#C9C7BE] opacity-100 transition lg:opacity-0 lg:group-hover:opacity-100">
                     {urls.length > 1 ? `${urls.length} PHOTOS` : "VIEW"}
                   </span>
                 </button>

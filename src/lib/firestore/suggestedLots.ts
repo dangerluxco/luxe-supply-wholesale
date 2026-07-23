@@ -403,7 +403,10 @@ export async function expireStaleSuggestedLots(
   const archived: string[] = [];
 
   for (const lot of lots) {
-    const anchor = lot.createdAt || lot.updatedAt;
+    // Anchor on the LAST edit, not creation — a rep actively maintaining a lot
+    // (repricing, swapping pieces) resets its clock instead of having it
+    // silently archived 14 days after it was first drafted.
+    const anchor = lot.updatedAt || lot.createdAt;
     if (!anchor) continue;
     const ts = Date.parse(anchor);
     if (!Number.isFinite(ts) || ts > cutoff) continue;

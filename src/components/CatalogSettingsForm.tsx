@@ -174,6 +174,7 @@ export function CatalogSettingsForm({
   });
   const [batchText, setBatchText] = useState("");
   const [listQuery, setListQuery] = useState("");
+  const [bulkMarginPct, setBulkMarginPct] = useState("20");
   const [sortMode, setSortMode] = useState<"recent" | "az" | "price_asc" | "price_desc">("recent");
   const [showNewOnly, setShowNewOnly] = useState(false);
   const [pending, start] = useTransition();
@@ -292,6 +293,40 @@ export function CatalogSettingsForm({
       }
       setMessage(parts.join(" · ") + ".");
     });
+  }
+
+  /**
+   * Bulk pricing: set every (or just the new) costed row to a target profit
+   * margin — % of price, matching lib/pricing.ts. 20% reproduces the cost÷0.8
+   * formula default, so applying 20% clears the override flag rather than
+   * marking every row "manually priced".
+   */
+  function applyBulkMargin(scope: "new" | "all") {
+    const pct = Number(bulkMarginPct);
+    if (!Number.isFinite(pct) || pct < 0 || pct >= 95) {
+      setError("Target margin must be between 0 and 94%.");
+      return;
+    }
+    setError(null);
+    const applies = (it: CuratedCatalogItem) =>
+      it.cost != null &&
+      it.cost > 0 &&
+      (scope === "all" || justAddedSkuKeys.has(it.sku.trim().toLowerCase()));
+    const changed = draft.items.filter(applies).length;
+    setDraft({
+      items: draft.items.map((it) =>
+        applies(it)
+          ? {
+              ...it,
+              price: Math.round(it.cost! / (1 - pct / 100)),
+              priceOverridden: pct !== 20,
+            }
+          : it,
+      ),
+    });
+    setMessage(
+      `Applied ${pct}% margin to ${changed} ${scope === "new" ? "new " : ""}item${changed === 1 ? "" : "s"} with a known cost — review below, then Save catalog.`,
+    );
   }
 
   function updateDraftPrice(index: number, value: string) {
@@ -559,6 +594,41 @@ export function CatalogSettingsForm({
                 {filteredDraft.length === 0 ? " — try different filters" : ""}
               </span>
             ) : null}
+            <div className="flex flex-wrap items-center gap-2 rounded-chip border border-border bg-ground px-3 py-2">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
+                Bulk price
+              </span>
+              <label className="flex items-center gap-1 font-mono text-[12px] text-ink">
+                <input
+                  type="number"
+                  min={0}
+                  max={94}
+                  value={bulkMarginPct}
+                  onChange={(e) => setBulkMarginPct(e.target.value)}
+                  className="h-8 w-[60px] rounded-chip border border-border bg-surface px-2 text-right outline-none focus:border-accent"
+                />
+                % margin
+              </label>
+              <button
+                type="button"
+                disabled={pending || justAddedSkuKeys.size === 0}
+                onClick={() => applyBulkMargin("new")}
+                className="h-8 rounded-chip border border-border px-2.5 text-[11px] font-semibold text-secondary transition hover:border-accent hover:text-ink disabled:opacity-50"
+              >
+                Apply to new
+              </button>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => applyBulkMargin("all")}
+                className="h-8 rounded-chip border border-border px-2.5 text-[11px] font-semibold text-secondary transition hover:border-accent hover:text-ink disabled:opacity-50"
+              >
+                Apply to all
+              </button>
+              <span className="text-[10.5px] text-muted">
+                20% = the standard cost ÷ 0.8 price · skips rows with no cost · pasted/manual prices get overwritten
+              </span>
+            </div>
           </div>
         ) : null}
 
