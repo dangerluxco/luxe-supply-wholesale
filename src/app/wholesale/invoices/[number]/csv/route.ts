@@ -19,6 +19,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ number:
     ["Company", inv.customerCompany],
     ["Status", displayInvoiceStatus(inv)],
     ["Terms", inv.terms],
+    ["PO number", inv.poNumber || ""],
     ["Issued", isoDate(inv.issuedAt)],
     ["Due", isoDate(inv.dueDate)],
     ["Paid", isoDate(inv.paidAt)],

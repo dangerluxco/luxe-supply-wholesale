@@ -212,6 +212,7 @@ export async function renderInvoicePdf(
     ["ISSUED", fmtDate(inv.issuedAt)],
     ["DUE", fmtDate(inv.dueDate)],
     ["TERMS", inv.terms || "—"],
+    ...(inv.poNumber ? ([["PO NUMBER", inv.poNumber]] as Array<[string, string]>) : []),
     ...(opts.letterhead?.taxId
       ? ([["TAX ID", opts.letterhead.taxId]] as Array<[string, string]>)
       : []),

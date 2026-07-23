@@ -19,6 +19,8 @@ export type PortalQuote = {
   customerCompany: string;
   customerPhone: string;
   message: string;
+  /** Buyer-supplied purchase-order reference, carried onto the formal invoice. */
+  poNumber: string;
   items: Array<Record<string, unknown>>;
   itemCount: number;
   cartTotal: number | null;
@@ -174,6 +176,7 @@ function serializeQuote(id: string, d: Record<string, unknown>): PortalQuote {
     customerCompany: String(d.customerCompany || ""),
     customerPhone: String(d.customerPhone || ""),
     message: String(d.message || ""),
+    poNumber: String(d.poNumber || ""),
     items,
     itemCount: Number(d.itemCount || items.length || 0),
     cartTotal: d.cartTotal != null ? Number(d.cartTotal) : null,

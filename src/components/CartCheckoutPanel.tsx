@@ -24,6 +24,8 @@ export function CartCheckoutPanel({
   const [shippingMethodId, setShippingMethodId] = useState<string>(
     defaultShippingMethodId(shippingRules),
   );
+  const [poNumber, setPoNumber] = useState("");
+  const [orderNote, setOrderNote] = useState("");
   const shipping = evaluateShippingCharge(shippingRules, shippingMethodId, subtotal);
   const orderTotal = subtotal + shipping.price;
 
@@ -93,6 +95,38 @@ export function CartCheckoutPanel({
         })}
       </fieldset>
 
+      <div className="mt-5 border-t border-border pt-4">
+        <div className="micro-badge mb-3 text-[10px] tracking-[0.14em] text-accent">
+          YOUR REFERENCE
+        </div>
+        <label className="block">
+          <span className="mb-1 block text-[11px] uppercase tracking-[0.1em] text-muted">
+            PO number <span className="normal-case tracking-normal">(optional)</span>
+          </span>
+          <input
+            type="text"
+            value={poNumber}
+            onChange={(e) => setPoNumber(e.target.value)}
+            maxLength={64}
+            placeholder="e.g. PO-2026-0142"
+            className="h-9 w-full rounded-chip border border-border bg-ground px-3 font-mono text-[12.5px] text-ink placeholder:font-sans placeholder:text-muted focus:border-accent focus:outline-none"
+          />
+        </label>
+        <label className="mt-3 block">
+          <span className="mb-1 block text-[11px] uppercase tracking-[0.1em] text-muted">
+            Order notes <span className="normal-case tracking-normal">(optional)</span>
+          </span>
+          <textarea
+            value={orderNote}
+            onChange={(e) => setOrderNote(e.target.value)}
+            maxLength={2000}
+            rows={3}
+            placeholder="Pricing questions, consolidation with a previous order, delivery timing…"
+            className="w-full resize-y rounded-chip border border-border bg-ground px-3 py-2 text-[12.5px] text-ink placeholder:text-muted focus:border-accent focus:outline-none"
+          />
+        </label>
+      </div>
+
       <div className="mt-5 space-y-2 border-t border-border pt-4 text-[13px]">
         <div className="flex justify-between">
           <span className="text-secondary">Subtotal</span>
@@ -121,6 +155,8 @@ export function CartCheckoutPanel({
         <SubmitInvoiceRequestButton
           disabled={submitDisabled}
           shippingMethodId={shippingMethodId}
+          poNumber={poNumber}
+          message={orderNote}
         />
       </div>
     </div>

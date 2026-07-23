@@ -64,6 +64,7 @@ export async function removeSkuFromCart(sku: string) {
  */
 export async function submitInvoiceRequest(opts?: {
   message?: string;
+  poNumber?: string;
   shippingMethodId?: string;
 }) {
   const session = await requireBuyer();
@@ -96,11 +97,13 @@ export async function submitInvoiceRequest(opts?: {
   }
 
   const holdSkus = cartHoldSkus(cart);
-  const message = opts?.message;
+  const message = String(opts?.message || "").trim().slice(0, 2000);
+  const poNumber = String(opts?.poNumber || "").trim().slice(0, 64);
   const { id } = await createBuyerQuote({
     buyer,
     items: cart,
     message,
+    poNumber,
     shippingMethodId: shipping.methodId,
     shippingLabel: shipping.label,
     shipping: shipping.price,
@@ -130,6 +133,7 @@ export async function submitInvoiceRequest(opts?: {
       customerCompany: buyer.company,
       customerPhone: buyer.phone,
       message,
+      poNumber,
       items: cart.map((i) => ({ sku: i.sku, title: i.title, brand: i.brand, price: i.price })),
       itemCount,
       cartTotal,

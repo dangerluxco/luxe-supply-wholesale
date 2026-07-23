@@ -96,6 +96,9 @@ export default async function BuyerOrderDetailPage({
         <h1 className="text-[24px] font-semibold text-ink">Order request</h1>
         <span className="font-mono text-[11px] text-muted">#{quote.id}</span>
         <BuyerOrderStatusBadge status={quote.status} />
+        {quote.poNumber ? (
+          <span className="font-mono text-[11px] text-secondary">PO {quote.poNumber}</span>
+        ) : null}
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.3fr_1fr]">

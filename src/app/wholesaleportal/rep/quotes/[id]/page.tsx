@@ -222,6 +222,11 @@ export default async function StaffQuoteDetailPage({
             <div className="micro-badge mb-3 text-[10px] tracking-[0.14em] text-accent">
               BUYER MESSAGE
             </div>
+            {quote.poNumber ? (
+              <p className="mb-2 text-[12.5px] text-secondary">
+                PO number: <span className="font-mono text-ink">{quote.poNumber}</span>
+              </p>
+            ) : null}
             <p className="whitespace-pre-wrap text-[12.5px] text-secondary">
               {quote.message || "No message included with this request."}
             </p>

@@ -781,6 +781,7 @@ export async function createBuyerQuote(opts: {
   buyer: PortalBuyer;
   items: CartItem[];
   message?: string;
+  poNumber?: string;
   shippingMethodId?: string;
   shippingInstructions?: string;
   shippingLabel?: string;
@@ -805,6 +806,7 @@ export async function createBuyerQuote(opts: {
     customerCompany: opts.buyer.company || "",
     customerPhone: opts.buyer.phone || "",
     message: String(opts.message || "").slice(0, 2000),
+    poNumber: String(opts.poNumber || "").slice(0, 64),
     items: opts.items.map((i) => ({
       sku: i.sku,
       title: i.title,

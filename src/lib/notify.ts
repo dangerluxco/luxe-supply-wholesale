@@ -41,6 +41,7 @@ export async function notifyStaffOfInvoiceRequest(opts: {
   customerCompany?: string;
   customerPhone?: string;
   message?: string;
+  poNumber?: string;
   items: Array<{ sku: string; title: string; brand?: string; price?: number | null }>;
   itemCount: number;
   cartTotal: number;
@@ -83,6 +84,7 @@ export async function notifyStaffOfInvoiceRequest(opts: {
     <strong>From:</strong> ${escapeHtml(opts.customerName)} &lt;${escapeHtml(opts.customerEmail)}&gt;<br/>
     ${opts.customerCompany ? `<strong>Company:</strong> ${escapeHtml(opts.customerCompany)}<br/>` : ""}
     ${opts.customerPhone ? `<strong>Phone:</strong> ${escapeHtml(opts.customerPhone)}<br/>` : ""}
+    ${opts.poNumber ? `<strong>PO number:</strong> ${escapeHtml(opts.poNumber)}<br/>` : ""}
   </p>
   ${
     opts.message

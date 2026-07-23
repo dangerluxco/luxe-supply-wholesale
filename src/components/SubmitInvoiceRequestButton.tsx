@@ -9,9 +9,13 @@ import { PressableButton } from "@/components/PressableButton";
 export function SubmitInvoiceRequestButton({
   disabled,
   shippingMethodId = DEFAULT_SHIPPING_METHOD_ID,
+  poNumber,
+  message,
 }: {
   disabled?: boolean;
   shippingMethodId?: string;
+  poNumber?: string;
+  message?: string;
 }) {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -25,7 +29,7 @@ export function SubmitInvoiceRequestButton({
         disabled={disabled}
         onClick={() =>
           start(async () => {
-            const res = await submitInvoiceRequest({ shippingMethodId });
+            const res = await submitInvoiceRequest({ shippingMethodId, poNumber, message });
             if (res?.ok) {
               setError(null);
               router.push("/wholesale/orders");

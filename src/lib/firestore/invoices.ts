@@ -256,7 +256,7 @@ export async function createInvoiceFromQuote(
     total,
     terms,
     billTo,
-    poNumber: null,
+    poNumber: String(quote.poNumber || "").trim() || null,
     status: FIRESTORE_INVOICE_STATUS.SENT,
     fulfillmentStatus: FULFILLMENT_STATUS.UNFULFILLED,
     carrier: null,
