@@ -50,7 +50,7 @@ gcloud run deploy luxe-wholesale-portal \
   --memory 1Gi \
   --cpu 1 \
   --min-instances 1 \
-  --update-env-vars "GCLOUD_PROJECT=photography-964f5,NODE_ENV=production,PUBLIC_HOST=photography-964f5.web.app"
+  --update-env-vars "GCLOUD_PROJECT=photography-964f5,NODE_ENV=production,BUYER_ORIGIN=https://wholesale.luxesupply.co,STAFF_ORIGIN=https://luxe-wholesale-portal.web.app"
 
 cd ../ItemIQ-Marketing-Website
 firebase deploy --only hosting
@@ -59,6 +59,12 @@ firebase deploy --only hosting
 `--update-env-vars` (not `--set-env-vars`) is deliberate: it merges and preserves
 other runtime env vars — notably the Google OAuth creds below. `--set-env-vars`
 replaces the whole set and silently wipes them, which breaks "Sign in with Google".
+
+Do NOT set `PUBLIC_HOST=photography-964f5.web.app` (the pre-July-2026 setup): it
+feeds every generated buyer/staff link (curation shares, order/invoice emails,
+calendar invites), and that legacy Hosting site no longer rewrites portal routes
+to Cloud Run — links on it dead-end in the old photo app. `BUYER_ORIGIN` /
+`STAFF_ORIGIN` above are the explicit replacements.
 
 **Google OAuth env vars (required for "Sign in with Google" in prod).** These are
 NOT baked into the image; set them on the Cloud Run service once:

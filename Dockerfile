@@ -21,7 +21,12 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=8080
 ENV HOSTNAME=0.0.0.0
 ENV DATABASE_URL=file:./prod.db
-ENV PUBLIC_HOST=photography-964f5.web.app
+# Absolute origins for links the app generates (emails, curation shares, calendar
+# invites). Never point these at photography-964f5.web.app — that legacy Hosting
+# site no longer rewrites portal routes to Cloud Run, so its links dead-end in
+# the old photo app.
+ENV BUYER_ORIGIN=https://wholesale.luxesupply.co
+ENV STAFF_ORIGIN=https://luxe-wholesale-portal.web.app
 
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
 
