@@ -418,6 +418,41 @@ export async function updateQuoteStatus(
 }
 
 /**
+ * Append a timestamped, attributed note block onto adminNotes inside a
+ * transaction — two reps adding call notes at once can't clobber each other
+ * (the previous save path was whole-field last-write-wins). Returns the new
+ * combined notes string.
+ */
+export async function appendQuoteNote(
+  quoteId: string,
+  text: string,
+  staff: { email: string; name?: string },
+): Promise<string> {
+  const clean = String(text || "").trim().slice(0, 2000);
+  if (!clean) throw new Error("Note is empty.");
+  const db = getDb();
+  const ref = db.collection("salesPortalQuotes").doc(quoteId);
+  const stampDate = new Date().toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "America/New_York",
+  });
+  const who = staff.name || staff.email;
+  const block = `[${stampDate} · ${who}]\n${clean}`;
+
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new Error("Quote not found");
+    const existing = String((snap.data() || {}).adminNotes || "").trim();
+    const combined = (existing ? `${existing}\n\n${block}` : block).slice(0, 8000);
+    tx.update(ref, { adminNotes: combined, updatedAt: new Date(), updatedBy: staff.email });
+    return combined;
+  });
+}
+
+/**
  * Staff edit of line items: remove products and/or adjust unit prices, then
  * recompute itemCount/cartTotal from the surviving items.
  */

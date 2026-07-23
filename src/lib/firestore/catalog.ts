@@ -436,6 +436,37 @@ function uploaderEmailsFromGroups(
   return map;
 }
 
+/** AI-generated listing details from askIIQResults — the buyer PDP's fallback
+ * when staff haven't filled the matching product-override fields. */
+export type AiListingDetails = {
+  description: string;
+  category: string;
+  dimensions: string;
+  marks: string;
+  conditionNotes: string;
+};
+
+export async function getAiListingDetails(skuRaw: string): Promise<AiListingDetails | null> {
+  const sku = String(skuRaw || "").trim();
+  if (!sku) return null;
+  const uploadMap = await loadUploadGroupsBySku([sku]);
+  const askMap = await loadAskBySku([sku], uploaderEmailsFromGroups(uploadMap.values()));
+  const ask = askMap.get(sku) || askMap.get(sku.toUpperCase()) || null;
+  if (!ask) return null;
+  // Some fields arrive as arrays ("distinctiveFeatures") — join them readably
+  // instead of relying on Array.toString()'s bare commas.
+  const text = (v: unknown): string =>
+    Array.isArray(v) ? v.map(takeText).filter(Boolean).join(", ") : takeText(v);
+  const details: AiListingDetails = {
+    description: text(ask.listingDescription) || text(ask.description),
+    category: text(ask.productType) || text(ask.auctionCategory),
+    dimensions: text(ask.size),
+    marks: text(ask.distinctiveFeatures),
+    conditionNotes: text(ask.condition),
+  };
+  return Object.values(details).some(Boolean) ? details : null;
+}
+
 /** Direct-by-SKU uploadHistory lookup (not limited to a recent window) — used to resolve
  * arbitrary, possibly-old SKUs pasted into the curated catalog builder. */
 async function loadUploadGroupsBySku(skus: string[]): Promise<Map<string, UploadGroup>> {

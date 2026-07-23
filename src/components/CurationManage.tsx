@@ -140,6 +140,9 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
   const [message, setMessage] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [extendHours, setExtendHours] = useState("168");
+  const [endModalOpen, setEndModalOpen] = useState(false);
+  const [endDownloadCsv, setEndDownloadCsv] = useState(true);
+  const [endCreateOrder, setEndCreateOrder] = useState(true);
   // Inline buyer picker for converting a potential-client session to an order.
   const [orderBuyerQuery, setOrderBuyerQuery] = useState("");
   const [orderBuyerResults, setOrderBuyerResults] = useState<
@@ -653,41 +656,16 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
     });
   }
 
+  // Wrap-up is ONE summary modal (decision tallies + what-happens list +
+  // checkboxes), replacing a chain of up to five sequential window.confirm
+  // dialogs that slowed every call's close-out.
   function endSession() {
     setError(null);
-    if (stats.maybe > 0) {
-      const reviewMaybes = window.confirm(
-        `You still have ${stats.maybe} Maybe item${stats.maybe === 1 ? "" : "s"}.\n\n` +
-          "OK = go back and review Maybes first\nCancel = continue ending the session",
-      );
-      if (reviewMaybes) {
-        setMessage("Review Maybe items in the catalog below, then end the session when ready.");
-        return;
-      }
-    } else if (stats.pending > 0) {
-      if (
-        !window.confirm(
-          `You still have ${stats.pending} pending item${stats.pending === 1 ? "" : "s"} with no decision.\n\n` +
-            "End session anyway and finalize current selections?",
-        )
-      ) {
-        return;
-      }
-    } else if (
-      !window.confirm(
-        "End this sales session?\n\n" +
-          "• Selections will be finalized (buyer catalog becomes read-only)\n" +
-          "• Live add stops; the featured item is cleared\n" +
-          "• Link stays available until expiry (or revoke)\n" +
-          (share.quoteId
-            ? "• The linked order request updates to match: declined items come off (holds released); items already on the order stay unless declined; anything you added live only joins the order if it was approved\n"
-            : "") +
-          "• You can export the final CSV afterward",
-      )
-    ) {
-      return;
-    }
+    setEndModalOpen(true);
+  }
 
+  function confirmEndSession() {
+    setEndModalOpen(false);
     start(async () => {
       const res = await fetch(`/api/staff/curation/${share.token}/end`, {
         method: "POST",
@@ -721,17 +699,12 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
       } else if (share.quoteId && data.orderSyncError) {
         setMessage("Session ended, but the linked order request couldn't be updated automatically.");
         setError(data.orderSyncError);
-      } else if (
-        data.canCreateOrder &&
-        window.confirm(
-          `Create an order request from the ${data.approvedCount ?? 0} approved item${data.approvedCount === 1 ? "" : "s"}?`,
-        )
-      ) {
+      } else if (data.canCreateOrder && endCreateOrder) {
         await createOrderFromApprovals();
       } else {
         setMessage("Session ended — the link is now read-only for the client.");
       }
-      if (window.confirm("Download the final decisions CSV now?")) {
+      if (endDownloadCsv) {
         window.location.href = `/api/staff/curation/${share.token}/export`;
       }
     });
@@ -877,6 +850,116 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
 
   return (
     <div className="space-y-6">
+      {endModalOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4"
+          onClick={() => setEndModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-card border border-border bg-surface p-6 shadow-[0_24px_64px_-16px_rgba(22,22,26,0.6)]"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="End session"
+          >
+            <h3 className="text-[17px] font-semibold text-ink">End this sales session?</h3>
+
+            <div className="mt-3 flex flex-wrap gap-2 font-mono text-[11.5px]">
+              <span className="rounded-chip bg-[#4E9A6A]/10 px-2 py-1 text-[#4E9A6A]">
+                {stats.approve} yes · {money(Math.round(stats.cart))}
+              </span>
+              <span className="rounded-chip bg-accent/10 px-2 py-1 text-accent">
+                {stats.maybe} maybe
+              </span>
+              <span className="rounded-chip bg-ground px-2 py-1 text-muted">
+                {stats.pending} pending
+              </span>
+              <span className="rounded-chip bg-ground px-2 py-1 text-muted">
+                {stats.decline} no
+              </span>
+            </div>
+
+            {stats.maybe > 0 || stats.pending > 0 ? (
+              <p className="mt-3 text-[12.5px] text-danger">
+                {stats.maybe > 0
+                  ? `${stats.maybe} Maybe item${stats.maybe === 1 ? "" : "s"} will finalize as undecided. `
+                  : ""}
+                {stats.pending > 0
+                  ? `${stats.pending} item${stats.pending === 1 ? " has" : "s have"} no decision yet.`
+                  : ""}
+              </p>
+            ) : null}
+
+            <ul className="mt-3 list-disc space-y-1 pl-5 text-[12.5px] text-secondary">
+              <li>Selections finalize — the buyer&apos;s catalog becomes read-only.</li>
+              <li>Live add stops and the featured item is cleared.</li>
+              <li>The link stays viewable until expiry (or revoke).</li>
+              {share.quoteId ? (
+                <li>
+                  The linked order request syncs: declined items come off (holds released);
+                  live-added items only join if approved.
+                </li>
+              ) : null}
+            </ul>
+
+            <div className="mt-4 space-y-2">
+              {canCreateOrderRequest ? (
+                <label className="flex items-center gap-2 text-[12.5px] text-ink">
+                  <input
+                    type="checkbox"
+                    checked={endCreateOrder}
+                    onChange={(e) => setEndCreateOrder(e.target.checked)}
+                    className="h-3.5 w-3.5 accent-[var(--accent,#B08D3E)]"
+                  />
+                  Create an order request from the {stats.approve} approved item
+                  {stats.approve === 1 ? "" : "s"}
+                </label>
+              ) : null}
+              <label className="flex items-center gap-2 text-[12.5px] text-ink">
+                <input
+                  type="checkbox"
+                  checked={endDownloadCsv}
+                  onChange={(e) => setEndDownloadCsv(e.target.checked)}
+                  className="h-3.5 w-3.5 accent-[var(--accent,#B08D3E)]"
+                />
+                Download the final decisions CSV
+              </label>
+            </div>
+
+            <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
+              {stats.maybe > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEndModalOpen(false);
+                    setMessage(
+                      "Review Maybe items in the catalog below, then end the session when ready.",
+                    );
+                  }}
+                  className="h-9 rounded-chip border border-border px-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-secondary transition hover:border-accent hover:text-ink"
+                >
+                  Review Maybes first
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => setEndModalOpen(false)}
+                className="h-9 rounded-chip border border-border px-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-secondary transition hover:border-accent hover:text-ink"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={confirmEndSession}
+                className="h-9 rounded-chip bg-ink px-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-ground transition hover:opacity-90 disabled:opacity-60"
+              >
+                End session
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {/* Branded session header — same ink/gold treatment as the buyer-facing
           storefront chrome and the PDF invoice, so the seller's working view
           feels like Luxe, not an admin tool. */}
@@ -933,6 +1016,8 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
                   aria-label="Restart link for"
                   className="h-8 rounded-chip border border-white/20 bg-white/5 px-2 text-[11px] text-white/75 outline-none focus:border-accent disabled:opacity-60"
                 >
+                  <option value="2">+2 hours</option>
+                  <option value="4">+4 hours</option>
                   <option value="24">24 hours</option>
                   <option value="48">48 hours</option>
                   <option value="72">3 days</option>

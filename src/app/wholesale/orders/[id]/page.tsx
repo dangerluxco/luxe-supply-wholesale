@@ -10,6 +10,7 @@ import { MicroBadge } from "@/components/badges";
 import { BuyerOrderStatusBadge } from "@/components/BuyerOrderStatusBadge";
 import { BundleImageStrip } from "@/components/BundleImageStrip";
 import { fullDate, money } from "@/lib/format";
+import { RequestPieceCallButton } from "@/components/RequestPieceCallButton";
 
 export const dynamic = "force-dynamic";
 
@@ -240,6 +241,27 @@ export default async function BuyerOrderDetailPage({
               <Row label="Last updated" value={fullDate(quote.updatedAt)} />
               {quote.shippedAt ? <Row label="Shipped" value={fullDate(quote.shippedAt)} /> : null}
             </div>
+          </div>
+
+          {/* Post-submit questions used to mean emailing or phoning the rep —
+              the same call-request flow from the PDP/cart now works here. */}
+          <div className="rounded-card border border-border bg-surface p-5">
+            <div className="micro-badge mb-3 text-[10px] tracking-[0.14em] text-accent">
+              QUESTIONS?
+            </div>
+            <p className="mb-3 text-[12.5px] text-secondary">
+              Want to talk through this order — swaps, pricing, timing? Request a video call
+              and your rep will reach out.
+            </p>
+            <RequestPieceCallButton
+              cart
+              title={
+                items.length === 1
+                  ? items[0]!.title
+                  : `Order #${quote.id.slice(-6).toUpperCase()} · ${items.length} pieces`
+              }
+              imageUrls={items.map((i) => i.imageUrl)}
+            />
           </div>
         </div>
       </div>

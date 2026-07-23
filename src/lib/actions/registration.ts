@@ -86,8 +86,17 @@ export async function submitBuyerRegistration(
     }
     if (!businessTaxId) throw new Error("Business Tax ID number is required.");
 
-    const inviteCheck = await validateInviteCode(inviteCodeRaw);
-    if (!inviteCheck.ok) throw new Error(inviteCheck.reason);
+    // Invite code is optional: with one, the application ties to the issuing
+    // rep as before; without one, it still submits (docs + tax ID are the real
+    // vetting gate — every application is manually reviewed either way) and is
+    // flagged self-serve so staff can prioritize scrutiny. A code that IS
+    // entered must still be valid — silently ignoring a typo'd code would
+    // orphan the rep attribution.
+    let inviteCheck: Awaited<ReturnType<typeof validateInviteCode>> | null = null;
+    if (inviteCodeRaw) {
+      inviteCheck = await validateInviteCode(inviteCodeRaw);
+      if (!inviteCheck.ok) throw new Error(inviteCheck.reason);
+    }
 
     const application = await createRegistrationRequest({
       firstName,
@@ -102,18 +111,20 @@ export async function submitBuyerRegistration(
       country: String(formData.get("country") || "US").trim() || "US",
       businessTaxId,
       company: String(formData.get("company") || "").trim(),
-      inviteCodeId: inviteCheck.code.id,
-      inviteCode: inviteCheck.code.code,
+      inviteCodeId: inviteCheck?.ok ? inviteCheck.code.id : "",
+      inviteCode: inviteCheck?.ok ? inviteCheck.code.code : "",
       idFront,
       idBack,
       businessRegistration,
       resaleCertificate,
     });
 
-    try {
-      await consumeInviteCode(inviteCheck.code.id);
-    } catch (err) {
-      console.warn("[submitBuyerRegistration] invite consume failed:", err);
+    if (inviteCheck?.ok) {
+      try {
+        await consumeInviteCode(inviteCheck.code.id);
+      } catch (err) {
+        console.warn("[submitBuyerRegistration] invite consume failed:", err);
+      }
     }
 
     try {

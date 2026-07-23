@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
-import { findSimilarCatalogItems, getCatalogProductBySku } from "@/lib/firestore/catalog";
+import {
+  findSimilarCatalogItems,
+  getAiListingDetails,
+  getCatalogProductBySku,
+} from "@/lib/firestore/catalog";
 import { getProductOverrides, type ProductOverrides } from "@/lib/firestore/productOverrides";
 import { cartHoldSkus, getBuyerCart } from "@/lib/firestore/buyers";
 import { Placeholder } from "@/components/Placeholder";
@@ -98,8 +102,9 @@ export default async function ProductPage({
   let product: Awaited<ReturnType<typeof getCatalogProductBySku>> = null;
   let cartSkus: string[] = [];
   let details: ProductOverrides | null = null;
+  let ai: Awaited<ReturnType<typeof getAiListingDetails>> = null;
   try {
-    const [productResult, cartResult, detailsResult] = await Promise.all([
+    const [productResult, cartResult, detailsResult, aiResult] = await Promise.all([
       getCatalogProductBySku(decodedSku, {
         buyerUsername,
       }),
@@ -107,27 +112,34 @@ export default async function ProductPage({
       // Staff-entered details (description, provenance, marks, dimensions…) —
       // captured on the product edit page but previously never shown to buyers.
       getProductOverrides(decodedSku).catch(() => null),
+      // AI-generated listing details (askIIQResults) fill any field staff
+      // haven't written — most inventory ships with these and nothing else.
+      getAiListingDetails(decodedSku).catch(() => null),
     ]);
     product = productResult;
     cartSkus = cartHoldSkus(cartResult);
     details = detailsResult;
+    ai = aiResult;
   } catch (err) {
     console.warn("[wholesale product] Firestore unavailable:", err instanceof Error ? err.message : err);
   }
   if (!product || product.soldOut) notFound();
 
-  const detailRows: Array<[string, string]> = details
-    ? (
-        [
-          ["Category", details.category],
-          ["Origin", details.origin],
-          ["Dimensions", details.dimensions],
-          ["Marks", details.marks],
-          ["Provenance", details.provenance],
-        ] as Array<[string, string | null]>
-      )
-        .filter((r): r is [string, string] => !!r[1] && r[1].trim() !== "")
-    : [];
+  // Per-field: staff-entered wins, AI-generated fills the gaps.
+  const pick = (staff: string | null | undefined, aiVal: string | null | undefined) =>
+    (staff && staff.trim()) || (aiVal && aiVal.trim()) || "";
+  const description = pick(details?.description, ai?.description);
+  const detailRows: Array<[string, string]> = (
+    [
+      ["Category", pick(details?.category, ai?.category)],
+      ["Origin", details?.origin || ""],
+      ["Dimensions", pick(details?.dimensions, ai?.dimensions)],
+      ["Marks", pick(details?.marks, ai?.marks)],
+      ["Provenance", details?.provenance || ""],
+      // AI condition notes only add value when the header shows no condition.
+      ["Condition notes", product.condition === "—" ? ai?.conditionNotes || "" : ""],
+    ] as Array<[string, string]>
+  ).filter((r): r is [string, string] => !!r[1]);
 
   const price = Math.round(product.price ?? 0);
   const unavailable = product.held || product.price == null;
@@ -187,9 +199,9 @@ export default async function ProductPage({
 
           <div className="mt-2 text-[12px] text-secondary">Condition · {product.condition}</div>
 
-          {details?.description ? (
+          {description ? (
             <p className="mt-4 max-w-prose whitespace-pre-wrap text-[13px] leading-relaxed text-secondary">
-              {details.description}
+              {description}
             </p>
           ) : null}
 

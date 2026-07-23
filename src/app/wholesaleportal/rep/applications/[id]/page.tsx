@@ -83,6 +83,18 @@ export default async function RegistrationDetailPage({
                 {app.createdAt ? new Date(app.createdAt).toLocaleString() : "—"}
               </dd>
             </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-muted">Invite code</dt>
+              <dd>
+                {app.inviteCode ? (
+                  <span className="font-mono text-ink">{app.inviteCode}</span>
+                ) : (
+                  <span className="rounded-chip border border-accent/50 bg-accent/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-accent">
+                    Self-serve · no code
+                  </span>
+                )}
+              </dd>
+            </div>
           </dl>
         </section>
 

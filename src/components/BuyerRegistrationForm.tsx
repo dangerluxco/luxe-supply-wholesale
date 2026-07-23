@@ -39,8 +39,9 @@ export function BuyerRegistrationForm({ initialCode = "" }: { initialCode?: stri
         <div className="micro-badge text-[10px] tracking-[0.14em] text-accent">WHOLESALE ACCESS</div>
         <h1 className="mt-2 text-[24px] font-semibold text-ink">Request to join</h1>
         <p className="mt-2 max-w-2xl text-[13px] text-secondary">
-          Submit your invite code, business details, and verification documents. Our team reviews
-          each application before creating a storefront login.
+          Submit your business details and verification documents — our team reviews every
+          application before creating a storefront login. Have an invite code from your rep?
+          Include it to fast-track review.
         </p>
       </div>
 
@@ -49,15 +50,17 @@ export function BuyerRegistrationForm({ initialCode = "" }: { initialCode?: stri
           Invite code
         </h2>
         <label className="mt-4 flex max-w-md flex-col gap-1.5">
-          <span className={labelClass}>CODE *</span>
+          <span className={labelClass}>CODE (OPTIONAL)</span>
           <input
             name="inviteCode"
-            required
             defaultValue={initialCode}
             autoComplete="off"
             className={`${fieldClass} font-mono uppercase tracking-[0.12em]`}
             placeholder="XXXX-XXXX"
           />
+          <span className="text-[11.5px] text-muted">
+            No code? You can still apply — applications without one just get an extra look.
+          </span>
         </label>
       </section>
 
