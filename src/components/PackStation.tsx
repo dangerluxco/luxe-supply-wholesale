@@ -310,10 +310,20 @@ export function PackStation({
                   autoFocus
                   disabled={busy}
                   placeholder={
-                    currentBox ? "Scan item SKU…" : "Scan a BOX- barcode, or use + New box"
+                    currentBox ? "Scan or type item SKU…" : "Scan a BOX- barcode, or use + New box"
                   }
                   className="h-12 w-full rounded-chip border border-white/20 bg-[#1c1c20] px-4 font-mono text-[15px] text-white outline-none focus:border-accent"
                 />
+                {/* Scan guns send Enter on their own — this button is for hand-typed codes. */}
+                <button
+                  type="button"
+                  disabled={busy || !scanValue.trim()}
+                  onClick={() => void submitScan()}
+                  title="Submit the typed code — same as pressing Enter"
+                  className="h-12 shrink-0 rounded-chip bg-accent px-5 text-[11px] font-semibold uppercase tracking-[0.1em] text-ink hover:opacity-90 disabled:opacity-40"
+                >
+                  Add
+                </button>
                 <button
                   type="button"
                   disabled={busy}
