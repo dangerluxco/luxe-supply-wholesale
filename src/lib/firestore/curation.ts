@@ -26,6 +26,10 @@ export type CurationItem = {
   decision: CurationDecision;
   note: string;
   liveAdded?: boolean;
+  /** Set (to the revision at decision time) when this item was approved/declined while
+   * featured — the seller's manage view floats these to the top of its table, most
+   * recent first. Buyer-facing order is intentionally untouched. */
+  featuredRank?: number;
 };
 
 export type CurationShare = {
@@ -95,6 +99,9 @@ function serializeItem(raw: Record<string, unknown>): CurationItem {
     decision: normalizeDecision(raw.decision),
     note: takeText(raw.note).slice(0, 500),
     liveAdded: raw.liveAdded === true,
+    ...(typeof raw.featuredRank === "number" && Number.isFinite(raw.featuredRank)
+      ? { featuredRank: raw.featuredRank }
+      : {}),
   };
 }
 
@@ -366,9 +373,10 @@ async function updateItemField(
 }
 
 /** Public: buyer or staff sets a decision. Blocked once the session has ended/expired/revoked.
- * Approving/declining the featured (hero) item retires it from the hero block: the item
- * moves to the top of the list — so neither side has to scroll back down to find it —
- * and the hero pointer clears. A "maybe" keeps it featured (still under discussion). */
+ * Approving/declining the featured (hero) item retires it from the hero block: the hero
+ * pointer clears and the item gets a `featuredRank` stamp so the seller's manage view can
+ * float it to the top of its table. The stored item order — and with it the buyer's grid —
+ * stays untouched. A "maybe" keeps it featured (still under discussion). */
 export async function updateCurationDecision(
   token: string,
   sku: string,
@@ -381,27 +389,21 @@ export async function updateCurationDecision(
   assertShareWritable(data);
 
   const skuKey = takeText(sku).toLowerCase();
-  const items = Array.isArray(data.items) ? (data.items as Record<string, unknown>[]) : [];
-  let matched = false;
-  let nextItems = items.map((it) => {
-    if (takeText(it.sku).toLowerCase() !== skuKey) return it;
-    matched = true;
-    return { ...it, decision };
-  });
-  if (!matched) throw new Error("That item is not on this curation link.");
-
   const heroDecided =
     takeText(data.heroSku).toLowerCase() === skuKey &&
     (decision === "approve" || decision === "decline");
-  if (heroDecided) {
-    nextItems = [
-      ...nextItems.filter((it) => takeText(it.sku).toLowerCase() === skuKey),
-      ...nextItems.filter((it) => takeText(it.sku).toLowerCase() !== skuKey),
-    ];
-  }
+  const revision = (typeof data.revision === "number" ? data.revision : 0) + 1;
+
+  const items = Array.isArray(data.items) ? (data.items as Record<string, unknown>[]) : [];
+  let matched = false;
+  const nextItems = items.map((it) => {
+    if (takeText(it.sku).toLowerCase() !== skuKey) return it;
+    matched = true;
+    return { ...it, decision, ...(heroDecided ? { featuredRank: revision } : {}) };
+  });
+  if (!matched) throw new Error("That item is not on this curation link.");
 
   const heroSku = heroDecided ? null : data.heroSku ? takeText(data.heroSku) : null;
-  const revision = (typeof data.revision === "number" ? data.revision : 0) + 1;
   await ref.update({
     items: nextItems,
     revision,

@@ -24,6 +24,7 @@ type CurationItem = {
   decision: Decision;
   note: string;
   liveAdded?: boolean;
+  featuredRank?: number;
 };
 
 type CurationShare = {
@@ -262,16 +263,17 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
 
   function setItemDecision(sku: string, decision: Decision) {
     setShare((prev) => {
-      const items = prev.items.map((it) => (it.sku === sku ? { ...it, decision } : it));
       // Mirrors the server rule: deciding the featured item retires it from the
-      // featured block and pins it to the top of the list.
+      // featured block and floats it to the top of this table (buyer order unchanged).
       const heroDecided =
         prev.heroSku === sku && (decision === "approve" || decision === "decline");
       return {
         ...prev,
-        items: heroDecided
-          ? [...items.filter((it) => it.sku === sku), ...items.filter((it) => it.sku !== sku)]
-          : items,
+        items: prev.items.map((it) =>
+          it.sku === sku
+            ? { ...it, decision, ...(heroDecided ? { featuredRank: prev.revision + 1 } : {}) }
+            : it,
+        ),
         heroSku: heroDecided ? null : prev.heroSku,
       };
     });
@@ -861,7 +863,11 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
   const heroItem = share.heroSku
     ? share.items.find((it) => it.sku === share.heroSku) || null
     : null;
-  const tableItems = heroItem ? share.items.filter((it) => it.sku !== heroItem.sku) : share.items;
+  // Previously-featured items float to the top (most recently decided first) so the
+  // seller never scrolls to find them; everything else keeps its original order.
+  const tableItems = share.items
+    .filter((it) => it.sku !== heroItem?.sku)
+    .sort((a, b) => (b.featuredRank ?? 0) - (a.featuredRank ?? 0));
   const heroMargin = heroItem && heroItem.cost != null ? heroItem.price - heroItem.cost : null;
   const heroMarginPct =
     heroItem && heroMargin != null && heroItem.price > 0 ? (heroMargin / heroItem.price) * 100 : null;
