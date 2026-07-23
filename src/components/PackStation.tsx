@@ -987,12 +987,16 @@ function MultiBoxShipping({
   } | null>;
 }) {
   const [options, setOptions] = useState<RateAllOption[] | null>(null);
+  const [selectedKey, setSelectedKey] = useState<string>("");
   const [loading, setLoading] = useState(false);
-  const [buyingCode, setBuyingCode] = useState<string | null>(null);
+  const [buying, setBuying] = useState(false);
   const [signature, setSignature] = useState(signatureDefault);
   const [insure, setInsure] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
   const missingWeight = boxes.filter((b) => !b.weightOz);
+
+  const optionKey = (o: RateAllOption) => `${o.carrier}::${o.serviceCode}`;
+  const selected = options?.find((o) => optionKey(o) === selectedKey) || null;
 
   return (
     <div className="rounded-card border border-accent/40 p-5">
@@ -1035,10 +1039,17 @@ function MultiBoxShipping({
               onClick={async () => {
                 setLoading(true);
                 setOptions(null);
+                setSelectedKey("");
                 setNotice(null);
                 try {
                   const data = await api({ action: "rates-all", signature, insure });
-                  if (data?.options) setOptions(data.options);
+                  if (data?.options) {
+                    setOptions(data.options);
+                    // Preselect the cheapest (options arrive sorted by total).
+                    if (data.options[0]) {
+                      setSelectedKey(`${data.options[0].carrier}::${data.options[0].serviceCode}`);
+                    }
+                  }
                 } finally {
                   setLoading(false);
                 }
@@ -1055,49 +1066,66 @@ function MultiBoxShipping({
                 No service is available for every box — rate the boxes individually above.
               </p>
             ) : (
-              <div className="mt-3 space-y-1">
-                {options.map((o) => (
-                  <button
-                    key={`${o.carrier}-${o.serviceCode}`}
-                    type="button"
-                    disabled={buyingCode !== null}
-                    onClick={async () => {
-                      if (
-                        !window.confirm(
-                          `Buy ${boxes.length} ${o.carrier} ${o.service} labels for $${o.total.toFixed(2)} total?`,
-                        )
-                      )
-                        return;
-                      setBuyingCode(o.serviceCode);
-                      try {
-                        const data = await api({
-                          action: "buy-labels-all",
-                          purchases: o.boxes.map((b) => ({ boxId: b.boxId, rateId: b.rateId })),
-                        });
-                        if (data?.warning) setNotice(data.warning);
-                        else if (data) setOptions(null);
-                      } finally {
-                        setBuyingCode(null);
-                      }
-                    }}
-                    className="flex w-full items-center justify-between rounded-chip border border-white/15 px-3 py-2 text-left text-[12px] text-white/80 transition hover:border-accent hover:bg-white/5 disabled:opacity-50"
-                  >
-                    <span>
+              <div className="mt-3 space-y-2">
+                {/* PirateShip-style: pick the service for the whole order, then one pay click. */}
+                <select
+                  value={selectedKey}
+                  onChange={(e) => setSelectedKey(e.target.value)}
+                  disabled={buying}
+                  className="h-10 w-full rounded-chip border border-white/20 bg-[#1c1c20] px-3 text-[12.5px] text-white outline-none focus:border-accent disabled:opacity-50"
+                >
+                  {options.map((o) => (
+                    <option key={optionKey(o)} value={optionKey(o)}>
                       {o.carrier} {o.service}
-                      {o.deliveryDays ? (
-                        <span className="ml-1.5 text-[10.5px] text-white/40">~{o.deliveryDays}d</span>
-                      ) : null}
-                    </span>
-                    <span className="text-right">
-                      <span className="mr-2 font-mono text-[10.5px] text-white/45">
-                        avg ${o.avgPerBox.toFixed(2)}/box
+                      {o.deliveryDays ? ` (~${o.deliveryDays}d)` : ""} — ${o.total.toFixed(2)} total
+                      · ${o.avgPerBox.toFixed(2)}/box
+                    </option>
+                  ))}
+                </select>
+                {selected ? (
+                  <>
+                    <div className="flex items-baseline justify-between rounded-chip border border-white/10 bg-white/5 px-3 py-2">
+                      <span className="text-[11.5px] text-white/60">
+                        {boxes.length} boxes · avg ${selected.avgPerBox.toFixed(2)}/box
+                        {selected.deliveryDays ? ` · ~${selected.deliveryDays}d` : ""}
                       </span>
-                      <span className="font-mono font-semibold text-accent">
-                        {buyingCode === o.serviceCode ? "Buying…" : `$${o.total.toFixed(2)} total`}
+                      <span className="font-mono text-[15px] font-semibold text-accent">
+                        ${selected.total.toFixed(2)}
                       </span>
-                    </span>
-                  </button>
-                ))}
+                    </div>
+                    <button
+                      type="button"
+                      disabled={buying}
+                      onClick={async () => {
+                        if (
+                          !window.confirm(
+                            `Buy ${boxes.length} ${selected.carrier} ${selected.service} labels for $${selected.total.toFixed(2)} total?`,
+                          )
+                        )
+                          return;
+                        setBuying(true);
+                        try {
+                          const data = await api({
+                            action: "buy-labels-all",
+                            purchases: selected.boxes.map((b) => ({
+                              boxId: b.boxId,
+                              rateId: b.rateId,
+                            })),
+                          });
+                          if (data?.warning) setNotice(data.warning);
+                          else if (data) setOptions(null);
+                        } finally {
+                          setBuying(false);
+                        }
+                      }}
+                      className="h-11 w-full rounded-chip bg-accent text-[12px] font-semibold uppercase tracking-[0.14em] text-ink transition hover:opacity-90 disabled:opacity-40"
+                    >
+                      {buying
+                        ? "Buying labels…"
+                        : `Buy ${boxes.length} labels — $${selected.total.toFixed(2)}`}
+                    </button>
+                  </>
+                ) : null}
               </div>
             )
           ) : null}
