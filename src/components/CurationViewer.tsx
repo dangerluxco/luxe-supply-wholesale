@@ -164,11 +164,21 @@ export function CurationViewer({ token }: { token: string }) {
 
   function setDecision(sku: string, decision: Decision) {
     if (!share) return;
-    setShare((prev) =>
-      prev
-        ? { ...prev, items: prev.items.map((it) => (it.sku === sku ? { ...it, decision } : it)) }
-        : prev,
-    );
+    setShare((prev) => {
+      if (!prev) return prev;
+      const items = prev.items.map((it) => (it.sku === sku ? { ...it, decision } : it));
+      // Mirrors the server rule: approving/declining the featured item retires
+      // it from the hero block and pins it to the top of the list.
+      const heroDecided =
+        prev.heroSku === sku && (decision === "approve" || decision === "decline");
+      return {
+        ...prev,
+        items: heroDecided
+          ? [...items.filter((it) => it.sku === sku), ...items.filter((it) => it.sku !== sku)]
+          : items,
+        heroSku: heroDecided ? null : prev.heroSku,
+      };
+    });
     pendingSkus.current.add(sku);
     fetch(`/api/curation/${token}/decision`, {
       method: "POST",

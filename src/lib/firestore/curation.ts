@@ -365,15 +365,50 @@ async function updateItemField(
   return { revision, heroSku };
 }
 
-/** Public: buyer or staff sets a decision. Blocked once the session has ended/expired/revoked. */
+/** Public: buyer or staff sets a decision. Blocked once the session has ended/expired/revoked.
+ * Approving/declining the featured (hero) item retires it from the hero block: the item
+ * moves to the top of the list — so neither side has to scroll back down to find it —
+ * and the hero pointer clears. A "maybe" keeps it featured (still under discussion). */
 export async function updateCurationDecision(
   token: string,
   sku: string,
   decisionRaw: string,
-): Promise<{ revision: number; decision: CurationDecision }> {
+): Promise<{ revision: number; decision: CurationDecision; heroSku: string | null }> {
   const decision = normalizeDecision(decisionRaw);
-  const { revision } = await updateItemField(token, sku, (it) => ({ ...it, decision }));
-  return { revision, decision };
+  const found = await loadDoc(token);
+  if (!found) throw new Error("This curation link is unavailable.");
+  const { ref, data } = found;
+  assertShareWritable(data);
+
+  const skuKey = takeText(sku).toLowerCase();
+  const items = Array.isArray(data.items) ? (data.items as Record<string, unknown>[]) : [];
+  let matched = false;
+  let nextItems = items.map((it) => {
+    if (takeText(it.sku).toLowerCase() !== skuKey) return it;
+    matched = true;
+    return { ...it, decision };
+  });
+  if (!matched) throw new Error("That item is not on this curation link.");
+
+  const heroDecided =
+    takeText(data.heroSku).toLowerCase() === skuKey &&
+    (decision === "approve" || decision === "decline");
+  if (heroDecided) {
+    nextItems = [
+      ...nextItems.filter((it) => takeText(it.sku).toLowerCase() === skuKey),
+      ...nextItems.filter((it) => takeText(it.sku).toLowerCase() !== skuKey),
+    ];
+  }
+
+  const heroSku = heroDecided ? null : data.heroSku ? takeText(data.heroSku) : null;
+  const revision = (typeof data.revision === "number" ? data.revision : 0) + 1;
+  await ref.update({
+    items: nextItems,
+    revision,
+    updatedAt: new Date(),
+    ...(heroDecided ? { heroSku: null } : {}),
+  });
+  return { revision, decision, heroSku };
 }
 
 /** Public: buyer or staff sets an invoice note on an item (≤500 chars). */

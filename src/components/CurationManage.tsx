@@ -261,10 +261,20 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
   }
 
   function setItemDecision(sku: string, decision: Decision) {
-    setShare((prev) => ({
-      ...prev,
-      items: prev.items.map((it) => (it.sku === sku ? { ...it, decision } : it)),
-    }));
+    setShare((prev) => {
+      const items = prev.items.map((it) => (it.sku === sku ? { ...it, decision } : it));
+      // Mirrors the server rule: deciding the featured item retires it from the
+      // featured block and pins it to the top of the list.
+      const heroDecided =
+        prev.heroSku === sku && (decision === "approve" || decision === "decline");
+      return {
+        ...prev,
+        items: heroDecided
+          ? [...items.filter((it) => it.sku === sku), ...items.filter((it) => it.sku !== sku)]
+          : items,
+        heroSku: heroDecided ? null : prev.heroSku,
+      };
+    });
     editingSku.current.add(sku);
     fetch(`/api/curation/${share.token}/decision`, {
       method: "POST",
@@ -847,6 +857,14 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
     stats.marginPct != null
       ? `${money(Math.round(stats.margin))} · ${stats.marginPct.toFixed(0)}%`
       : money(Math.round(stats.margin));
+
+  const heroItem = share.heroSku
+    ? share.items.find((it) => it.sku === share.heroSku) || null
+    : null;
+  const tableItems = heroItem ? share.items.filter((it) => it.sku !== heroItem.sku) : share.items;
+  const heroMargin = heroItem && heroItem.cost != null ? heroItem.price - heroItem.cost : null;
+  const heroMarginPct =
+    heroItem && heroMargin != null && heroItem.price > 0 ? (heroMargin / heroItem.price) * 100 : null;
 
   return (
     <div className="space-y-6">
@@ -1507,6 +1525,95 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
         </div>
       ) : null}
 
+      {heroItem ? (
+        <div className="overflow-hidden rounded-card border border-accent/40 bg-surface">
+          <div className="micro-badge flex flex-wrap items-center justify-between gap-2 border-b border-accent/30 bg-accent/10 px-4 py-2 text-[10px] tracking-[0.14em] text-accent">
+            <span>FEATURED — CLIENT IS VIEWING LARGE</span>
+            <span className="normal-case tracking-normal text-secondary">
+              Stays here until approved or declined, then moves to the top of the list below.
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-[220px_1fr]">
+            <Placeholder
+              imageSrc={heroItem.imageUrl}
+              alt={portalDisplayTitle(heroItem.title, heroItem.sku)}
+              className="aspect-square w-full bg-ground"
+            />
+            <div className="flex min-w-0 flex-col gap-3 p-4 sm:p-5">
+              <div className="min-w-0">
+                <div className="truncate text-[17px] font-semibold text-ink">
+                  {portalDisplayTitle(heroItem.title, heroItem.sku)}
+                </div>
+                {portalShowSkuLine(heroItem.title, heroItem.sku) ? (
+                  <div className="font-mono text-[11px] text-muted">{heroItem.sku}</div>
+                ) : null}
+                {heroItem.brand ? (
+                  <div className="text-[12px] text-secondary">{heroItem.brand}</div>
+                ) : null}
+              </div>
+              <div className="flex flex-wrap items-center gap-4 font-mono text-[12.5px]">
+                <span className="text-secondary">
+                  Cost {heroItem.cost != null ? money(Math.round(heroItem.cost)) : "—"}
+                </span>
+                <label className="flex items-center gap-1.5">
+                  <span className="text-muted">$</span>
+                  <input
+                    key={heroItem.sku}
+                    type="number"
+                    min={0}
+                    disabled={pending || share.sessionEnded || share.revoked}
+                    defaultValue={heroItem.price}
+                    onBlur={(e) => savePrice(heroItem.sku, e.target.value)}
+                    className="w-[90px] rounded-chip border border-border bg-ground px-2 py-1 text-right text-[13px] text-ink outline-none focus:border-accent disabled:opacity-60"
+                  />
+                </label>
+                <span className={`whitespace-nowrap ${marginColorClass(heroMarginPct)}`}>
+                  {heroMargin != null ? money(Math.round(heroMargin)) : "—"}
+                  {heroMarginPct != null ? ` · ${heroMarginPct.toFixed(0)}%` : ""}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {(["approve", "maybe", "decline"] as const).map((d) => {
+                  const meta = DECISION_META[d];
+                  const active = heroItem.decision === d;
+                  return (
+                    <button
+                      key={d}
+                      type="button"
+                      disabled={share.sessionEnded || share.revoked}
+                      onClick={() => toggleDecision(heroItem.sku, d)}
+                      className={clsx(
+                        "h-9 rounded-chip border px-4 text-[10.5px] font-semibold uppercase tracking-[0.08em] transition disabled:opacity-50",
+                        active ? meta.activeClass : meta.idleClass,
+                      )}
+                    >
+                      {meta.label}
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  disabled={pending || share.sessionEnded || share.revoked}
+                  onClick={() => removeItem(heroItem.sku)}
+                  aria-label="Remove item"
+                  className="ml-auto inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-chip text-muted transition hover:bg-danger/10 hover:text-danger disabled:opacity-50"
+                >
+                  <TrashIcon className="h-4 w-4" />
+                </button>
+              </div>
+              <input
+                key={`note-${heroItem.sku}`}
+                defaultValue={heroItem.note}
+                disabled={share.sessionEnded || share.revoked}
+                onBlur={(e) => saveNote(heroItem.sku, e.target.value)}
+                placeholder="Client note…"
+                className="h-9 min-w-0 rounded-chip border border-border bg-ground px-2.5 text-[12px] text-ink outline-none focus:border-accent disabled:opacity-60"
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <div className="overflow-hidden rounded-chip border border-border">
         <div className="grid grid-cols-[112px_minmax(160px,1fr)_80px_90px_100px_190px_minmax(120px,1fr)_84px] items-center gap-x-3 border-b border-border bg-ground px-3 py-2 font-mono text-[10px] uppercase tracking-[0.1em] text-muted">
           <span />
@@ -1519,16 +1626,13 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
           <span />
         </div>
         <div className="max-h-[600px] overflow-y-auto">
-          {share.items.map((it) => {
+          {tableItems.map((it) => {
             const margin = it.cost != null ? it.price - it.cost : null;
             const marginPct = margin != null && it.price > 0 ? (margin / it.price) * 100 : null;
             return (
               <div
                 key={it.sku}
-                className={clsx(
-                  "grid grid-cols-[112px_minmax(160px,1fr)_80px_90px_100px_190px_minmax(120px,1fr)_84px] items-center gap-x-3 border-b border-border/60 px-3 py-2.5 text-[12.5px] last:border-b-0",
-                  share.heroSku === it.sku && "bg-accent/5",
-                )}
+                className="grid grid-cols-[112px_minmax(160px,1fr)_80px_90px_100px_190px_minmax(120px,1fr)_84px] items-center gap-x-3 border-b border-border/60 px-3 py-2.5 text-[12.5px] last:border-b-0"
               >
                 <Placeholder
                   imageSrc={it.imageUrl}
@@ -1538,11 +1642,6 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
                 <div className="min-w-0 px-2">
                   <div className="truncate text-ink">
                     {portalDisplayTitle(it.title, it.sku)}
-                    {share.heroSku === it.sku ? (
-                      <span className="ml-1.5 text-[10px] uppercase tracking-[0.08em] text-accent">
-                        now viewing
-                      </span>
-                    ) : null}
                   </div>
                   {portalShowSkuLine(it.title, it.sku) ? (
                     <div className="truncate font-mono text-[11px] text-muted">{it.sku}</div>
@@ -1594,17 +1693,15 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
                   className="h-8 min-w-0 rounded-chip border border-border bg-ground px-2 text-[11.5px] text-ink outline-none focus:border-accent disabled:opacity-60"
                 />
                 <div className="flex items-center justify-end gap-1">
-                  {share.heroSku !== it.sku ? (
-                    <button
-                      type="button"
-                      disabled={pending || share.sessionEnded || share.revoked}
-                      onClick={() => featureExistingItem(it.sku)}
-                      title="Bring this back into the hero view"
-                      className="inline-flex h-8 items-center rounded-chip border border-border px-2 text-[10px] font-semibold uppercase tracking-[0.06em] text-secondary transition hover:border-accent hover:text-ink disabled:opacity-50"
-                    >
-                      Feature
-                    </button>
-                  ) : null}
+                  <button
+                    type="button"
+                    disabled={pending || share.sessionEnded || share.revoked}
+                    onClick={() => featureExistingItem(it.sku)}
+                    title="Bring this back into the hero view"
+                    className="inline-flex h-8 items-center rounded-chip border border-border px-2 text-[10px] font-semibold uppercase tracking-[0.06em] text-secondary transition hover:border-accent hover:text-ink disabled:opacity-50"
+                  >
+                    Feature
+                  </button>
                   <button
                     type="button"
                     disabled={pending || share.sessionEnded || share.revoked}
