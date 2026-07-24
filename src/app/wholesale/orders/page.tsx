@@ -63,7 +63,11 @@ export default async function OrdersPage() {
                   : "—"}
               </span>
               <span className="flex justify-center">
-                <BuyerOrderStatusBadge status={q.status} />
+                <BuyerOrderStatusBadge
+                  status={q.status}
+                  shippedAt={q.shippedAt}
+                  fulfilledAt={q.fulfilledAt}
+                />
               </span>
               <span className="text-center">
                 {q.invoiceNumber ? (

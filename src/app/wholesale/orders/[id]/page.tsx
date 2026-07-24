@@ -95,7 +95,11 @@ export default async function BuyerOrderDetailPage({
       <div className="mb-6 mt-3 flex flex-wrap items-baseline gap-3">
         <h1 className="text-[24px] font-semibold text-ink">Order request</h1>
         <span className="font-mono text-[11px] text-muted">#{quote.id}</span>
-        <BuyerOrderStatusBadge status={quote.status} />
+        <BuyerOrderStatusBadge
+          status={quote.status}
+          shippedAt={quote.shippedAt}
+          fulfilledAt={quote.fulfilledAt}
+        />
         {quote.poNumber ? (
           <span className="font-mono text-[11px] text-secondary">PO {quote.poNumber}</span>
         ) : null}
