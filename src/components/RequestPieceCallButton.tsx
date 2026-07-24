@@ -16,11 +16,14 @@ export function RequestPieceCallButton({
   sku,
   title,
   cart = false,
+  quoteId,
   imageUrls = [],
 }: {
   sku?: string;
   title: string;
   cart?: boolean;
+  /** Submitted order request — server reads the quote's items (the cart is empty by then). */
+  quoteId?: string;
   /** Piece thumbnails shown in the modal (single image for PDP, cart items for cart mode). */
   imageUrls?: Array<string | null | undefined>;
 }) {
@@ -47,7 +50,7 @@ export function RequestPieceCallButton({
         onClick={() => setOpen(true)}
         className="flex h-[44px] w-full items-center justify-center gap-2 rounded-chip border border-accent bg-accent/5 text-[12px] uppercase tracking-[0.14em] text-[#6E5A30] transition hover:bg-accent/10"
       >
-        ◉ {cart ? "Request a call about these pieces" : "Request a call about this piece"}
+        ◉ {cart || quoteId ? "Request a call about these pieces" : "Request a call about this piece"}
       </button>
 
       {open ? (
@@ -109,7 +112,14 @@ export function RequestPieceCallButton({
                 onClick={() => {
                   setError(null);
                   start(async () => {
-                    const res = await requestPieceCall({ sku, title, cart, preferredTimes, note });
+                    const res = await requestPieceCall({
+                      sku,
+                      title,
+                      cart,
+                      quoteId,
+                      preferredTimes,
+                      note,
+                    });
                     if (res.error) {
                       setError(res.error);
                       return;

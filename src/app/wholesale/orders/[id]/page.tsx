@@ -257,7 +257,7 @@ export default async function BuyerOrderDetailPage({
               and your rep will reach out.
             </p>
             <RequestPieceCallButton
-              cart
+              quoteId={quote.id}
               title={
                 items.length === 1
                   ? items[0]!.title

@@ -4,6 +4,7 @@ import { getSessionForArea } from "@/lib/auth";
 import { getBuyerById, getBuyerCart } from "@/lib/firestore/buyers";
 import { addCallRequest } from "@/lib/firestore/callRequests";
 import { getCatalogProductsBySkus } from "@/lib/firestore/catalog";
+import { getQuoteById } from "@/lib/firestore/quotes";
 import { notifyStaffOfCallRequest } from "@/lib/notify";
 
 /**
@@ -12,15 +13,19 @@ import { notifyStaffOfCallRequest } from "@/lib/notify";
  * (non-blocking; works without Resend, the request still lands on the rep
  * dashboard).
  *
- * Two modes:
+ * Three modes:
  * - piece: `{ sku, title }` — a single product page request
  * - cart:  `{ cart: true }` — about everything currently in the buyer's cart
  *   (items are read server-side; suggested-lot lines expand as one entry each)
+ * - order: `{ quoteId }` — about a submitted order request. This must NOT read
+ *   the cart: after submit the cart is empty, which used to make this reply
+ *   "Your order is empty." from the order detail page.
  */
 export async function requestPieceCall(opts: {
   sku?: string;
   title?: string;
   cart?: boolean;
+  quoteId?: string;
   preferredTimes?: string;
   note?: string;
 }): Promise<{ ok?: boolean; error?: string }> {
@@ -37,7 +42,30 @@ export async function requestPieceCall(opts: {
   let imageUrl: string | null = null;
   let items: Array<{ sku: string; title: string; imageUrl: string | null }> = [];
 
-  if (opts.cart) {
+  if (opts.quoteId) {
+    const quote = await getQuoteById(String(opts.quoteId).trim());
+    if (
+      !quote ||
+      (quote.portalUsername || "").toLowerCase() !== (buyer.username || "").toLowerCase()
+    ) {
+      return { error: "Order not found." };
+    }
+    items = quote.items
+      .map((it) => ({
+        sku: String(it.sku || "").trim(),
+        title: String(it.title || it.sku || ""),
+        imageUrl: it.imageUrl ? String(it.imageUrl) : null,
+      }))
+      .filter((i) => i.sku);
+    if (!items.length) return { error: "That order has no items yet." };
+    sku = items[0]!.sku;
+    imageUrl = items[0]!.imageUrl;
+    title =
+      opts.title ||
+      (items.length === 1
+        ? items[0]!.title
+        : `${items.length} pieces from order #${quote.id.slice(-6).toUpperCase()}`);
+  } else if (opts.cart) {
     const cart = await getBuyerCart(session.id);
     if (!cart.length) return { error: "Your order is empty." };
     items = cart.map((i) => ({ sku: i.sku, title: i.title, imageUrl: i.imageUrl }));
