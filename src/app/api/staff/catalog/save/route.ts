@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { ROLE } from "@/lib/constants";
 import {
+  findBrokenImageSkus,
   saveCuratedCatalog,
   type CuratedCatalogItem,
 } from "@/lib/firestore/catalog";
@@ -35,6 +36,21 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         error: `${unresolved.length} SKU${unresolved.length === 1 ? "" : "s"} not found in inventory — remove or fix before saving: ${unresolved.join(", ")}`,
+      },
+      { status: 400 },
+    );
+  }
+
+  // Refuse rows whose photo doesn't actually load — publishing them puts a
+  // broken image on the storefront. The client flags these at resolve time;
+  // this re-check is the backstop.
+  const brokenImageSkus = await findBrokenImageSkus(
+    body.items.map((i) => ({ sku: String(i?.sku || "?"), imageUrl: i?.imageUrl || null })),
+  ).catch(() => []);
+  if (brokenImageSkus.length) {
+    return NextResponse.json(
+      {
+        error: `${brokenImageSkus.length} item${brokenImageSkus.length === 1 ? "" : "s"} have a broken image — remove them or fix the photos before saving: ${brokenImageSkus.join(", ")}`,
       },
       { status: 400 },
     );

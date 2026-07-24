@@ -21,6 +21,9 @@ type CuratedCatalogItem = {
   cost: number | null;
   price: number | null;
   priceOverridden: boolean;
+  /** Resolve-time flags from the server: photo verified loading / all photos dead. */
+  imageOk?: boolean;
+  imageBroken?: boolean;
 };
 
 type CuratedCatalog = {
@@ -190,6 +193,11 @@ export function CatalogSettingsForm({
     [draft],
   );
   const draftUnresolvedCount = draftUnresolvedSkus.length;
+  const draftBrokenImageSkus = useMemo(
+    () => draft.items.filter((i) => i.imageBroken).map((i) => i.sku),
+    [draft],
+  );
+  const draftBrokenImageCount = draftBrokenImageSkus.length;
   const draftTotal = useMemo(
     () => draft.items.reduce((sum, i) => sum + (i.price || 0), 0),
     [draft],
@@ -404,6 +412,15 @@ export function CatalogSettingsForm({
         `Cannot save with ${unresolvedSkus.length} unresolved SKU${
           unresolvedSkus.length === 1 ? "" : "s"
         } — remove or fix: ${unresolvedSkus.join(", ")}`,
+      );
+      return;
+    }
+    // Broken photos never go live — the server re-checks this on save too.
+    if (draftBrokenImageCount > 0) {
+      setError(
+        `Cannot save with ${draftBrokenImageCount} broken image${
+          draftBrokenImageCount === 1 ? "" : "s"
+        } — remove or re-upload photos for: ${draftBrokenImageSkus.join(", ")}`,
       );
       return;
     }
@@ -663,6 +680,37 @@ export function CatalogSettingsForm({
           </div>
         ) : null}
 
+        {draftBrokenImageCount > 0 ? (
+          <div className="space-y-1.5 rounded-chip border border-danger/40 bg-danger/5 px-3 py-2 text-[12px] text-danger">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span>
+                {draftBrokenImageCount} item{draftBrokenImageCount === 1 ? "" : "s"} have photos
+                that don&apos;t load — Save is disabled until they are removed or re-shot.
+              </span>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() =>
+                  setDraft((d) => ({ ...d, items: d.items.filter((i) => !i.imageBroken) }))
+                }
+                className="rounded-chip border border-danger/40 bg-surface px-2 py-1 text-[11px] font-semibold text-danger hover:bg-danger/10 disabled:opacity-50"
+              >
+                Remove all broken-image items
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-1.5 font-mono text-[11px]">
+              {draftBrokenImageSkus.map((sku, i) => (
+                <span
+                  key={`${sku}-${i}`}
+                  className="rounded-chip border border-danger/40 bg-surface px-1.5 py-0.5"
+                >
+                  {sku}
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         {draft.items.length === 0 ? (
           <div className="rounded-chip border border-border px-4 py-8 text-center text-[12.5px] text-muted">
             No items in the working catalog yet. Paste a SKU batch above to start.
@@ -707,6 +755,11 @@ export function CatalogSettingsForm({
                         {isNew ? (
                           <span className="micro-badge shrink-0 rounded-chip bg-accent px-1.5 py-0.5 text-[9px] tracking-[0.1em] text-ground">
                             NEW
+                          </span>
+                        ) : null}
+                        {item.imageBroken ? (
+                          <span className="micro-badge shrink-0 rounded-chip bg-danger px-1.5 py-0.5 text-[9px] tracking-[0.1em] text-white">
+                            IMAGE BROKEN
                           </span>
                         ) : null}
                         <Link
@@ -777,13 +830,19 @@ export function CatalogSettingsForm({
           <button
             type="button"
             disabled={
-              pending || draft.items.length === 0 || !dirty || draftUnresolvedCount > 0
+              pending ||
+              draft.items.length === 0 ||
+              !dirty ||
+              draftUnresolvedCount > 0 ||
+              draftBrokenImageCount > 0
             }
             onClick={saveCatalog}
             title={
               draftUnresolvedCount > 0
                 ? "Remove or fix the unresolved SKUs above before saving."
-                : undefined
+                : draftBrokenImageCount > 0
+                  ? "Remove the broken-image items above before saving."
+                  : undefined
             }
             className="h-9 rounded-chip bg-ink px-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-ground disabled:opacity-60"
           >

@@ -46,6 +46,10 @@ export type CuratedCatalogItem = {
   /** Staff-facing wholesale price actually used on the storefront. */
   price: number | null;
   priceOverridden: boolean;
+  /** Resolve-time verification: `imageUrl` was fetched and actually loads. Transient — not persisted. */
+  imageOk?: boolean;
+  /** The SKU has photo URLs on file but none of them load. Blocks publish. Transient. */
+  imageBroken?: boolean;
 };
 
 export type CuratedCatalog = {
@@ -694,11 +698,15 @@ function toCatalogProduct(
   const era = String((iiq && (iiq.Era || iiq.era || iiq.Period)) || "").trim() || "—";
   const heldByYou = !!(hold && buyerUsername && hold.portalUsername === buyerUsername);
   const heldByOther = !!(hold && !heldByYou);
-  const imageUrls = group?.imageUrls?.length
-    ? group.imageUrls
-    : overrides?.imageUrl
-      ? [overrides.imageUrl]
-      : [];
+  // The saved (import-time verified) image leads; the live upload group fills
+  // in the rest of the set. Letting the live group's [0] win outright meant a
+  // stale/re-ordered uploadHistory could swap a curated item's hero for a dead
+  // URL after staff had already eyeballed it at import.
+  const groupUrls = group?.imageUrls?.length ? group.imageUrls : [];
+  const savedUrl = overrides?.imageUrl || null;
+  const imageUrls = savedUrl
+    ? [savedUrl, ...groupUrls.filter((u) => u !== savedUrl)]
+    : groupUrls;
   const price = overrides && "price" in overrides ? overrides.price ?? null : parseMoney(priceLabel);
   const iiqCost =
     iiq && typeof iiq.cost === "number" && Number.isFinite(iiq.cost as number)
@@ -801,6 +809,76 @@ function parseCuratedCatalog(raw: unknown): CuratedCatalog | null {
 }
 
 /**
+ * Fetch-check a photo URL (HEAD, falling back to a 1-byte ranged GET for hosts
+ * that reject HEAD). Bounded so one dead CDN can't hang a resolve.
+ */
+async function imageUrlLoads(url: string, timeoutMs = 4000): Promise<boolean> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    let res = await fetch(url, { method: "HEAD", signal: ctrl.signal });
+    if (!res.ok && (res.status === 405 || res.status === 403)) {
+      res = await fetch(url, { headers: { Range: "bytes=0-0" }, signal: ctrl.signal });
+    }
+    return res.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Pick the first photo URL that actually loads (checking up to `maxChecks`
+ * candidates). Returns null when the SKU has URLs but every one is dead —
+ * that's the "known image shows broken" case: uploadHistory keeps stale/revoked
+ * URLs around, and blindly using `imageUrls[0]` published the dead one.
+ */
+async function firstWorkingImageUrl(
+  urls: string[],
+  maxChecks = 3,
+): Promise<string | null> {
+  for (const url of urls.slice(0, maxChecks)) {
+    if (!url) continue;
+    if (await imageUrlLoads(url)) return url;
+  }
+  return null;
+}
+
+/**
+ * Save-time backstop: re-check that each row's image actually loads (the client
+ * blocks broken rows too, but flags are client-supplied). Rows without any
+ * imageUrl are allowed — they render the striped placeholder, not a broken img.
+ */
+export async function findBrokenImageSkus(
+  items: Array<{ sku: string; imageUrl: string | null }>,
+): Promise<string[]> {
+  const withImages = items.filter((i) => i.imageUrl);
+  const results = await mapLimit(withImages, 8, async (i) =>
+    (await imageUrlLoads(i.imageUrl!)) ? null : i.sku,
+  );
+  return results.filter((s): s is string => !!s);
+}
+
+/** Run an async mapper over items with bounded concurrency. */
+async function mapLimit<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i]!);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
+/**
  * Resolve a raw pasted SKU list against the inventory DB for the curated catalog
  * builder's review step. Every input SKU produces exactly one row — unresolved
  * SKUs are kept (marked `inDb: false`, `cost`/`price: null`) rather than dropped,
@@ -827,7 +905,7 @@ export async function resolveCuratedDraftItems(
   ]);
   const askMap = await loadAskBySku(cleanSkus, uploaderEmailsFromGroups(uploadMap.values()));
 
-  const items: CuratedCatalogItem[] = cleanSkus.map((sku) => {
+  const items: CuratedCatalogItem[] = await mapLimit(cleanSkus, 8, async (sku) => {
     const group = uploadMap.get(sku) || null;
     const iiq = iiqMap.get(sku) || null;
     const ask = askMap.get(sku) || null;
@@ -835,7 +913,11 @@ export async function resolveCuratedDraftItems(
     const resolvedSku = group?.sku || sku;
     const title = resolveTitle(group, iiq, ask, resolvedSku);
     const brand = resolveBrand(group, iiq, ask) || brandFromTitle(title);
-    const imageUrl = group?.imageUrls[0] || null;
+    // Verify the photo actually loads and fall forward past dead URLs —
+    // previously this blindly took imageUrls[0], publishing broken images
+    // for SKUs whose first stored URL had gone stale.
+    const candidates = group?.imageUrls || [];
+    const imageUrl = candidates.length ? await firstWorkingImageUrl(candidates) : null;
     const iiqCost =
       iiq && typeof iiq.cost === "number" && Number.isFinite(iiq.cost as number)
         ? (iiq.cost as number)
@@ -851,6 +933,8 @@ export async function resolveCuratedDraftItems(
       cost,
       price,
       priceOverridden: false,
+      imageOk: !!imageUrl,
+      imageBroken: candidates.length > 0 && !imageUrl,
     };
   });
 
