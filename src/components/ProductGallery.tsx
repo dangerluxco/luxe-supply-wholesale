@@ -1,7 +1,7 @@
 "use client";
 
-import Image from "next/image";
-import { useCallback, useEffect, useRef, useState } from "react";
+import Image, { getImageProps } from "next/image";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export type GalleryItem = {
   title: string;
@@ -12,6 +12,25 @@ export type GalleryItem = {
 const MIN_SCALE = 1;
 const MAX_SCALE = 4;
 const ZOOM_STEP = 0.5;
+
+// The stage renders inside a ≤1024px modal, so a 1920w optimized variant
+// (AVIF/WebP via /_next/image) is visually lossless here — and a fraction of
+// the multi-MB Firebase Storage originals this used to load per step.
+const LIGHTBOX_WIDTH = 1920;
+
+/** Optimizer URL for the 1x lightbox rendition of a source image. */
+function lightboxSrc(src: string): string {
+  const { props } = getImageProps({
+    src,
+    alt: "",
+    width: LIGHTBOX_WIDTH,
+    height: LIGHTBOX_WIDTH,
+    quality: 80,
+  });
+  // First srcSet candidate is the 1x width; props.src is the 2x fallback.
+  const first = props.srcSet?.split(",")[0]?.trim().split(" ")[0];
+  return first || props.src;
+}
 
 export function ProductGallery({
   item,
@@ -24,9 +43,19 @@ export function ProductGallery({
   onIndexChange: (index: number) => void;
   onClose: () => void;
 }) {
-  const urls = item.imageUrls.filter(Boolean);
+  const urls = useMemo(() => item.imageUrls.filter(Boolean), [item.imageUrls]);
   const safeIndex = urls.length ? Math.min(Math.max(index, 0), urls.length - 1) : 0;
   const url = urls[safeIndex] || "";
+
+  // Warm the browser cache for the neighboring photos so next/prev is instant.
+  useEffect(() => {
+    for (const i of [safeIndex - 1, safeIndex + 1]) {
+      const neighbor = urls[i];
+      if (!neighbor) continue;
+      const img = new window.Image();
+      img.src = lightboxSrc(neighbor);
+    }
+  }, [safeIndex, urls]);
 
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -248,7 +277,7 @@ export function ProductGallery({
           {url ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={url}
+              src={lightboxSrc(url)}
               alt={item.title}
               draggable={false}
               onPointerDown={onPointerDown}

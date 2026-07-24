@@ -36,15 +36,36 @@ export function ProductPdpGallery({
           urls.length ? "cursor-zoom-in" : "cursor-default",
         )}
       >
-        <Placeholder
-          label={title}
-          imageSrc={urls[safeActive] || null}
-          priority
-          sizes="(max-width: 640px) 100vw, 440px"
-          className="h-full w-full"
-        >
-          <OneOfOneBadge />
-        </Placeholder>
+        {/* All photos render stacked; inactive ones sit invisible underneath and
+            stream in right after first paint, so switching photos is instant
+            instead of fetching each one on demand. */}
+        {urls.length ? (
+          <div className="relative h-full w-full">
+            {urls.map((u, i) => (
+              <div
+                key={`${u}-${i}`}
+                aria-hidden={i !== safeActive}
+                className={clsx(
+                  "absolute inset-0",
+                  i === safeActive ? "opacity-100" : "pointer-events-none opacity-0",
+                )}
+              >
+                <Placeholder
+                  label={title}
+                  imageSrc={u}
+                  priority={i === 0}
+                  sizes="(max-width: 640px) 100vw, 440px"
+                  className="h-full w-full"
+                />
+              </div>
+            ))}
+            <OneOfOneBadge />
+          </div>
+        ) : (
+          <Placeholder label={title} imageSrc={null} className="h-full w-full">
+            <OneOfOneBadge />
+          </Placeholder>
+        )}
         {urls.length > 1 ? (
           <span className="pointer-events-none absolute bottom-2.5 right-2.5 rounded-chip bg-ink/70 px-2 py-1 font-mono text-[10px] text-ground">
             {safeActive + 1} / {urls.length}
