@@ -14,6 +14,7 @@ const STATUS_COLOR: Record<string, string> = {
   open: "#4E9A6A",
   contacted: "#B08D3E",
   quoted: "#3A7CA5",
+  fulfilled: "#B08D3E",
   timed_out: "#8B897F",
 };
 

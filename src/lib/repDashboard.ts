@@ -12,8 +12,16 @@ const PIPELINE_STATUSES = [
   { key: "open", label: "Open" },
   { key: "contacted", label: "Contacted" },
   { key: "quoted", label: "Invoiced" },
+  // Synthetic: invoiced + packed, held for payment (pay-first buyers).
+  // Not a stored quote status — derived via pipelineKeyFor().
+  { key: "fulfilled", label: "Fulfilled" },
   { key: "timed_out", label: "Timed out" },
 ] as const;
+
+/** Board column for a quote — "fulfilled" is derived, everything else is the stored status. */
+function pipelineKeyFor(q: PortalQuote): string {
+  return q.status === "quoted" && q.fulfilledAt && !q.shippedAt ? "fulfilled" : q.status;
+}
 
 function daysSince(iso: string | null, now: number): number | null {
   if (!iso) return null;
@@ -120,11 +128,11 @@ export function computeRepDashboard(input: {
   };
 
   const pipelineQuotes = input.quotes.filter((q) =>
-    PIPELINE_STATUSES.some((p) => p.key === q.status),
+    PIPELINE_STATUSES.some((p) => p.key === pipelineKeyFor(q)),
   );
   const pipeline: PipelineColumn[] = PIPELINE_STATUSES.map(({ key, label }) => {
     const inColumn = pipelineQuotes
-      .filter((q) => q.status === key)
+      .filter((q) => pipelineKeyFor(q) === key)
       .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
     return {
       key,
@@ -166,8 +174,8 @@ export function computeRepDashboard(input: {
       email: q.customerEmail || "",
       itemCount: q.itemCount,
       total: Math.round((q.cartTotal || 0) + (q.shipping || 0)),
-      statusKey: q.status,
-      statusLabel: statusLabelByKey.get(q.status) || q.status,
+      statusKey: pipelineKeyFor(q),
+      statusLabel: statusLabelByKey.get(pipelineKeyFor(q)) || q.status,
       waiting: elapsedShort(q.createdAt, now),
       href: `/wholesaleportal/rep/quotes/${q.id}`,
     }));
