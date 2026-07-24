@@ -402,6 +402,21 @@ async function updateBox(
 }
 
 /** Webhook-fed: stamp the latest carrier status onto whichever box owns the tracking number. */
+/** Webhook-stored per-box status → "this box has been delivered". The webhook
+ * stores status_description/status_code, so match both vocabularies. */
+export function isDeliveredTrackingStatus(status: string | null): boolean {
+  const s = String(status || "").trim().toUpperCase();
+  return s === "DE" || s.includes("DELIVERED");
+}
+
+/** Every packed box on a shipped record reports delivered — drives the buyer's DELIVERED pill. */
+export function fulfillmentDelivered(record: FulfillmentRecord | null): boolean {
+  if (!record || record.status !== "shipped") return false;
+  const usedBoxIds = new Set(Object.values(record.assignments));
+  const used = record.boxes.filter((b) => usedBoxIds.has(b.id));
+  return used.length > 0 && used.every((b) => isDeliveredTrackingStatus(b.trackingStatus));
+}
+
 export async function updateTrackingStatusByNumber(
   trackingNumber: string,
   status: string,

@@ -18,11 +18,17 @@ export function BuyerOrderStatusBadge({
   status,
   shippedAt,
   fulfilledAt,
+  delivered = false,
 }: {
   status: string;
   shippedAt?: string | null;
   fulfilledAt?: string | null;
+  /** Every box on the shipment reports delivered (ShipEngine tracking webhook). */
+  delivered?: boolean;
 }) {
+  if (status === "quoted" && shippedAt && delivered) {
+    return <MicroBadge tone="solid-green">DELIVERED</MicroBadge>;
+  }
   if (status === "quoted" && shippedAt) {
     return <MicroBadge tone="solid-green">SHIPPED</MicroBadge>;
   }

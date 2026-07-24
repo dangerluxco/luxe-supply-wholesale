@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { ROLE } from "@/lib/constants";
 import { getQuoteById } from "@/lib/firestore/quotes";
-import { getFulfillmentForInvoice } from "@/lib/firestore/fulfillment";
+import { getFulfillmentForInvoice, fulfillmentDelivered } from "@/lib/firestore/fulfillment";
 import { getInvoiceByNumber, displayInvoiceStatus } from "@/lib/firestore/invoices";
 import { InvoiceBadge } from "@/components/badges";
 import { PayInvoiceButton } from "@/components/PayInvoiceButton";
@@ -111,6 +111,7 @@ export default async function BuyerOrderDetailPage({
           status={quote.status}
           shippedAt={quote.shippedAt}
           fulfilledAt={quote.fulfilledAt}
+          delivered={fulfillmentDelivered(fulfillment)}
         />
         {invoice ? <InvoiceBadge status={displayInvoiceStatus(invoice)} /> : null}
         {quote.poNumber ? (
