@@ -21,6 +21,8 @@ export async function GET() {
     "Subtotal",
     "Shipping",
     "Total",
+    "Carrier",
+    "Tracking",
     "Pieces",
   ];
   const rows = invoices.map((inv) => [
@@ -34,6 +36,8 @@ export async function GET() {
     inv.subtotal,
     inv.shipping,
     inv.total,
+    inv.carrier || "",
+    inv.trackingNumber || "",
     inv.items.map((l) => l.title).join("; "),
   ]);
 
