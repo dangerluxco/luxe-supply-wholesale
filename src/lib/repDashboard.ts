@@ -55,6 +55,8 @@ export type PipelineCard = {
   subtitle: string;
   total: number;
   href: string;
+  /** Claimed by the viewing staffer — gets the "yours" highlight. */
+  mine: boolean;
 };
 
 export type PipelineColumn = {
@@ -74,6 +76,7 @@ export type PipelineTableRow = {
   statusLabel: string;
   waiting: string;
   href: string;
+  mine: boolean;
 };
 
 export type NeedsAttentionItem = {
@@ -97,9 +100,14 @@ export function computeRepDashboard(input: {
   buyers: PortalBuyer[];
   pendingApplications: BuyerRegistrationRequest[];
   catalogValue: { total: number; count: number; approximate: boolean };
+  /** Viewing staffer — their claimed requests get the "yours" highlight. */
+  currentEmail?: string;
   now?: Date;
 }): RepDashboardData {
   const now = (input.now ?? new Date()).getTime();
+  const me = String(input.currentEmail || "").trim().toLowerCase();
+  const isMine = (q: PortalQuote): boolean =>
+    !!me && String(q.claimedByEmail || "").trim().toLowerCase() === me;
 
   const openQuotes = input.quotes.filter((q) => OPEN_STATUSES.has(q.status));
   const openRequests = {
@@ -159,6 +167,7 @@ export function computeRepDashboard(input: {
           } · waiting ${elapsedShort(q.createdAt, now)}${timeoutNote}`,
           total: Math.round((q.cartTotal || 0) + (q.shipping || 0)),
           href: `/wholesaleportal/rep/quotes/${q.id}`,
+          mine: isMine(q),
         };
       }),
     };
@@ -178,6 +187,7 @@ export function computeRepDashboard(input: {
       statusLabel: statusLabelByKey.get(pipelineKeyFor(q)) || q.status,
       waiting: elapsedShort(q.createdAt, now),
       href: `/wholesaleportal/rep/quotes/${q.id}`,
+      mine: isMine(q),
     }));
 
   type Candidate = { item: NeedsAttentionItem; weight: number; age: number };

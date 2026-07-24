@@ -36,6 +36,50 @@ export async function recordBookedCall(opts: {
     });
 }
 
+export type BookedCallDetail = {
+  staffName: string;
+  staffEmail: string;
+  scheduledStartIso: string | null;
+  durationMinutes: number | null;
+  createdAt: string | null;
+};
+
+/** Most recent booked call for an order — shown on the buyer's order page so
+ * the call time lives in the portal, not just the Google Calendar invite. */
+export async function getLatestBookedCallForQuote(
+  quoteId: string,
+): Promise<BookedCallDetail | null> {
+  const clean = String(quoteId || "").trim();
+  if (!clean) return null;
+  try {
+    const snap = await getDb()
+      .collection(COLLECTION)
+      .where("quoteId", "==", clean)
+      .limit(20)
+      .get();
+    const rows = snap.docs.map((doc) => {
+      const d = doc.data() || {};
+      return {
+        staffName: String(d.staffName || ""),
+        staffEmail: String(d.staffEmail || ""),
+        scheduledStartIso: d.scheduledStartIso ? String(d.scheduledStartIso) : null,
+        durationMinutes: Number.isFinite(Number(d.durationMinutes))
+          ? Number(d.durationMinutes)
+          : null,
+        createdAt: toIso(d.createdAt),
+      };
+    });
+    rows.sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+    return rows[0] || null;
+  } catch (err) {
+    console.warn(
+      "[bookedCalls] getLatestBookedCallForQuote:",
+      err instanceof Error ? err.message : err,
+    );
+    return null;
+  }
+}
+
 /** Booked calls in a date range — powers the staff performance "calls" column. */
 export async function listBookedCallsInRange(
   fromIso: string,

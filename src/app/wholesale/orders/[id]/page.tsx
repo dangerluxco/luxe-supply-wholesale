@@ -5,6 +5,8 @@ import { ROLE } from "@/lib/constants";
 import { getQuoteById } from "@/lib/firestore/quotes";
 import { getFulfillmentForInvoice, fulfillmentDelivered } from "@/lib/firestore/fulfillment";
 import { getInvoiceByNumber, displayInvoiceStatus } from "@/lib/firestore/invoices";
+import { getCurationShareForBuyer } from "@/lib/firestore/curation";
+import { getLatestBookedCallForQuote } from "@/lib/firestore/bookedCalls";
 import { InvoiceBadge } from "@/components/badges";
 import { PayInvoiceButton } from "@/components/PayInvoiceButton";
 import { isStripeConfigured } from "@/lib/stripe";
@@ -98,6 +100,15 @@ export default async function BuyerOrderDetailPage({
   const canPayOnline =
     !!invoice && isStripeConfigured() && invoice.status === "SENT" && invoice.balance > 0;
 
+  // Buyer Curate View + call details live here in the portal — buyers
+  // shouldn't have to dig through Google Calendar for the links.
+  const [curationShare, bookedCall] = await Promise.all([
+    quote.curationToken
+      ? getCurationShareForBuyer(quote.curationToken).catch(() => null)
+      : Promise.resolve(null),
+    getLatestBookedCallForQuote(quote.id).catch(() => null),
+  ]);
+
   return (
     <div className="px-8 pb-16 pt-8">
       <Link href="/wholesale/orders" className="text-[12px] text-muted transition hover:text-ink">
@@ -188,6 +199,43 @@ export default async function BuyerOrderDetailPage({
         </div>
 
         <div className="space-y-6">
+          {curationShare || bookedCall?.scheduledStartIso ? (
+            <div className="rounded-card border border-accent/40 bg-surface p-5">
+              <div className="micro-badge mb-3 text-[10px] tracking-[0.14em] text-accent">
+                BUYER CURATE VIEW
+              </div>
+              {bookedCall?.scheduledStartIso ? (
+                <p className="mb-2 text-[12.5px] text-secondary">
+                  Call scheduled for{" "}
+                  <strong className="text-ink">
+                    {new Date(bookedCall.scheduledStartIso).toLocaleString("en-US", {
+                      weekday: "short",
+                      month: "short",
+                      day: "numeric",
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                  </strong>
+                  {bookedCall.durationMinutes ? ` · ${bookedCall.durationMinutes} min` : ""}
+                  {bookedCall.staffName ? ` with ${bookedCall.staffName}` : ""}.
+                </p>
+              ) : null}
+              {curationShare ? (
+                <>
+                  <p className="mb-3 text-[12.5px] text-secondary">
+                    Your rep prepared a curate view of pieces for this order — open it to
+                    browse and mark what you like{bookedCall ? " before the call" : ""}.
+                  </p>
+                  <a
+                    href={`/curation/${quote.curationToken}`}
+                    className="inline-flex h-10 items-center rounded-chip bg-accent px-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink transition hover:opacity-90"
+                  >
+                    Open Buyer Curate View →
+                  </a>
+                </>
+              ) : null}
+            </div>
+          ) : null}
           {shipmentBoxes.length > 0 ? (
             <div className="rounded-card border border-border bg-surface p-5">
               <ShipmentTracking boxes={shipmentBoxes} />

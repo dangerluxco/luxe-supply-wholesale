@@ -11,23 +11,23 @@ export function curationCallRequestDraft(opts: {
   staffName: string;
 }): { subject: string; body: string } {
   const firstName = (opts.customerName || "").trim().split(/\s+/)[0] || "there";
-  const subject = "Let's schedule a call about your curated selection — Luxe Supply Co.";
+  const subject = "Your curate view is ready — let's schedule a call · Luxe Supply Co.";
   const selectionBits =
     opts.itemCount > 0
-      ? ` (${opts.itemCount} item${opts.itemCount === 1 ? "" : "s"}${
+      ? ` — ${opts.itemCount} piece${opts.itemCount === 1 ? "" : "s"}${
           opts.estimatedTotal != null
             ? ` · $${Math.round(opts.estimatedTotal).toLocaleString("en-US")}`
             : ""
-        })`
+        }`
       : "";
   const body = [
     `Hi ${firstName},`,
     "",
-    `We've put together a curated selection${selectionBits} and would love to hop on a quick call to walk through the pieces together.`,
+    `We've put together a curate view just for you${selectionBits}. Take a look, mark what you like, and we'll walk through the pieces together on a quick call.`,
     "",
     "Just reply with a few times that work for you and we'll send over a calendar invite.",
     "",
-    `View your curated selection: ${opts.curationUrl}`,
+    `Open your curate view: ${opts.curationUrl}`,
     "",
     opts.staffName,
     "Luxe Supply Co.",

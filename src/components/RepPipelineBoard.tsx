@@ -356,7 +356,11 @@ export function RepPipelineBoard({
                             : undefined
                         }
                         className={clsx(
-                          "block rounded-chip border border-border bg-surface px-2.5 py-2 text-[12px] transition hover:border-accent",
+                          "block rounded-chip border bg-surface px-2.5 py-2 text-[12px] transition hover:border-accent",
+                          // "Mine" highlight — claimed by the viewing staffer.
+                          card.mine
+                            ? "border-accent ring-1 ring-accent/40 bg-accent/[0.05]"
+                            : "border-border",
                           droppable && "cursor-grab active:cursor-grabbing",
                         )}
                       >
@@ -400,7 +404,10 @@ export function RepPipelineBoard({
               {table.map((row) => (
                 <div
                   key={row.id}
-                  className="grid grid-cols-[1fr_60px_90px_110px_80px_64px] items-center gap-x-3 border-b border-border/60 px-4 py-3 text-[12.5px] transition last:border-b-0 hover:bg-ground/70"
+                  className={clsx(
+                    "grid grid-cols-[1fr_60px_90px_110px_80px_64px] items-center gap-x-3 border-b border-border/60 px-4 py-3 text-[12.5px] transition last:border-b-0 hover:bg-ground/70",
+                    row.mine && "border-l-2 border-l-accent bg-accent/[0.05]",
+                  )}
                 >
                   <div className="min-w-0">
                     <div className="truncate font-semibold text-ink">{row.name}</div>

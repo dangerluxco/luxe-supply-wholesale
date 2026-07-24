@@ -114,7 +114,8 @@ export function CurationBuilder({
   /** Empty = not chosen; buyer id; or POTENTIAL_VALUE */
   const [clientSelect, setClientSelect] = useState("");
   const [potentialName, setPotentialName] = useState("");
-  const [invoiceDate, setInvoiceDate] = useState("");
+  // Defaults to today; the native date input gives the click-to-pick calendar.
+  const [invoiceDate, setInvoiceDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [note, setNote] = useState("");
   const [expiresHours, setExpiresHours] = useState(4);
   const [pending, start] = useTransition();
@@ -633,9 +634,9 @@ export function CurationBuilder({
                 INVOICE DATE
               </span>
               <input
+                type="date"
                 value={invoiceDate}
                 onChange={(e) => setInvoiceDate(e.target.value)}
-                placeholder="Optional"
                 className="h-10 rounded-chip border border-border bg-ground px-3 text-[12.5px] text-ink outline-none focus:border-accent"
               />
             </label>

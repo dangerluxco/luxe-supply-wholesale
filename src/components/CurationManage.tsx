@@ -113,7 +113,20 @@ function computeStats(items: CurationItem[], callStartedAtMs: number | null, now
   const perHour = hours > 0 ? approve / hours : 0;
   const margin = cart - costTotal;
   const marginPct = cart > 0 ? (margin / cart) * 100 : null;
-  return { approve, maybe, decline, pending, cart, rev: cart, pieces: approve, margin, marginPct, elapsedMs, perHour };
+  return {
+    approve,
+    maybe,
+    decline,
+    pending,
+    cart,
+    rev: cart,
+    pieces: approve,
+    cost: costTotal,
+    margin,
+    marginPct,
+    elapsedMs,
+    perHour,
+  };
 }
 
 /** Margin color bands matching the marketing-site review table: green ≥18%, amber below, red if negative. */
@@ -1322,10 +1335,18 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
                 INVOICE DATE
               </span>
               <input
-                defaultValue={share.invoiceDate}
+                type="date"
+                // Defaults to today for new sessions; legacy free-text dates
+                // show empty here (the stored value is preserved until edited).
+                defaultValue={
+                  /^\d{4}-\d{2}-\d{2}$/.test(share.invoiceDate)
+                    ? share.invoiceDate
+                    : share.invoiceDate
+                      ? ""
+                      : new Date().toISOString().slice(0, 10)
+                }
                 disabled={share.sessionEnded}
                 onBlur={(e) => saveMeta({ invoiceDate: e.target.value })}
-                placeholder="Optional"
                 className="h-10 rounded-chip border border-border bg-ground px-3 text-[12.5px] text-ink outline-none focus:border-accent disabled:opacity-60"
               />
             </label>
@@ -1416,12 +1437,15 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
                   </div>
 
                   <div className="mb-5 grid grid-cols-3 gap-3 sm:grid-cols-5">
+                    {/* Seller-side economics: cost / sell / profit — so price
+                        drops on the call are made with the real margin in view. */}
                     {[
                       { label: "Time elapsed", value: formatElapsed(stats.elapsedMs) },
                       { label: "Piece count", value: String(stats.pieces) },
                       { label: "Items/hour", value: stats.perHour ? stats.perHour.toFixed(1) : "0" },
-                      { label: "Total rev", value: money(Math.round(stats.rev)) },
-                      { label: "Net margin", value: marginLabel },
+                      { label: "Sell price (approved)", value: money(Math.round(stats.rev)) },
+                      { label: "Actual cost", value: money(Math.round(stats.cost)) },
+                      { label: "Profit · margin", value: marginLabel },
                       { label: "Approve", value: String(stats.approve) },
                       { label: "Maybe", value: String(stats.maybe) },
                       { label: "Decline", value: String(stats.decline) },

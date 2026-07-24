@@ -157,7 +157,14 @@ export function QuotesTable({
         {rows.map((q) => (
           <div
             key={q.id}
-            className="grid grid-cols-[36px_1fr_0.85fr_52px_72px_60px_110px_minmax(230px,1.3fr)_72px] items-center border-b border-border/60 px-5 py-3.5 text-[12.5px] text-[#3A3934] transition last:border-b-0 hover:bg-ground/70"
+            className={
+              "grid grid-cols-[36px_1fr_0.85fr_52px_72px_60px_110px_minmax(230px,1.3fr)_72px] items-center border-b border-border/60 px-5 py-3.5 text-[12.5px] text-[#3A3934] transition last:border-b-0 hover:bg-ground/70" +
+              // "Mine" highlight: claimed by the viewing staffer — gold edge + tint.
+              (q.claimedByEmail &&
+              q.claimedByEmail.toLowerCase() === currentStaffEmail.toLowerCase()
+                ? " border-l-2 border-l-accent bg-accent/[0.05]"
+                : "")
+            }
           >
             <span>
               <input

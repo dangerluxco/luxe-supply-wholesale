@@ -132,6 +132,7 @@ export function BundleBuilder({
       : BUNDLE_AUDIENCE_ALL,
   );
   const [saving, startSave] = useTransition();
+  const saveInFlight = useRef(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const initialPrices = useMemo(() => {
@@ -478,6 +479,10 @@ export function BundleBuilder({
           className="mt-6"
           onSubmit={(e) => {
             e.preventDefault();
+            // Double-click guard: two rapid submits published duplicate lots —
+            // useTransition's `saving` flips too late to stop the second click.
+            if (saveInFlight.current) return;
+            saveInFlight.current = true;
             setSaveError(null);
             startSave(async () => {
               const res = await fetch("/api/staff/bundles/save", {
@@ -505,9 +510,12 @@ export function BundleBuilder({
                 redirectTo?: string;
               };
               if (!res.ok || data.error) {
+                saveInFlight.current = false;
                 setSaveError(data.error || "Could not save bundle.");
                 return;
               }
+              // Intentionally NOT released on success — the redirect unmounts
+              // this form, and releasing early would re-arm the button.
               router.push(data.redirectTo || "/wholesaleportal/rep/bundles");
             });
           }}

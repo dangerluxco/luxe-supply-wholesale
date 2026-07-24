@@ -130,6 +130,7 @@ export default async function StaffDashboardPage() {
     buyers,
     pendingApplications,
     catalogValue,
+    currentEmail: session.email,
   });
 
   return (

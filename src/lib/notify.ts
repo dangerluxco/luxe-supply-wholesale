@@ -259,32 +259,30 @@ export async function sendCurationCallRequestEmail(opts: {
   bodyText?: string;
 }): Promise<boolean> {
   const firstName = (opts.customerName || "").trim().split(/\s+/)[0] || "there";
-  const selection =
-    opts.clientLabel && opts.clientLabel.trim()
-      ? escapeHtml(opts.clientLabel.trim())
-      : "a curated selection";
   const subject =
     (opts.subject || "").trim() ||
-    "Let's schedule a call about your curated selection — Luxe Supply Co.";
+    "Your curate view is ready — let's schedule a call · Luxe Supply Co.";
+  // NOTE: the session's client name is deliberately NOT interpolated into the
+  // sentence — "We've put together <client name>…" read as gibberish.
   const html = opts.bodyText?.trim()
     ? plainTextToEmailHtml(opts.bodyText)
     : `<!DOCTYPE html>
 <html><body style="font-family:Segoe UI,Roboto,Helvetica,sans-serif;line-height:1.6;color:#333;max-width:640px;">
   <p style="font-size:15px;font-weight:600;letter-spacing:0.06em;">LUXE SUPPLY<span style="color:#B08D3E;">*</span></p>
   <p>Hi ${escapeHtml(firstName)},</p>
-  <p>We've put together ${selection}${
+  <p>We've put together a curate view just for you${
     opts.itemCount
-      ? ` (<strong>${opts.itemCount} item${opts.itemCount === 1 ? "" : "s"}</strong>${
+      ? ` — <strong>${opts.itemCount} piece${opts.itemCount === 1 ? "" : "s"}</strong>${
           opts.estimatedTotal != null
             ? ` · ${escapeHtml(money(Math.round(opts.estimatedTotal)))}`
             : ""
-        })`
+        }`
       : ""
-  } and would love to hop on a quick call to walk through the pieces together.</p>
+  }. Take a look, mark what you like, and we'll walk through the pieces together on a quick call.</p>
   <p><strong>Just reply to this email with a few times that work for you</strong> and we'll send over a calendar invite.</p>
-  <p><a href="${opts.curationUrl}" style="display:inline-block;padding:10px 20px;background:#16161a;color:#fff;text-decoration:none;border-radius:4px;">View your curated selection</a></p>
+  <p><a href="${opts.curationUrl}" style="display:inline-block;padding:10px 20px;background:#16161a;color:#fff;text-decoration:none;border-radius:4px;">Open your curate view</a></p>
   <p>Talk soon,<br/>${escapeHtml(opts.staffName)}<br/><span style="color:#666;">Luxe Supply Co. · ${escapeHtml(opts.staffEmail)}</span></p>
-  <p style="color:#666;font-size:12px;">Curation link: ${escapeHtml(opts.token)}</p>
+  <p style="color:#666;font-size:12px;">Curate view link: ${escapeHtml(opts.token)}</p>
 </body></html>`;
 
   return sendEmail({
