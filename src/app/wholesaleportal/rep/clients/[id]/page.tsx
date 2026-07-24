@@ -48,12 +48,24 @@ function MetricCard({
   );
 }
 
+/** Sales-performance range presets for the client page (?range=…). */
+const RANGE_PRESETS: Array<{ key: string; label: string; days?: number; ytd?: boolean }> = [
+  { key: "all", label: "All time" },
+  { key: "30d", label: "30 days", days: 30 },
+  { key: "90d", label: "90 days", days: 90 },
+  { key: "ytd", label: "This year", ytd: true },
+  { key: "12m", label: "12 months", days: 365 },
+];
+
 export default async function ClientDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ range?: string; from?: string; to?: string }>;
 }) {
   const { id } = await params;
+  const sp = await searchParams;
   const buyer = await getBuyerById(id);
   if (!buyer) notFound();
 
@@ -67,14 +79,61 @@ export default async function ClientDetailPage({
   const holds = await loadActiveHoldsBySku(holdSkus);
   const cartTotal = cart.reduce((s, i) => s + i.price, 0);
 
-  const metrics = computeBuyerAccountMetrics(invoices, quotes);
+  // --- Sales-performance date range (?range=preset or ?from/?to custom) -----
+  const parseDay = (v: string | undefined, endOfDay: boolean): number | null => {
+    if (!v || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
+    const t = new Date(`${v}T${endOfDay ? "23:59:59.999" : "00:00:00"}`).getTime();
+    return Number.isFinite(t) ? t : null;
+  };
+  const customFrom = parseDay(sp.from, false);
+  const customTo = parseDay(sp.to, true);
+  const preset =
+    customFrom != null || customTo != null
+      ? null
+      : RANGE_PRESETS.find((p) => p.key === String(sp.range || "all")) || RANGE_PRESETS[0]!;
+  const now = Date.now();
+  let rangeFrom: number | null = null;
+  let rangeTo: number | null = null;
+  if (preset) {
+    if (preset.days) rangeFrom = now - preset.days * 86_400_000;
+    else if (preset.ytd) rangeFrom = new Date(new Date().getFullYear(), 0, 1).getTime();
+  } else {
+    rangeFrom = customFrom;
+    rangeTo = customTo;
+  }
+  const rangeActive = rangeFrom != null || rangeTo != null;
+  const inRange = (d: string | null | undefined): boolean => {
+    if (!rangeActive) return true;
+    if (!d) return false;
+    const t = new Date(d).getTime();
+    if (!Number.isFinite(t)) return false;
+    if (rangeFrom != null && t < rangeFrom) return false;
+    if (rangeTo != null && t > rangeTo) return false;
+    return true;
+  };
+  const rangeInvoices = rangeActive
+    ? invoices.filter((i) => inRange(i.issuedAt || i.createdAt))
+    : invoices;
+  const rangeQuotes = rangeActive ? quotes.filter((q) => inRange(q.createdAt)) : quotes;
+  const chartMonths = rangeActive
+    ? Math.min(24, Math.max(1, Math.ceil((now - (rangeFrom ?? now - 6 * 30 * 86_400_000)) / (30 * 86_400_000))))
+    : 6;
+  const rangeLabel = preset
+    ? preset.label
+    : [sp.from || "…", sp.to || "today"].join(" → ");
+
+  // Range-scoped view for sales performance; full-history view for
+  // current-state numbers (outstanding balance, credit exposure, open orders).
+  const metrics = computeBuyerAccountMetrics(rangeInvoices, rangeQuotes, { months: chartMonths });
+  const metricsAll = rangeActive ? computeBuyerAccountMetrics(invoices, quotes) : metrics;
   const shippingRules = await getShippingRules();
   const shippingMethodName = shippingMethodLabel(shippingRules, buyer.shippingMethodId) ?? "—";
   const creditPct =
     buyer.creditLimit && buyer.creditLimit > 0
-      ? Math.min(100, Math.round((metrics.outstanding / buyer.creditLimit) * 100))
+      ? Math.min(100, Math.round((metricsAll.outstanding / buyer.creditLimit) * 100))
       : null;
   const maxBucket = Math.max(1, ...metrics.monthly.map((b) => b.paidTotal + b.openTotal));
+  const basePath = `/wholesaleportal/rep/clients/${encodeURIComponent(buyer.id)}`;
 
   return (
     <div className="px-10 pb-12 pt-8">
@@ -136,18 +195,69 @@ export default async function ClientDetailPage({
         </div>
       </div>
 
+      {/* Sales-performance date range — scopes purchases, AOV, the purchase
+          chart, and order history. Outstanding/credit stay current-state. */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <span className="micro-badge text-[9.5px] tracking-[0.14em] text-muted">SALES RANGE</span>
+        {RANGE_PRESETS.map((p) => {
+          const active = preset?.key === p.key;
+          return (
+            <a
+              key={p.key}
+              href={p.key === "all" ? basePath : `${basePath}?range=${p.key}`}
+              className={`rounded-chip px-2.5 py-1 text-[11px] tracking-[0.06em] ${
+                active
+                  ? "bg-ink text-ground"
+                  : "border border-border text-secondary hover:border-accent"
+              }`}
+            >
+              {p.label}
+            </a>
+          );
+        })}
+        <form action={basePath} method="get" className="ml-1 flex items-center gap-1.5">
+          <input
+            type="date"
+            name="from"
+            defaultValue={sp.from || ""}
+            className="h-7 rounded-chip border border-border bg-surface px-2 font-mono text-[11px] text-ink outline-none focus:border-accent"
+          />
+          <span className="text-[11px] text-muted">→</span>
+          <input
+            type="date"
+            name="to"
+            defaultValue={sp.to || ""}
+            className="h-7 rounded-chip border border-border bg-surface px-2 font-mono text-[11px] text-ink outline-none focus:border-accent"
+          />
+          <button
+            type="submit"
+            className={`rounded-chip px-2.5 py-1 text-[11px] tracking-[0.06em] ${
+              !preset
+                ? "bg-ink text-ground"
+                : "border border-border text-secondary hover:border-accent"
+            }`}
+          >
+            Apply
+          </button>
+        </form>
+      </div>
+
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <MetricCard label="LIFETIME PURCHASES" value={money(metrics.lifetimePurchases)} />
+        <MetricCard
+          label={rangeActive ? "PURCHASES · RANGE" : "LIFETIME PURCHASES"}
+          value={money(metrics.lifetimePurchases)}
+          caption={rangeActive ? rangeLabel : undefined}
+        />
         <MetricCard
           label="OUTSTANDING"
-          value={money(metrics.outstanding)}
+          value={money(metricsAll.outstanding)}
           caption={
-            metrics.outstandingCount > 0
-              ? `${metrics.outstandingCount} unpaid${
-                  metrics.outstandingDueSoonDays != null
-                    ? metrics.outstandingDueSoonDays >= 0
-                      ? `, due in ${metrics.outstandingDueSoonDays}d`
-                      : `, ${Math.abs(metrics.outstandingDueSoonDays)}d overdue`
+            metricsAll.outstandingCount > 0
+              ? `${metricsAll.outstandingCount} unpaid${
+                  metricsAll.outstandingDueSoonDays != null
+                    ? metricsAll.outstandingDueSoonDays >= 0
+                      ? `, due in ${metricsAll.outstandingDueSoonDays}d`
+                      : `, ${Math.abs(metricsAll.outstandingDueSoonDays)}d overdue`
                     : ""
                 }`
               : "All caught up"
@@ -155,16 +265,20 @@ export default async function ClientDetailPage({
         />
         <MetricCard
           label="OPEN ORDERS"
-          value={String(metrics.openOrders)}
-          caption={metrics.openOrdersLatestDate ? `submitted ${fullDate(metrics.openOrdersLatestDate)}` : undefined}
+          value={String(metricsAll.openOrders)}
+          caption={
+            metricsAll.openOrdersLatestDate
+              ? `submitted ${fullDate(metricsAll.openOrdersLatestDate)}`
+              : undefined
+          }
         />
         <MetricCard
-          label="AVG ORDER VALUE"
+          label={rangeActive ? "AVG ORDER · RANGE" : "AVG ORDER VALUE"}
           value={metrics.avgOrderValue != null ? money(metrics.avgOrderValue) : "—"}
         />
         <MetricCard
           label="LAST ORDER"
-          value={metrics.lastOrderAt ? fullDate(metrics.lastOrderAt) : "—"}
+          value={metricsAll.lastOrderAt ? fullDate(metricsAll.lastOrderAt) : "—"}
         />
       </div>
 
