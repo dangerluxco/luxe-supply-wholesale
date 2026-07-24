@@ -178,12 +178,18 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
   // -- Call timer (Start call / elapsed / items-per-hour) --------------------
   const [callStartedAtMs, setCallStartedAtMs] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  // The branded header is tall; once the call is live the seller needs the
+  // LIVE section + item table, so it auto-collapses to a slim bar (reopenable).
+  const [headerCollapsed, setHeaderCollapsed] = useState(false);
 
   useEffect(() => {
     try {
       const raw = sessionStorage.getItem(callStartedKey(share.token));
       const ms = raw ? Number(raw) : NaN;
-      if (Number.isFinite(ms) && ms > 0) setCallStartedAtMs(ms);
+      if (Number.isFinite(ms) && ms > 0) {
+        setCallStartedAtMs(ms);
+        setHeaderCollapsed(true);
+      }
     } catch {
       /* ignore */
     }
@@ -199,6 +205,7 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
     const ms = Date.now();
     setCallStartedAtMs(ms);
     setNow(ms);
+    setHeaderCollapsed(true);
     try {
       sessionStorage.setItem(callStartedKey(share.token), String(ms));
     } catch {
@@ -986,7 +993,55 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
       ) : null}
       {/* Branded session header — same ink/gold treatment as the buyer-facing
           storefront chrome and the PDF invoice, so the seller's working view
-          feels like Luxe, not an admin tool. */}
+          feels like Luxe, not an admin tool. Collapses to a slim bar once the
+          call is live so the LIVE section + items stay above the fold. */}
+      {headerCollapsed ? (
+        <div className="flex flex-wrap items-center gap-3 rounded-card bg-ink px-4 py-2.5 shadow-[0_18px_48px_-24px_rgba(22,22,26,0.55)]">
+          <Logo tone="light" height={16} />
+          <span className="min-w-0 truncate text-[13.5px] font-semibold text-ground">
+            {share.clientName || "Curation link"}
+          </span>
+          <span
+            className={
+              "micro-badge inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[9px] tracking-[0.14em] " +
+              (share.revoked
+                ? "border border-danger/50 text-danger"
+                : share.sessionEnded
+                  ? "border border-white/25 text-white/60"
+                  : "border border-[#4E9A6A]/60 text-[#7BC49A]")
+            }
+          >
+            {!share.revoked && !share.sessionEnded ? (
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#7BC49A]" />
+            ) : null}
+            {share.revoked ? "REVOKED" : share.sessionEnded ? "SESSION ENDED" : "LIVE"}
+          </span>
+          {!share.revoked ? (
+            <span className="font-mono text-[10.5px] text-white/50">
+              {expiresLabel(share.expiresAt)}
+            </span>
+          ) : null}
+          <div className="flex-1" />
+          <button
+            type="button"
+            onClick={() => {
+              navigator.clipboard?.writeText(buyerUrl).catch(() => {});
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1500);
+            }}
+            className="h-8 rounded-chip border border-white/20 px-2.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-white/75 transition hover:border-accent hover:text-ground"
+          >
+            {copied ? "Copied" : "Copy buyer link"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setHeaderCollapsed(false)}
+            className="h-8 rounded-chip border border-white/20 px-2.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-white/75 transition hover:border-accent hover:text-ground"
+          >
+            Expand ▾
+          </button>
+        </div>
+      ) : (
       <div className="overflow-hidden rounded-card bg-ink shadow-[0_18px_48px_-24px_rgba(22,22,26,0.55)]">
         <div className="flex flex-wrap items-start justify-between gap-4 px-6 pb-5 pt-6">
           <div className="min-w-0">
@@ -1106,9 +1161,17 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
                 Revoke
               </button>
             ) : null}
+            <button
+              type="button"
+              onClick={() => setHeaderCollapsed(true)}
+              className="h-10 rounded-chip border border-white/20 px-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-white/75 transition hover:border-accent hover:text-ground"
+            >
+              Collapse ▴
+            </button>
           </div>
         </div>
       </div>
+      )}
 
       {error ? <p className="text-[12.5px] text-danger">{error}</p> : null}
       {message ? <p className="text-[12.5px] text-[#4E9A6A]">{message}</p> : null}
