@@ -88,6 +88,11 @@ function toApiAddress(to: ShipTo) {
 
 function toApiPackage(parcel: Parcel, insuredValue?: number | null) {
   const pkg: Record<string, unknown> = {
+    // "package" = universal custom-box packaging. Without an explicit
+    // package_code the rate response includes carrier-specific package-type
+    // variants, and buying a label from one of those rateIds fails with
+    // "The package type for the shipment is not set or is invalid".
+    package_code: "package",
     weight: { value: Math.max(1, Math.round(parcel.weightOz)), unit: "ounce" },
   };
   if (parcel.lengthIn && parcel.widthIn && parcel.heightIn) {
