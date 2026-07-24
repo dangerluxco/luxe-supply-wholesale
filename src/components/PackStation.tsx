@@ -54,6 +54,8 @@ export function PackStation({
   shipEngineEnabled = false,
   signatureDefault = false,
   isAdmin = false,
+  paymentHold = false,
+  invoiceFulfilled = false,
 }: {
   invoiceId: string;
   initialRecord: FulfillmentRecord;
@@ -64,6 +66,10 @@ export function PackStation({
   signatureDefault?: boolean;
   /** Admins (managers) get the unship escape hatch. */
   isAdmin?: boolean;
+  /** Pay-first buyer (Due on receipt) with an unpaid invoice — completing holds at FULFILLED instead of shipping. */
+  paymentHold?: boolean;
+  /** Invoice already marked FULFILLED (packed, waiting on payment). */
+  invoiceFulfilled?: boolean;
 }) {
   const router = useRouter();
   const [record, setRecord] = useState(initialRecord);
@@ -555,22 +561,38 @@ export function PackStation({
 
         {!shipped ? (
           <div className="rounded-card border border-white/15 p-5">
+            {paymentHold && invoiceFulfilled ? (
+              <div className="mb-3 rounded-chip border border-accent/50 bg-accent/10 px-3 py-2 text-center text-[11.5px] text-accent">
+                Packed &amp; fulfilled — awaiting payment. Once the invoice is marked paid,
+                come back and complete the shipment.
+              </div>
+            ) : null}
             <button
               type="button"
               disabled={busy || !readiness.ready}
               onClick={async () => {
-                if (!window.confirm("Mark this shipment as shipped and email the buyer tracking?")) return;
+                const prompt =
+                  paymentHold && !invoiceFulfilled
+                    ? "This buyer pays before shipping. Mark this shipment as packed & fulfilled (held until payment)?"
+                    : "Mark this shipment as shipped and email the buyer tracking?";
+                if (!window.confirm(prompt)) return;
                 const data = await api({ action: "complete" });
                 if (data) router.refresh();
               }}
               className="h-11 w-full rounded-chip bg-accent text-[12px] font-semibold uppercase tracking-[0.14em] text-ink transition hover:opacity-90 disabled:opacity-40"
             >
-              Mark shipped + email buyer
+              {paymentHold
+                ? invoiceFulfilled
+                  ? "Awaiting payment — ship once paid"
+                  : "Complete packing — hold for payment"
+                : "Mark shipped + email buyer"}
             </button>
             <p className="mt-2 text-center text-[11px] text-white/50">
-              {readiness.ready
-                ? "All pieces boxed and every box has tracking."
-                : readiness.reason || "Scan every piece into a box, then add tracking numbers."}
+              {!readiness.ready
+                ? readiness.reason || "Scan every piece into a box, then add tracking numbers."
+                : paymentHold
+                  ? "Due-on-receipt buyer: the shipped email + tracking go out after the invoice is paid."
+                  : "All pieces boxed and every box has tracking."}
             </p>
           </div>
         ) : null}

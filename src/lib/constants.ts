@@ -202,6 +202,8 @@ export const FIRESTORE_INVOICE_STATUS = {
 
 export const FULFILLMENT_STATUS = {
   UNFULFILLED: "UNFULFILLED",
+  /** Packed & ready to ship, but held until the invoice is paid (pay-first buyers). */
+  FULFILLED: "FULFILLED",
   SHIPPED: "SHIPPED",
 } as const;
 export type FulfillmentStatus = (typeof FULFILLMENT_STATUS)[keyof typeof FULFILLMENT_STATUS];

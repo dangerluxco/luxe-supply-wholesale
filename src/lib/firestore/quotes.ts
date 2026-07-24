@@ -52,6 +52,8 @@ export type PortalQuote = {
   curationCreatedAt: string | null;
   /** When staff last emailed the buyer asking for call times ("Request a call"). */
   callRequestedAt: string | null;
+  /** Packed & ready but held for payment (pay-first buyers) — cleared semantics: stays set once shipped. */
+  fulfilledAt: string | null;
   /** Stamped by the fulfillment console when the shipment goes out. */
   shippedAt: string | null;
   shipmentBoxes: Array<{ label: string; carrier: string; trackingNumber: string }>;
@@ -203,6 +205,7 @@ function serializeQuote(id: string, d: Record<string, unknown>): PortalQuote {
     curationToken: d.curationToken ? String(d.curationToken) : null,
     curationCreatedAt: toIso(d.curationCreatedAt),
     callRequestedAt: toIso(d.callRequestedAt),
+    fulfilledAt: toIso(d.fulfilledAt),
     shippedAt: toIso(d.shippedAt),
     shipmentBoxes: (Array.isArray(d.shipmentBoxes)
       ? (d.shipmentBoxes as Array<Record<string, unknown>>)
@@ -281,8 +284,13 @@ export async function listQuotes(options?: {
     .collection("salesPortalQuotes")
     .where("organizationId", "==", org.id);
 
+  // "fulfilled" is a synthetic view over invoiced quotes: packed & ready to
+  // ship but held for payment (fulfilledAt set, not shipped yet).
+  const fulfilledView = statusFilter === "fulfilled";
   if (statusFilter === "active") {
     query = query.where("status", "in", [...ACTIVE_QUOTE_STATUSES]);
+  } else if (fulfilledView) {
+    query = query.where("status", "==", "quoted");
   } else if (statusFilter && statusFilter !== "all") {
     query = query.where("status", "==", statusFilter);
   }
@@ -294,9 +302,12 @@ export async function listQuotes(options?: {
     snap = await query.limit(limitCount).get();
   }
 
-  const quotes = snap.docs
+  let quotes = snap.docs
     .map((doc) => serializeQuote(doc.id, doc.data() || {}))
     .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+  if (fulfilledView) {
+    quotes = quotes.filter((q) => q.fulfilledAt && !q.shippedAt);
+  }
 
   let openCount = 0;
   let activeCount = 0;
@@ -554,6 +565,14 @@ export async function linkQuoteToInvoice(
 
 /** Stamp the outbound shipment (per-box carrier + tracking) onto the originating
  * order request, so the order object itself carries tracking — not just the invoice. */
+/** Pay-first hold: packing finished but shipping waits on payment — powers the pipeline's "Fulfilled" tab. */
+export async function markQuoteFulfilled(quoteId: string): Promise<void> {
+  await getDb().collection("salesPortalQuotes").doc(quoteId).update({
+    fulfilledAt: new Date(),
+    updatedAt: new Date(),
+  });
+}
+
 export async function attachShipmentToQuote(
   quoteId: string,
   boxes: Array<{ label: string; carrier: string; trackingNumber: string }>,

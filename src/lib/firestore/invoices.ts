@@ -453,6 +453,33 @@ export async function setInvoicePackingNote(
   return serializeInvoice(saved.id, saved.data() || {});
 }
 
+/**
+ * Pay-first hold: packing is complete but the buyer's terms are "Due on
+ * receipt" and the invoice isn't paid — the shipment waits as FULFILLED
+ * until payment lands, then staff complete it again to ship.
+ */
+export async function markInvoiceFulfilled(
+  invoiceId: string,
+  updatedBy: string,
+): Promise<PortalInvoice> {
+  const ref = getDb().collection("salesPortalInvoices").doc(invoiceId);
+  const snap = await ref.get();
+  if (!snap.exists) throw new Error("Invoice not found.");
+  if ((snap.data() || {}).fulfillmentStatus === FULFILLMENT_STATUS.SHIPPED) {
+    throw new Error("This invoice has already shipped.");
+  }
+
+  await ref.update({
+    fulfillmentStatus: FULFILLMENT_STATUS.FULFILLED,
+    fulfilledAt: new Date(),
+    updatedAt: new Date(),
+    updatedBy,
+  });
+
+  const next = await ref.get();
+  return serializeInvoice(next.id, next.data() || {});
+}
+
 export async function markInvoiceShipped(
   invoiceId: string,
   opts: { carrier: string; trackingNumber?: string },

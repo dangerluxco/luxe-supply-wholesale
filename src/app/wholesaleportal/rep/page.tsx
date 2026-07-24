@@ -40,6 +40,9 @@ export default async function RepDashboard({
     { label: "Open", status: "open", href: "/wholesaleportal/rep?status=open" },
     { label: "Contacted", status: "contacted", href: "/wholesaleportal/rep?status=contacted" },
     { label: "Invoiced", status: "quoted", href: "/wholesaleportal/rep?status=quoted" },
+    // Packed & ready to ship but held for payment (pay-first buyers) — the
+    // unpaid-inventory-on-the-shelf view.
+    { label: "Fulfilled", status: "fulfilled", href: "/wholesaleportal/rep?status=fulfilled" },
     { label: "Timed out", status: "timed_out", href: "/wholesaleportal/rep?status=timed_out" },
     { label: "All", status: "all", href: "/wholesaleportal/rep?status=all" },
   ];

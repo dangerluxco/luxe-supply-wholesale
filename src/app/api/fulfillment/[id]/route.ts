@@ -14,8 +14,14 @@ import {
   fulfillmentReadyToShip,
   type FulfillmentRecord,
 } from "@/lib/firestore/fulfillment";
-import { markInvoiceShipped, markInvoiceUnshipped, type PortalInvoice } from "@/lib/firestore/invoices";
-import { attachShipmentToQuote, clearShipmentFromQuote } from "@/lib/firestore/quotes";
+import {
+  getInvoiceById,
+  markInvoiceFulfilled,
+  markInvoiceShipped,
+  markInvoiceUnshipped,
+  type PortalInvoice,
+} from "@/lib/firestore/invoices";
+import { attachShipmentToQuote, clearShipmentFromQuote, markQuoteFulfilled } from "@/lib/firestore/quotes";
 import {
   findBuyerByIdentifier,
   updateBuyerAccountDetails,
@@ -32,7 +38,7 @@ import {
 import { logAudit } from "@/lib/firestore/audit";
 import { sendShippedEmail } from "@/lib/notify";
 import { trackingUrlFor, friendlyCarrierName } from "@/lib/tracking";
-import { ROLE } from "@/lib/constants";
+import { FIRESTORE_INVOICE_STATUS, netDaysFromTerms, ROLE } from "@/lib/constants";
 
 /**
  * Default insured value for a box: the invoice-line prices of the pieces packed
@@ -516,6 +522,48 @@ export async function POST(
     }
 
     if (body.action === "complete") {
+      // Shipping is gated by payment terms: terms buyers (Net 15/30/…) ship as
+      // soon as packing completes; pay-first buyers ("Due on receipt") hold at
+      // FULFILLED until the invoice is paid, then complete again to ship.
+      const invoiceBefore = await getInvoiceById(invoiceId);
+      if (!invoiceBefore) {
+        return NextResponse.json({ error: "Invoice not found." }, { status: 404 });
+      }
+      const payFirst = netDaysFromTerms(invoiceBefore.terms) === 0;
+      if (payFirst && invoiceBefore.status !== FIRESTORE_INVOICE_STATUS.PAID) {
+        const { record: heldRecord } = await getOrCreateFulfillment(invoiceId);
+        const readiness = fulfillmentReadyToShip(heldRecord);
+        if (!readiness.ready) {
+          return NextResponse.json(
+            { error: readiness.reason || "Packing is not complete yet." },
+            { status: 400 },
+          );
+        }
+        const heldInvoice = await markInvoiceFulfilled(invoiceId, session.email);
+        if (heldInvoice.quoteId) {
+          await markQuoteFulfilled(heldInvoice.quoteId).catch((err) =>
+            console.warn(
+              "[fulfillment] quote fulfilled stamp failed:",
+              err instanceof Error ? err.message : err,
+            ),
+          );
+        }
+        await logAudit({
+          actor: session,
+          action: "fulfillment.held_for_payment",
+          entity: "invoice",
+          entityId: invoiceId,
+          payload: { invoiceNumber: heldRecord.invoiceNumber, terms: invoiceBefore.terms },
+        });
+        return NextResponse.json({
+          ok: true,
+          record: heldRecord,
+          heldForPayment: true,
+          message:
+            "Packed & fulfilled — this buyer pays before shipping. Mark the invoice paid, then complete the shipment.",
+        });
+      }
+
       const record = await markFulfillmentShipped(invoiceId, session.email);
       const usedBoxIds = new Set(Object.values(record.assignments));
       const usedBoxes = record.boxes.filter((b) => usedBoxIds.has(b.id));

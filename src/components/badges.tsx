@@ -67,7 +67,8 @@ export function OrderBadge({ status, dark = false }: { status: string; dark?: bo
 
 // ---- Firestore invoice fulfillment status: UNFULFILLED outline gray / SHIPPED solid green
 export function FulfillmentBadge({ status }: { status: string }) {
-  const tone: Tone = status === "SHIPPED" ? "solid-green" : "outline-gray";
+  const tone: Tone =
+    status === "SHIPPED" ? "solid-green" : status === "FULFILLED" ? "outline-gold" : "outline-gray";
   return <MicroBadge tone={tone}>{status.replace("_", " ")}</MicroBadge>;
 }
 

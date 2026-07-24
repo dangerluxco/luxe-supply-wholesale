@@ -10,7 +10,12 @@ import { PackStation } from "@/components/PackStation";
 import { shipEngineConfigured } from "@/lib/shipengine";
 import { loadItemImagesBySkus } from "@/lib/firestore/catalog";
 import { requireFulfillmentAccess } from "@/lib/staff-api-auth";
-import { ROLE } from "@/lib/constants";
+import {
+  FIRESTORE_INVOICE_STATUS,
+  FULFILLMENT_STATUS,
+  netDaysFromTerms,
+  ROLE,
+} from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
 
@@ -160,6 +165,11 @@ export default async function PackStationPage({ params }: { params: Promise<{ id
         shipEngineEnabled={shipEngineConfigured()}
         signatureDefault={!!buyer?.shippingSignatureRequired}
         isAdmin={session?.role === ROLE.MANAGER}
+        paymentHold={
+          netDaysFromTerms(invoice.terms) === 0 &&
+          invoice.status !== FIRESTORE_INVOICE_STATUS.PAID
+        }
+        invoiceFulfilled={invoice.fulfillmentStatus === FULFILLMENT_STATUS.FULFILLED}
       />
     </div>
   );
