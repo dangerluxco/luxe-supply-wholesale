@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
@@ -123,7 +124,8 @@ export default async function InvoiceDetail({
         </div>
 
         <div className="border-t border-border pt-4">
-          <div className="grid grid-cols-[1fr_120px_110px] border-b border-border pb-2 font-mono text-[10px] uppercase tracking-[0.12em] text-muted">
+          <div className="grid grid-cols-[52px_1fr_120px_110px] border-b border-border pb-2 font-mono text-[10px] uppercase tracking-[0.12em] text-muted">
+            <span />
             <span>Piece</span>
             <span>SKU</span>
             <span className="text-right">Wholesale</span>
@@ -131,9 +133,14 @@ export default async function InvoiceDetail({
           {inv.items.map((l, i) => (
             <div
               key={i}
-              className="grid grid-cols-[1fr_120px_110px] items-center border-b border-border/60 py-3 text-[12.5px]"
+              className="grid grid-cols-[52px_1fr_120px_110px] items-center border-b border-border/60 py-2.5 text-[12.5px]"
             >
-              <span className="text-ink">
+              <div className="relative h-11 w-11 overflow-hidden rounded-chip border border-border/60 bg-ground">
+                {l.imageUrl ? (
+                  <Image src={l.imageUrl} alt={l.title} fill sizes="44px" className="object-cover" />
+                ) : null}
+              </div>
+              <span className="pr-2 text-ink">
                 {l.title}{" "}
                 <span className="ml-1 rounded border border-ink px-1.5 py-0.5 font-mono text-[8px] tracking-[0.1em] text-ink">
                   1/1
