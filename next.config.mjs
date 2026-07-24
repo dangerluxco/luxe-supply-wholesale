@@ -25,7 +25,12 @@ const nextConfig = {
     // Product photo URLs are content-stable (tokened Firebase Storage links),
     // so optimized variants can cache long on the instance disk + browser.
     minimumCacheTTL: 2_678_400, // 31 days
-    formats: ["image/avif", "image/webp"],
+    // WebP ONLY — no AVIF. First-encode bursts after a deploy (empty image
+    // cache + a thumbnail-heavy staff page) wedged the 1-vCPU instance hard
+    // enough that /_next/image requests 504'd and rendered as broken images
+    // (verified in Cloud Run logs, 2026-07-24). AVIF encodes cost ~10x WebP
+    // for a few percent smaller files — not worth it on this box.
+    formats: ["image/webp"],
     remotePatterns: [
       { protocol: "https", hostname: "**.googleapis.com" },
       { protocol: "https", hostname: "**.googleusercontent.com" },
