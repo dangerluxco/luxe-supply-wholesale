@@ -81,6 +81,64 @@ function Progress({ rec }: { rec: FulfillmentRecord | undefined }) {
   );
 }
 
+function QueueRow({
+  inv,
+  rec,
+  held,
+}: {
+  inv: PortalInvoice;
+  rec: FulfillmentRecord | undefined;
+  /** Packed & fulfilled but waiting on payment (pay-first buyer). */
+  held: boolean;
+}) {
+  const paid = inv.status === "PAID";
+  return (
+    <div className="grid grid-cols-[110px_1.1fr_54px_84px_150px_95px_120px] items-center gap-x-3 border-b border-white/10 px-5 py-3.5 text-[13px] last:border-b-0 hover:bg-white/5">
+      <div>
+        <div className="font-mono">{inv.invoiceNumber}</div>
+        <div className="font-mono text-[10px] text-white/40">{fullDate(inv.issuedAt)}</div>
+      </div>
+      <div className="min-w-0">
+        <div className="truncate">{inv.customerName || inv.buyerDisplayName || "—"}</div>
+        <div className="truncate font-mono text-[10.5px] text-white/40">
+          {inv.customerCompany || (inv.portalUsername ? `@${inv.portalUsername}` : "")}
+          {" · "}
+          {inv.itemCount} pc{inv.itemCount === 1 ? "" : "s"}
+        </div>
+      </div>
+      <AgeChip days={ageDays(inv)} />
+      <PaymentChip inv={inv} />
+      <Progress rec={rec} />
+      <span className="text-right font-mono">{money(inv.total)}</span>
+      <div className="text-right">
+        <Link
+          href={`/fulfillment/${inv.id}`}
+          className={clsx(
+            "inline-flex h-8 items-center rounded-chip px-3 text-[10.5px] font-semibold uppercase tracking-[0.1em]",
+            held && !paid
+              ? "border border-white/20 text-white/60 hover:border-accent hover:text-white"
+              : "bg-accent text-ink hover:opacity-90",
+          )}
+        >
+          {held ? (paid ? "Ship now" : "Open") : "Pack"}
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+const QUEUE_HEADER = (
+  <div className="grid grid-cols-[110px_1.1fr_54px_84px_150px_95px_120px] items-center gap-x-3 border-b border-white/15 bg-white/5 px-5 py-3 font-mono text-[10px] uppercase tracking-[0.12em] text-white/50">
+    <span>Invoice</span>
+    <span>Buyer</span>
+    <span>Age</span>
+    <span>Payment</span>
+    <span>Progress</span>
+    <span className="text-right">Total</span>
+    <span className="text-right"> </span>
+  </div>
+);
+
 /** Queue of invoices awaiting pack + ship — oldest first, so nothing rots at the bottom. */
 export default async function FulfillmentQueuePage() {
   const invoices = (await listInvoices({ limit: 300 }))
@@ -89,6 +147,12 @@ export default async function FulfillmentQueuePage() {
       String(a.issuedAt || a.createdAt || "").localeCompare(String(b.issuedAt || b.createdAt || "")),
     );
   const records = await listFulfillmentRecordsByInvoiceIds(invoices.map((i) => i.id));
+
+  // Pay-first shipments that finished packing sit here until the invoice is
+  // paid — the shippers' daily "has it been paid yet?" check-in list.
+  const heldInvoices = invoices.filter((inv) => inv.fulfillmentStatus === "FULFILLED");
+  const toPack = invoices.filter((inv) => inv.fulfillmentStatus !== "FULFILLED");
+  const heldReady = heldInvoices.filter((inv) => inv.status === "PAID").length;
 
   return (
     <div>
@@ -101,51 +165,36 @@ export default async function FulfillmentQueuePage() {
         </span>
       </div>
 
-      {invoices.length === 0 ? (
+      {heldInvoices.length > 0 ? (
+        <div className="mb-6">
+          <div className="mb-2 flex items-baseline gap-3">
+            <div className="micro-badge text-[10px] tracking-[0.14em] text-accent">
+              PACKED — AWAITING PAYMENT
+            </div>
+            <span className="text-[11.5px] text-white/50">
+              {heldReady > 0
+                ? `${heldReady} now paid — ship ${heldReady === 1 ? "it" : "them"} today`
+                : "waiting on payment — once an invoice is marked paid, its button flips to Ship now"}
+            </span>
+          </div>
+          <div className="overflow-hidden rounded-card border border-accent/40">
+            {QUEUE_HEADER}
+            {heldInvoices.map((inv) => (
+              <QueueRow key={inv.id} inv={inv} rec={records.get(inv.id)} held />
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {toPack.length === 0 && heldInvoices.length === 0 ? (
         <div className="rounded-card border border-dashed border-white/20 px-6 py-14 text-center text-[13px] text-white/50">
           Nothing to pack — all invoices are shipped.
         </div>
-      ) : (
+      ) : toPack.length === 0 ? null : (
         <div className="overflow-hidden rounded-card border border-white/15">
-          <div className="grid grid-cols-[110px_1.1fr_54px_84px_150px_95px_90px] items-center gap-x-3 border-b border-white/15 bg-white/5 px-5 py-3 font-mono text-[10px] uppercase tracking-[0.12em] text-white/50">
-            <span>Invoice</span>
-            <span>Buyer</span>
-            <span>Age</span>
-            <span>Payment</span>
-            <span>Progress</span>
-            <span className="text-right">Total</span>
-            <span className="text-right"> </span>
-          </div>
-          {invoices.map((inv) => (
-            <div
-              key={inv.id}
-              className="grid grid-cols-[110px_1.1fr_54px_84px_150px_95px_90px] items-center gap-x-3 border-b border-white/10 px-5 py-3.5 text-[13px] last:border-b-0 hover:bg-white/5"
-            >
-              <div>
-                <div className="font-mono">{inv.invoiceNumber}</div>
-                <div className="font-mono text-[10px] text-white/40">{fullDate(inv.issuedAt)}</div>
-              </div>
-              <div className="min-w-0">
-                <div className="truncate">{inv.customerName || inv.buyerDisplayName || "—"}</div>
-                <div className="truncate font-mono text-[10.5px] text-white/40">
-                  {inv.customerCompany || (inv.portalUsername ? `@${inv.portalUsername}` : "")}
-                  {" · "}
-                  {inv.itemCount} pc{inv.itemCount === 1 ? "" : "s"}
-                </div>
-              </div>
-              <AgeChip days={ageDays(inv)} />
-              <PaymentChip inv={inv} />
-              <Progress rec={records.get(inv.id)} />
-              <span className="text-right font-mono">{money(inv.total)}</span>
-              <div className="text-right">
-                <Link
-                  href={`/fulfillment/${inv.id}`}
-                  className="inline-flex h-8 items-center rounded-chip bg-accent px-3 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ink hover:opacity-90"
-                >
-                  Pack
-                </Link>
-              </div>
-            </div>
+          {QUEUE_HEADER}
+          {toPack.map((inv) => (
+            <QueueRow key={inv.id} inv={inv} rec={records.get(inv.id)} held={false} />
           ))}
         </div>
       )}
