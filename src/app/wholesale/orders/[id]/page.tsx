@@ -4,6 +4,10 @@ import { getSession } from "@/lib/auth";
 import { ROLE } from "@/lib/constants";
 import { getQuoteById } from "@/lib/firestore/quotes";
 import { getFulfillmentForInvoice } from "@/lib/firestore/fulfillment";
+import { getInvoiceByNumber, displayInvoiceStatus } from "@/lib/firestore/invoices";
+import { InvoiceBadge } from "@/components/badges";
+import { PayInvoiceButton } from "@/components/PayInvoiceButton";
+import { isStripeConfigured } from "@/lib/stripe";
 import { ShipmentTracking, shipmentBoxesFromRecord } from "@/components/ShipmentTracking";
 import { PortalItemLine, portalDisplayTitle } from "@/components/PortalItemLine";
 import { MicroBadge } from "@/components/badges";
@@ -85,6 +89,14 @@ export default async function BuyerOrderDetailPage({
       ? await getFulfillmentForInvoice(quote.invoiceId).catch(() => null)
       : null;
   const shipmentBoxes = shipmentBoxesFromRecord(fulfillment);
+
+  // Pay-from-the-order: buyers kept hunting for the Stripe button, which only
+  // lived on the invoice page — surface balance + Pay online here too.
+  const invoice = quote.invoiceNumber
+    ? await getInvoiceByNumber(quote.invoiceNumber).catch(() => null)
+    : null;
+  const canPayOnline =
+    !!invoice && isStripeConfigured() && invoice.status === "SENT" && invoice.balance > 0;
 
   return (
     <div className="px-8 pb-16 pt-8">
@@ -198,12 +210,35 @@ export default async function BuyerOrderDetailPage({
 
           {quote.invoiceNumber ? (
             <div className="rounded-card border border-border bg-surface p-5">
-              <div className="micro-badge mb-3 text-[10px] tracking-[0.14em] text-accent">
-                INVOICE
+              <div className="mb-3 flex items-center justify-between">
+                <div className="micro-badge text-[10px] tracking-[0.14em] text-accent">INVOICE</div>
+                {invoice ? <InvoiceBadge status={displayInvoiceStatus(invoice)} /> : null}
               </div>
-              <p className="mb-2 text-[12.5px] text-secondary">
-                An invoice has been generated for this request.
-              </p>
+              {invoice && invoice.balance > 0 ? (
+                <div className="mb-3 flex items-baseline justify-between text-[12.5px]">
+                  <span className="text-secondary">Balance due</span>
+                  <span className="font-mono text-[16px] font-semibold text-ink">
+                    {money(invoice.balance)}
+                  </span>
+                </div>
+              ) : (
+                <p className="mb-2 text-[12.5px] text-secondary">
+                  {invoice?.status === "PAID"
+                    ? "Paid — thank you."
+                    : "An invoice has been generated for this request."}
+                </p>
+              )}
+              {canPayOnline ? (
+                <div className="mb-3">
+                  <PayInvoiceButton
+                    invoiceNumber={quote.invoiceNumber}
+                    balance={invoice!.balance}
+                  />
+                  <p className="mt-2 text-center text-[11px] text-muted">
+                    Secure checkout by Stripe — or pay by wire via the PDF invoice.
+                  </p>
+                </div>
+              ) : null}
               <Link
                 href={`/wholesale/invoices/${quote.invoiceNumber}`}
                 className="inline-flex h-9 items-center rounded-chip border border-border px-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-secondary transition hover:border-accent hover:text-ink"
