@@ -383,8 +383,8 @@ export function PerformanceDashboard({
         </div>
       ) : (
         <div className="overflow-x-auto rounded-card border border-border bg-surface">
-          <div className="min-w-[880px]">
-            <div className="grid grid-cols-[1.2fr_95px_95px_110px_60px_75px_90px_95px_60px] items-center gap-x-2 border-b border-border px-5 py-3 font-mono text-[10px] uppercase tracking-[0.12em] text-muted">
+          <div className="min-w-[990px]">
+            <div className="grid grid-cols-[1.2fr_95px_95px_110px_60px_75px_90px_95px_60px_110px] items-center gap-x-2 border-b border-border px-5 py-3 font-mono text-[10px] uppercase tracking-[0.12em] text-muted">
               <button type="button" onClick={() => toggleSort("name")} className="flex items-center text-left hover:text-ink">
                 Name {sortIndicator("name")}
               </button>
@@ -412,11 +412,12 @@ export function PerformanceDashboard({
               <button type="button" onClick={() => toggleSort("calls")} className="flex items-center justify-end hover:text-ink">
                 Calls {sortIndicator("calls")}
               </button>
+              <span className="text-right">Quota (mo)</span>
             </div>
             {sortedRows.map((r) => (
               <div
                 key={r.email}
-                className="grid grid-cols-[1.2fr_95px_95px_110px_60px_75px_90px_95px_60px] items-center gap-x-2 border-b border-border/60 px-5 py-3.5 text-[12.5px] text-[#3A3934] last:border-b-0"
+                className="grid grid-cols-[1.2fr_95px_95px_110px_60px_75px_90px_95px_60px_110px] items-center gap-x-2 border-b border-border/60 px-5 py-3.5 text-[12.5px] text-[#3A3934] last:border-b-0"
               >
                 <div className="min-w-0">
                   {staffIdByEmail?.[r.email] ? (
@@ -446,6 +447,27 @@ export function PerformanceDashboard({
                 <div className="text-right font-mono">{fmtMoneyOrDash(r.aov)}</div>
                 <div className="text-right font-mono">{fmtPct(r.conversionPct)}</div>
                 <div className="text-right font-mono">{r.calls}</div>
+                {(() => {
+                  const quota = goals?.repQuotas?.[r.email.trim().toLowerCase()];
+                  if (!quota) {
+                    return <div className="text-right font-mono text-muted">—</div>;
+                  }
+                  // Attainment only reads against a month of sales — other
+                  // ranges show the quota alone.
+                  const pct = preset === "month" ? Math.round((r.sales / quota) * 100) : null;
+                  return (
+                    <div className="text-right font-mono">
+                      {money(Math.round(quota))}
+                      {pct != null ? (
+                        <span
+                          className={`ml-1 text-[10px] ${pct >= 100 ? "text-[#4E9A6A]" : "text-muted"}`}
+                        >
+                          {pct}%
+                        </span>
+                      ) : null}
+                    </div>
+                  );
+                })()}
               </div>
             ))}
           </div>

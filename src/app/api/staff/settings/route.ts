@@ -70,7 +70,9 @@ export async function POST(request: Request) {
     }
 
     if (section === "goals") {
-      const saved = await saveSalesGoals((body.goals || {}) as Record<string, number | null>);
+      const saved = await saveSalesGoals(
+        (body.goals || {}) as Parameters<typeof saveSalesGoals>[0],
+      );
       await logAudit({
         actor: session,
         action: "settings.goals.update",

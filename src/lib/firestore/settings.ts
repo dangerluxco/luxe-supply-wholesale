@@ -280,6 +280,8 @@ export type SalesGoals = {
   monthlyGp: number;
   weeklyRevenue: number | null;
   weeklyGp: number | null;
+  /** Per-rep monthly revenue quotas, keyed by staff email (absent = no quota). */
+  repQuotas: Record<string, number>;
 };
 
 const DEFAULT_SALES_GOALS: SalesGoals = {
@@ -287,6 +289,7 @@ const DEFAULT_SALES_GOALS: SalesGoals = {
   monthlyGp: 100_000,
   weeklyRevenue: null,
   weeklyGp: null,
+  repQuotas: {},
 };
 
 export function normalizeSalesGoals(raw: unknown): SalesGoals {
@@ -300,11 +303,20 @@ export function normalizeSalesGoals(raw: unknown): SalesGoals {
     const n = Number(v);
     return Number.isFinite(n) && n > 0 ? n : null;
   };
+  const repQuotas: Record<string, number> = {};
+  if (d.repQuotas && typeof d.repQuotas === "object") {
+    for (const [email, v] of Object.entries(d.repQuotas as Record<string, unknown>)) {
+      const key = String(email).trim().toLowerCase();
+      const n = Number(v);
+      if (key && Number.isFinite(n) && n > 0) repQuotas[key] = Math.round(n);
+    }
+  }
   return {
     monthlyRevenue: num(d.monthlyRevenue, DEFAULT_SALES_GOALS.monthlyRevenue),
     monthlyGp: num(d.monthlyGp, DEFAULT_SALES_GOALS.monthlyGp),
     weeklyRevenue: numOrNull(d.weeklyRevenue),
     weeklyGp: numOrNull(d.weeklyGp),
+    repQuotas,
   };
 }
 
