@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ProductCard, type CatalogProduct } from "./ProductCard";
@@ -13,6 +13,9 @@ import { CheckoutNavButton } from "@/components/CheckoutNavButton";
 import { useStorefrontAvailability } from "@/components/StorefrontAvailability";
 
 const STORAGE_KEY = "luxe-wholesale-catalog-view";
+// Selection survives pagination / PDP round-trips within the tab. Stored as
+// [sku, price] pairs — off-page selections still need a price for the bar total.
+const SELECTED_KEY = "luxe-wholesale-catalog-selected";
 
 type AddCartResult = {
   error?: string;
@@ -55,7 +58,8 @@ export function CatalogProductGrid({
   const { isBundled } = useStorefrontAvailability();
   const { cartCount: badgeCount, cartTotal: badgeTotal, setCartBadge } = useCartBadge();
   const [layout, setLayout] = useState<"grid" | "list">("grid");
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<Map<string, number>>(new Map());
+  const selectionHydrated = useRef(false);
   const [pending, start] = useTransition();
   const [message, setMessage] = useState<
     { text: string; kind: "success" | "error"; showCheckout?: boolean } | null
@@ -132,6 +136,34 @@ export function CatalogProductGrid({
     }
   }, []);
 
+  // Restore any in-flight selection (this runs before the save effect below,
+  // so the initial empty state never clobbers what's stored).
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(SELECTED_KEY);
+      if (raw) {
+        const entries = (JSON.parse(raw) as Array<[string, number]>).filter(
+          (e): e is [string, number] =>
+            Array.isArray(e) && typeof e[0] === "string" && typeof e[1] === "number",
+        );
+        if (entries.length) setSelected(new Map(entries));
+      }
+    } catch {
+      /* ignore */
+    }
+    selectionHydrated.current = true;
+  }, []);
+
+  useEffect(() => {
+    if (!selectionHydrated.current) return;
+    try {
+      if (selected.size) sessionStorage.setItem(SELECTED_KEY, JSON.stringify([...selected]));
+      else sessionStorage.removeItem(SELECTED_KEY);
+    } catch {
+      /* ignore */
+    }
+  }, [selected]);
+
   // Auto-dismiss the quick-add toast (only relevant when nothing is selected —
   // otherwise the message lives inside the persistent selection bar).
   useEffect(() => {
@@ -142,14 +174,20 @@ export function CatalogProductGrid({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [message]);
 
-  // Drop selection for products no longer selectable (filtered out, sold, or already in cart)
+  // Drop selections that became unselectable (sold, held, or already in cart).
+  // Only prune SKUs visible on THIS page — pruning by "not in the current page"
+  // was the bug that wiped the selection on every pagination.
   useEffect(() => {
+    const visible = new Set(visibleProducts.map((p) => p.sku));
     const allowed = new Set(selectableSkus);
     setSelected((prev) => {
-      const next = new Set([...prev].filter((sku) => allowed.has(sku)));
+      const next = new Map(prev);
+      for (const sku of prev.keys()) {
+        if (visible.has(sku) && !allowed.has(sku)) next.delete(sku);
+      }
       return next.size === prev.size ? prev : next;
     });
-  }, [selectableSkus]);
+  }, [selectableSkus, visibleProducts]);
 
   function setView(next: "grid" | "list") {
     setLayout(next);
@@ -163,25 +201,43 @@ export function CatalogProductGrid({
   function toggle(sku: string) {
     if (inCart(sku)) return;
     setSelected((prev) => {
-      const next = new Set(prev);
+      const next = new Map(prev);
       if (next.has(sku)) next.delete(sku);
-      else next.add(sku);
+      else {
+        const p = visibleProducts.find((x) => x.sku === sku);
+        next.set(sku, p?.wholesalePrice || 0);
+      }
       return next;
     });
   }
 
+  // Adds this page's selectable pieces on top of what's already selected on
+  // other pages; unchecking removes only this page's (see the header checkbox).
   function selectAllVisible() {
-    setSelected(new Set(selectableSkus));
+    const allowed = new Set(selectableSkus);
+    setSelected((prev) => {
+      const next = new Map(prev);
+      for (const p of visibleProducts) {
+        if (allowed.has(p.sku)) next.set(p.sku, p.wholesalePrice || 0);
+      }
+      return next;
+    });
+  }
+
+  function deselectAllVisible() {
+    setSelected((prev) => {
+      const next = new Map(prev);
+      for (const p of visibleProducts) next.delete(p.sku);
+      return next.size === prev.size ? prev : next;
+    });
   }
 
   function clearSelection() {
-    setSelected(new Set());
+    setSelected(new Map());
   }
 
-  const selectedList = [...selected];
-  const selectedTotal = visibleProducts
-    .filter((p) => selected.has(p.sku))
-    .reduce((s, p) => s + (p.wholesalePrice || 0), 0);
+  const selectedList = [...selected.keys()];
+  const selectedTotal = [...selected.values()].reduce((s, v) => s + v, 0);
   const allSelected =
     selectableSkus.length > 0 && selectableSkus.every((sku) => selected.has(sku));
 
@@ -251,7 +307,7 @@ export function CatalogProductGrid({
             ref={(el) => {
               if (el) el.indeterminate = selectedList.length > 0 && !allSelected;
             }}
-            onChange={() => (allSelected ? clearSelection() : selectAllVisible())}
+            onChange={() => (allSelected ? deselectAllVisible() : selectAllVisible())}
             className="h-3.5 w-3.5 accent-[var(--accent,#B08D3E)]"
           />
           Select all
