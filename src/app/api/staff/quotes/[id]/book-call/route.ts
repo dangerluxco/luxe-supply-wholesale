@@ -6,6 +6,7 @@ import {
   linkQuoteToCurationShare,
 } from "@/lib/firestore/quotes";
 import { createCurationShare } from "@/lib/firestore/curation";
+import { recordBookedCall } from "@/lib/firestore/bookedCalls";
 import { buyerStorefrontOrigin, staffPortalOrigin } from "@/lib/notify";
 import {
   buildGoogleCalendarUrl,
@@ -90,6 +91,17 @@ export async function POST(
       start,
       durationMinutes,
     });
+
+    // Dashboard "calls" source of truth — never fail the booking over it.
+    await recordBookedCall({
+      staffEmail: session.email,
+      staffName: session.name,
+      buyerLabel,
+      quoteId: quote.id,
+      curationToken: share.token,
+      scheduledStartIso: start.toISOString(),
+      durationMinutes,
+    }).catch(() => {});
 
     return NextResponse.json({
       ok: true,

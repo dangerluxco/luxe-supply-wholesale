@@ -4,7 +4,7 @@ import { ROLE } from "@/lib/constants";
 import { listInvoices } from "@/lib/firestore/invoices";
 import { listQuotes } from "@/lib/firestore/quotes";
 import { listStaff } from "@/lib/firestore/staff";
-import { listCurationSessionsInRange } from "@/lib/firestore/curation";
+import { listBookedCallsInRange } from "@/lib/firestore/bookedCalls";
 import {
   computeStaffPerformance,
   computeTeamSummary,
@@ -52,11 +52,14 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
   let loadError: string | null = null;
 
   try {
-    const [staffList, invoiceList, quotesResult, callSessions] = await Promise.all([
+    const [staffList, invoiceList, quotesResult, bookedCalls] = await Promise.all([
       listStaff(),
       listInvoices({ limit: 1000 }),
       listQuotes({ status: "all", limit: 500 }),
-      listCurationSessionsInRange(from.toISOString(), to.toISOString()).catch(() => []),
+      // Real bookings (written by the two "Book call" routes) — not the old
+      // curation-sessions-created proxy, which counted links that never
+      // became calls and missed ad-hoc bookings entirely.
+      listBookedCallsInRange(from.toISOString(), to.toISOString()).catch(() => []),
     ]);
     const quoteList = quotesResult.quotes;
 
@@ -111,7 +114,10 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
         invoiceId: q.invoiceId,
         claimedAt: q.claimedAt,
       })),
-      callSessions,
+      callSessions: bookedCalls.map((c) => ({
+        createdByEmail: c.staffEmail,
+        createdAt: c.createdAt,
+      })),
       from,
       to,
     });

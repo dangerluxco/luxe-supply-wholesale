@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireStaffSession } from "@/lib/staff-api-auth";
 import { getCurationShareForStaff, linkCurationShareToBuyer } from "@/lib/firestore/curation";
+import { recordBookedCall } from "@/lib/firestore/bookedCalls";
 import { getBuyerById } from "@/lib/firestore/buyers";
 import { buyerStorefrontOrigin, staffPortalOrigin } from "@/lib/notify";
 import {
@@ -80,6 +81,18 @@ export async function POST(request: Request, ctx: { params: Promise<{ token: str
       start,
       durationMinutes,
     });
+
+    // Dashboard "calls" source of truth — the old curation-session proxy
+    // missed this ad-hoc path entirely. Never fail the booking over it.
+    await recordBookedCall({
+      staffEmail: session.email,
+      staffName: session.name,
+      buyerLabel,
+      quoteId: share.quoteId || null,
+      curationToken: token,
+      scheduledStartIso: start.toISOString(),
+      durationMinutes,
+    }).catch(() => {});
 
     return NextResponse.json({
       ok: true,
