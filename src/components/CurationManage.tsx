@@ -675,6 +675,34 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
     });
   }
 
+  /** Explicit mid-call save: push current decisions/prices onto the linked
+   *  order request right now — same rules as the end-of-session auto-sync,
+   *  without ending anything. */
+  function syncOrderNow() {
+    setError(null);
+    start(async () => {
+      const res = await fetch(`/api/staff/curation/${share.token}/sync-order`, {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        itemCount?: number;
+        removedCount?: number;
+      };
+      if (!res.ok || data.error) {
+        setError(data.error || "Could not update the order request.");
+        return;
+      }
+      const removed = data.removedCount ?? 0;
+      setMessage(
+        `Order request updated — now ${data.itemCount ?? 0} item${data.itemCount === 1 ? "" : "s"}${
+          removed ? `, ${removed} removed (holds released)` : ""
+        }.`,
+      );
+    });
+  }
+
   // Wrap-up is ONE summary modal (decision tallies + what-happens list +
   // checkboxes), replacing a chain of up to five sequential window.confirm
   // dialogs that slowed every call's close-out.
@@ -1337,13 +1365,26 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
                     Your catalog link is ready — send it anytime. Add items below now or during
                     the call; start the timer once you and the client are on together.
                   </p>
-                  <button
-                    type="button"
-                    onClick={startCall}
-                    className="mt-3 h-10 rounded-chip bg-ink px-5 text-[11.5px] font-semibold uppercase tracking-[0.14em] text-ground"
-                  >
-                    Start call
-                  </button>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={startCall}
+                      className="h-10 rounded-chip bg-ink px-5 text-[11.5px] font-semibold uppercase tracking-[0.14em] text-ground"
+                    >
+                      Start call
+                    </button>
+                    {share.quoteId ? (
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={syncOrderNow}
+                        title="Save current items/prices onto the linked order request."
+                        className="h-10 rounded-chip border border-accent/60 px-4 text-[11px] font-semibold uppercase tracking-[0.1em] text-[#6E5A30] hover:bg-accent/10 disabled:opacity-60"
+                      >
+                        {pending ? "Saving…" : "Update order request"}
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
               ) : (
                 <>
@@ -1351,14 +1392,27 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
                     <p className="text-[12px] text-secondary">
                       When you&apos;re done deciding items, end the session to finalize selections.
                     </p>
-                    <button
-                      type="button"
-                      disabled={pending}
-                      onClick={endSession}
-                      className="h-9 rounded-chip border border-border px-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-secondary hover:border-accent hover:text-ink disabled:opacity-60"
-                    >
-                      End sales session
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {share.quoteId ? (
+                        <button
+                          type="button"
+                          disabled={pending}
+                          onClick={syncOrderNow}
+                          title="Save the call's current decisions and prices onto the linked order request without ending the session."
+                          className="h-9 rounded-chip bg-accent px-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-ink hover:opacity-90 disabled:opacity-60"
+                        >
+                          {pending ? "Saving…" : "Update order request"}
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={endSession}
+                        className="h-9 rounded-chip border border-border px-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-secondary hover:border-accent hover:text-ink disabled:opacity-60"
+                      >
+                        End sales session
+                      </button>
+                    </div>
                   </div>
 
                   <div className="mb-5 grid grid-cols-3 gap-3 sm:grid-cols-5">
