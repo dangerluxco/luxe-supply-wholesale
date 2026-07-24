@@ -4,7 +4,9 @@ import { getSession } from "@/lib/auth";
 import { ROLE } from "@/lib/constants";
 import { EmptyState } from "@/components/EmptyState";
 import { BuyerOrderStatusBadge } from "@/components/BuyerOrderStatusBadge";
+import { InvoiceBadge } from "@/components/badges";
 import { listQuotesForBuyer } from "@/lib/firestore/quotes";
+import { listInvoicesForBuyer, displayInvoiceStatus } from "@/lib/firestore/invoices";
 import { money, fullDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +15,15 @@ export default async function OrdersPage() {
   const session = await getSession();
   if (!session || session.role !== ROLE.BUYER) redirect("/wholesale/sign-in");
 
-  const quotes = await listQuotesForBuyer(session.username || "");
+  const [quotes, invoices] = await Promise.all([
+    listQuotesForBuyer(session.username || ""),
+    listInvoicesForBuyer(session.username || "").catch(() => []),
+  ]);
+  // Fulfillment and payment are independent — a shipped order can be unpaid
+  // and vice versa, so each row wears both pills.
+  const invoiceStatusByNumber = new Map(
+    invoices.map((inv) => [inv.invoiceNumber, displayInvoiceStatus(inv)]),
+  );
 
   return (
     <div className="px-8 pb-16 pt-8">
@@ -62,12 +72,15 @@ export default async function OrdersPage() {
                   ? money(Math.round(q.cartTotal + (q.shipping || 0)))
                   : "—"}
               </span>
-              <span className="flex justify-center">
+              <span className="flex flex-wrap items-center justify-center gap-1">
                 <BuyerOrderStatusBadge
                   status={q.status}
                   shippedAt={q.shippedAt}
                   fulfilledAt={q.fulfilledAt}
                 />
+                {q.invoiceNumber && invoiceStatusByNumber.has(q.invoiceNumber) ? (
+                  <InvoiceBadge status={invoiceStatusByNumber.get(q.invoiceNumber)!} />
+                ) : null}
               </span>
               <span className="text-center">
                 {q.invoiceNumber ? (

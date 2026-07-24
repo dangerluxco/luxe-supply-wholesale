@@ -112,6 +112,7 @@ export default async function BuyerOrderDetailPage({
           shippedAt={quote.shippedAt}
           fulfilledAt={quote.fulfilledAt}
         />
+        {invoice ? <InvoiceBadge status={displayInvoiceStatus(invoice)} /> : null}
         {quote.poNumber ? (
           <span className="font-mono text-[11px] text-secondary">PO {quote.poNumber}</span>
         ) : null}
