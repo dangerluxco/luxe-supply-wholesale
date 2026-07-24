@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { money } from "@/lib/format";
@@ -184,6 +184,11 @@ export function CatalogSettingsForm({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [justAddedSkuKeys, setJustAddedSkuKeys] = useState<Set<string>>(new Set());
+  // Unresolved SKUs the manager explicitly removed. Re-pasting the same
+  // spreadsheet block re-resolves the same junk rows — without this memory the
+  // removed rows come straight back, which read as "removal didn't stick".
+  // A SKU leaves the set the moment it actually resolves in inventory.
+  const removedUnresolvedKeys = useRef<Set<string>>(new Set());
   // Once a catalog is already saved and clean, hide the batch-add/edit tools by
   // default — further review happens in the complete catalog grid below, not here.
   const [reviewExpanded, setReviewExpanded] = useState(!curatedCatalog?.items.length);
@@ -268,9 +273,24 @@ export function CatalogSettingsForm({
         return;
       }
       // A pasted sale price wins outright over the calculated cost/0.8 default.
-      const withOverrides = data.items.map((it) => {
+      const resolved = data.items.map((it) => {
         const override = overridePriceBySku.get(it.sku.trim().toLowerCase());
         return override != null ? { ...it, price: override, priceOverridden: true } : it;
+      });
+      // Previously-removed unresolved SKUs stay removed on re-paste; a SKU
+      // that resolves now is welcome back (and forgotten from the removed set).
+      let suppressedRemoved = 0;
+      const withOverrides = resolved.filter((it) => {
+        const key = it.sku.trim().toLowerCase();
+        if (it.inDb) {
+          removedUnresolvedKeys.current.delete(key);
+          return true;
+        }
+        if (removedUnresolvedKeys.current.has(key)) {
+          suppressedRemoved += 1;
+          return false;
+        }
+        return true;
       });
       const merged = mergeCatalogItems(draft.items, withOverrides);
       setDraft({ items: merged.items });
@@ -293,6 +313,11 @@ export function CatalogSettingsForm({
       }
       if (notFoundCount) {
         parts.push(`${notFoundCount} not found in inventory`);
+      }
+      if (suppressedRemoved) {
+        parts.push(
+          `${suppressedRemoved} previously-removed unresolved SKU${suppressedRemoved === 1 ? "" : "s"} skipped`,
+        );
       }
       if (invalidPriceSkus.length) {
         parts.push(
@@ -353,6 +378,10 @@ export function CatalogSettingsForm({
   }
 
   function removeDraftRow(index: number) {
+    const item = draft.items[index];
+    if (item && !item.inDb) {
+      removedUnresolvedKeys.current.add(item.sku.trim().toLowerCase());
+    }
     setDraft((prev) => (prev ? { items: prev.items.filter((_, i) => i !== index) } : prev));
   }
 
@@ -659,9 +688,12 @@ export function CatalogSettingsForm({
               <button
                 type="button"
                 disabled={pending}
-                onClick={() =>
-                  setDraft((d) => ({ ...d, items: d.items.filter((i) => i.inDb) }))
-                }
+                onClick={() => {
+                  for (const sku of draftUnresolvedSkus) {
+                    removedUnresolvedKeys.current.add(sku.trim().toLowerCase());
+                  }
+                  setDraft((d) => ({ ...d, items: d.items.filter((i) => i.inDb) }));
+                }}
                 className="rounded-chip border border-danger/40 bg-surface px-2 py-1 text-[11px] font-semibold text-danger hover:bg-danger/10 disabled:opacity-50"
               >
                 Remove all unresolved
