@@ -171,12 +171,12 @@ export default async function StaffDashboardPage() {
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.6fr_1fr]">
-        <RepPipelineBoard columns={pipeline} table={pipelineTable} callRequests={callRequests} />
-        <div className="space-y-6">
-          <TasksPanel tasks={openTasks} currentEmail={session.email} isManager={isManager} />
-          <NeedsAttentionPanel items={needsAttention} />
-        </div>
+      {/* Pipeline gets the full page width (6 columns now incl. Fulfilled);
+          tasks + needs-attention sit side by side underneath. */}
+      <RepPipelineBoard columns={pipeline} table={pipelineTable} callRequests={callRequests} />
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <TasksPanel tasks={openTasks} currentEmail={session.email} isManager={isManager} />
+        <NeedsAttentionPanel items={needsAttention} />
       </div>
     </div>
   );
