@@ -45,15 +45,18 @@ export default async function BoxLabelsPage({
         header, aside, nav { display: none !important; }
         main { padding: 0 !important; }
         body { background: #fff !important; }
-        .label-page { page-break-after: always; }
-        .label-page:last-child { page-break-after: auto; }
+        /* Two labels per sheet — cut in half and stick, halving the paper.
+           Every second label starts a new page; a lone last label prints alone. */
+        .label-page { page-break-after: auto; padding-bottom: 4mm; }
+        .labels .label-page:nth-child(even) { page-break-after: always; }
+        .labels .label-page:last-child { page-break-after: auto; }
       }`}</style>
 
       <div className="mb-6 flex items-center justify-between print:hidden">
         <p className="text-[13px] text-secondary">
-          {printable.length} box label{printable.length === 1 ? "" : "s"} — one per box, each on
-          its own page. Stick it on the box; scanning the barcode re-selects that box at the pack
-          station.
+          {printable.length} box label{printable.length === 1 ? "" : "s"} — two per printed page
+          (cut the sheet in half). Stick it on the box; scanning the barcode re-selects that box
+          at the pack station.
         </p>
         <PrintButton
           label={printable.length === 1 ? "Print label" : "Print all"}
@@ -68,7 +71,8 @@ export default async function BoxLabelsPage({
             : "No boxes yet — add boxes at the pack station first."}
         </p>
       ) : (
-        printable.map(({ box, ordinal }) => (
+        <div className="labels">
+        {printable.map(({ box, ordinal }) => (
           <div
             key={box.id}
             className="label-page mb-10 flex flex-col items-center border-t border-border pt-10 text-center first:border-t-0 first:pt-0"
@@ -89,7 +93,8 @@ export default async function BoxLabelsPage({
               <div className="mt-1 font-mono text-[13px] tracking-[0.1em]">{box.barcode}</div>
             </div>
           </div>
-        ))
+        ))}
+        </div>
       )}
     </div>
   );

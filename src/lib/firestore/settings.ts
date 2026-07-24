@@ -333,6 +333,32 @@ export async function saveSalesGoals(input: Partial<SalesGoals>): Promise<SalesG
   return next;
 }
 
+/** Org-wide standard box sizes for the pack station dropdown ("Small box 12×10×4 · 8 oz"). */
+export type BoxPreset = { name: string; weight: string; l: string; w: string; h: string };
+
+export function normalizeBoxPresets(raw: unknown): BoxPreset[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((p) => {
+      const d = (p && typeof p === "object" ? p : {}) as Record<string, unknown>;
+      const s = (v: unknown) => String(v ?? "").trim().slice(0, 40);
+      return { name: s(d.name), weight: s(d.weight), l: s(d.l), w: s(d.w), h: s(d.h) };
+    })
+    .filter((p) => p.name)
+    .slice(0, 20);
+}
+
+export async function getBoxPresets(): Promise<BoxPreset[]> {
+  const org = await getLuxesupplyOrg();
+  return normalizeBoxPresets(salesPortalOf(org.data).boxPresets);
+}
+
+export async function saveBoxPresets(raw: unknown): Promise<BoxPreset[]> {
+  const next = normalizeBoxPresets(raw);
+  await patchSalesPortal({ boxPresets: next });
+  return next;
+}
+
 export async function getNotifyEmails(): Promise<string[]> {
   const org = await getLuxesupplyOrg();
   const raw = salesPortalOf(org.data).notifyEmails;

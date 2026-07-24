@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { getOrCreateFulfillment } from "@/lib/firestore/fulfillment";
 import { getQuoteById } from "@/lib/firestore/quotes";
 import { findBuyerByIdentifier } from "@/lib/firestore/buyers";
-import { getShippingRules } from "@/lib/firestore/settings";
+import { getShippingRules, getBoxPresets } from "@/lib/firestore/settings";
 import { shippingMethodLabel } from "@/lib/shipping-rules";
 import { money } from "@/lib/format";
 import { PackStation } from "@/components/PackStation";
@@ -170,6 +170,7 @@ export default async function PackStationPage({ params }: { params: Promise<{ id
           invoice.status !== FIRESTORE_INVOICE_STATUS.PAID
         }
         invoiceFulfilled={invoice.fulfillmentStatus === FULFILLMENT_STATUS.FULFILLED}
+        orgBoxPresets={await getBoxPresets().catch(() => [])}
       />
     </div>
   );

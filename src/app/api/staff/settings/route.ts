@@ -9,6 +9,7 @@ import {
   saveQuoteSettings,
   saveSalesGoals,
   saveShippingRules,
+  saveBoxPresets,
 } from "@/lib/firestore/settings";
 import { logAudit } from "@/lib/firestore/audit";
 
@@ -101,6 +102,18 @@ export async function POST(request: Request) {
         },
       });
       return NextResponse.json({ ok: true, message: "Shipping rules saved." });
+    }
+
+    if (section === "boxes") {
+      const saved = await saveBoxPresets(body.boxPresets);
+      await logAudit({
+        actor: session,
+        action: "settings.boxes.update",
+        entity: "Settings",
+        entityId: "boxes",
+        payload: { count: saved.length },
+      });
+      return NextResponse.json({ ok: true, message: "Standard box sizes saved." });
     }
 
     if (section === "features") {

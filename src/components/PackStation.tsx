@@ -57,6 +57,7 @@ export function PackStation({
   isAdmin = false,
   paymentHold = false,
   invoiceFulfilled = false,
+  orgBoxPresets = [],
 }: {
   invoiceId: string;
   initialRecord: FulfillmentRecord;
@@ -71,6 +72,8 @@ export function PackStation({
   paymentHold?: boolean;
   /** Invoice already marked FULFILLED (packed, waiting on payment). */
   invoiceFulfilled?: boolean;
+  /** Org-wide standard box sizes (Settings → Shipping) — merged into each box's preset dropdown. */
+  orgBoxPresets?: BoxPreset[];
 }) {
   const router = useRouter();
   const [record, setRecord] = useState(initialRecord);
@@ -522,6 +525,7 @@ export function PackStation({
                   shipEngineEnabled={shipEngineEnabled}
                   signatureDefault={signatureDefault}
                   multiBoxActive={multiBoxActive}
+                  orgBoxPresets={orgBoxPresets}
                   api={api}
                 />
               </div>
@@ -704,6 +708,7 @@ function BoxShipping({
   shipEngineEnabled,
   signatureDefault,
   multiBoxActive = false,
+  orgBoxPresets = [],
   api,
 }: {
   box: BoxShape;
@@ -712,6 +717,8 @@ function BoxShipping({
   signatureDefault: boolean;
   /** Whole-order rating card is showing — this box only collects weight/dims here. */
   multiBoxActive?: boolean;
+  /** Org-wide standard box sizes — listed before any personal presets. */
+  orgBoxPresets?: BoxPreset[];
   api: (body: Record<string, unknown>) => Promise<unknown>;
 }) {
   const [carrier, setCarrier] = useState(box.carrier || "UPS");
@@ -786,7 +793,11 @@ function BoxShipping({
   // Prefill an untouched box from the station's remembered parcel defaults
   // (after mount — localStorage isn't available during server render).
   useEffect(() => {
-    setPresets(loadBoxPresets());
+    // Org-wide standard sizes first, personal (per-browser) presets after —
+    // deduped by name so a personal tweak with the same name wins nothing.
+    const personal = loadBoxPresets();
+    const seen = new Set(orgBoxPresets.map((p) => p.name.toLowerCase()));
+    setPresets([...orgBoxPresets, ...personal.filter((p) => !seen.has(p.name.toLowerCase()))]);
     if (box.weightOz || box.lengthIn || box.widthIn || box.heightIn) return;
     try {
       const raw = localStorage.getItem(PARCEL_DEFAULTS_KEY);
