@@ -16,6 +16,23 @@ export function isEmailConfigured(): boolean {
   return !!process.env.RESEND_API_KEY;
 }
 
+/**
+ * Brand every outgoing email with the company wordmark — the same gold-on-ink
+ * treatment as the portal header and the invoice. Injected centrally here so
+ * all ~dozen email types pick it up; bodies are simple <html><body> documents,
+ * so the banner slots in right after the body tag. Idempotent: bodies that
+ * already reference the logo are left alone.
+ */
+function withEmailBranding(html: string): string {
+  if (html.includes("luxe-supply-logo")) return html;
+  const origin = (process.env.BUYER_ORIGIN || "https://portal.luxesupply.co").replace(/\/$/, "");
+  const banner = `<div style="margin:0 0 18px;padding:14px 18px;background:#16161A;border-radius:10px;"><img src="${origin}/luxe-supply-logo.png" alt="Luxe Supply Co." height="24" style="display:block;height:24px;width:auto;border:0;" /></div>`;
+  if (/<body[^>]*>/i.test(html)) {
+    return html.replace(/(<body[^>]*>)/i, `$1${banner}`);
+  }
+  return banner + html;
+}
+
 export async function sendEmail(opts: {
   to: string[];
   subject: string;
@@ -43,7 +60,7 @@ export async function sendEmail(opts: {
         from,
         to,
         subject: opts.subject,
-        html: opts.html,
+        html: withEmailBranding(opts.html),
         ...(opts.replyTo ? { reply_to: opts.replyTo } : {}),
       }),
     });
