@@ -121,10 +121,15 @@ export function BundleBuilder({
   });
   const [name, setName] = useState(initialLot?.title || "The Collector's Edit");
   const [note, setNote] = useState(initialLot?.note || "");
+  // New lots default to ALL clients — a fresh bundle preselecting the first
+  // buyer in the list published to one person by accident. Editing an
+  // existing lot keeps its stored audience.
   const [buyerUsername, setBuyerUsername] = useState(
-    initialLot?.publishedToAll
-      ? BUNDLE_AUDIENCE_ALL
-      : initialLot?.buyerUsername || buyers[0]?.username || BUNDLE_AUDIENCE_ALL,
+    initialLot
+      ? initialLot.publishedToAll
+        ? BUNDLE_AUDIENCE_ALL
+        : initialLot.buyerUsername || BUNDLE_AUDIENCE_ALL
+      : BUNDLE_AUDIENCE_ALL,
   );
   const [saving, startSave] = useTransition();
   const [saveError, setSaveError] = useState<string | null>(null);

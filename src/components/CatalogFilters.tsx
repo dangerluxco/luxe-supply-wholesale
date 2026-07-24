@@ -4,6 +4,10 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { clsx } from "@/lib/clsx";
 
+// Collapsed/expanded is remembered per browser; the active-filter chips stay
+// visible either way, so collapsing never hides (or clears) what's applied.
+const COLLAPSED_KEY = "luxe-wholesale-filters-collapsed";
+
 const AVAILABILITY = [
   { value: "all", label: "All items" },
   { value: "available", label: "Available" },
@@ -51,10 +55,30 @@ export function CatalogFilters({
   const sort = params.get("sort") || "newest";
 
   const [q, setQ] = useState(qParam);
+  const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
     setQ(qParam);
   }, [qParam]);
+
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(COLLAPSED_KEY) === "1") setCollapsed(true);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  function toggleCollapsed() {
+    setCollapsed((c) => {
+      try {
+        localStorage.setItem(COLLAPSED_KEY, c ? "0" : "1");
+      } catch {
+        /* ignore */
+      }
+      return !c;
+    });
+  }
 
   function replace(next: Record<string, string | null>) {
     const sp = new URLSearchParams(params.toString());
@@ -115,8 +139,51 @@ export function CatalogFilters({
     "h-10 w-full rounded-chip border border-border bg-surface px-3 text-[12.5px] font-medium normal-case tracking-normal text-ink outline-none focus:border-accent";
 
   return (
-    <div className="sticky top-[60px] z-30 border-b border-border bg-surface/95 px-8 py-4 backdrop-blur-sm">
-      <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(160px,1.3fr)_repeat(4,minmax(110px,0.7fr))]">
+    <div className="sticky top-[60px] z-30 border-b border-border bg-surface/95 px-8 py-3 backdrop-blur-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={toggleCollapsed}
+          aria-expanded={!collapsed}
+          className="flex items-center gap-1.5 rounded-chip border border-border bg-ground px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-secondary transition hover:border-accent hover:text-ink"
+        >
+          Filters{collapsed && chips.length > 0 ? ` (${chips.length})` : ""}
+          <span aria-hidden className="text-[10px]">
+            {collapsed ? "▾" : "▴"}
+          </span>
+        </button>
+        <p className="text-[12px] font-medium text-muted">{metaParts.join(" · ")}</p>
+        {chips.length > 0 ? (
+          <>
+            <span className="text-[12px] text-muted">·</span>
+            {chips.map((c) => (
+              <button
+                key={c.key}
+                type="button"
+                onClick={c.onRemove}
+                className="flex items-center gap-1 rounded-chip border border-border bg-ground px-2 py-0.5 text-[11px] text-secondary transition hover:border-accent hover:text-ink"
+              >
+                {c.label}
+                <span aria-hidden className="text-muted">
+                  ×
+                </span>
+              </button>
+            ))}
+          </>
+        ) : null}
+        {hasActiveFilters ? (
+          <button
+            type="button"
+            onClick={clearAll}
+            className="text-[11.5px] font-semibold uppercase tracking-[0.08em] text-accent hover:underline"
+          >
+            Clear all filters
+          </button>
+        ) : null}
+      </div>
+
+      {collapsed ? null : (
+      <div className="mt-3 grid grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(160px,1.3fr)_repeat(4,minmax(110px,0.7fr))]">
         <label className={field}>
           <span className="sr-only">Search catalog</span>
           <input
@@ -193,37 +260,7 @@ export function CatalogFilters({
           </select>
         </label>
       </div>
-
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <p className="text-[12px] font-medium text-muted">{metaParts.join(" · ")}</p>
-        {chips.length > 0 ? (
-          <>
-            <span className="text-[12px] text-muted">·</span>
-            {chips.map((c) => (
-              <button
-                key={c.key}
-                type="button"
-                onClick={c.onRemove}
-                className="flex items-center gap-1 rounded-chip border border-border bg-ground px-2 py-0.5 text-[11px] text-secondary transition hover:border-accent hover:text-ink"
-              >
-                {c.label}
-                <span aria-hidden className="text-muted">
-                  ×
-                </span>
-              </button>
-            ))}
-          </>
-        ) : null}
-        {hasActiveFilters ? (
-          <button
-            type="button"
-            onClick={clearAll}
-            className="text-[11.5px] font-semibold uppercase tracking-[0.08em] text-accent hover:underline"
-          >
-            Clear all filters
-          </button>
-        ) : null}
-      </div>
+      )}
     </div>
   );
 }
