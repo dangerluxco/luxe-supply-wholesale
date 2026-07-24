@@ -30,6 +30,8 @@ export type CurationItem = {
    * featured — the seller's manage view floats these to the top of its table, most
    * recent first. Buyer-facing order is intentionally untouched. */
   featuredRank?: number;
+  /** Member pieces when this row is a collapsed suggested lot (bundle). */
+  lotItems?: Array<{ sku: string; title: string }>;
 };
 
 export type CurationShare = {
@@ -102,6 +104,13 @@ function serializeItem(raw: Record<string, unknown>): CurationItem {
     ...(typeof raw.featuredRank === "number" && Number.isFinite(raw.featuredRank)
       ? { featuredRank: raw.featuredRank }
       : {}),
+    ...(Array.isArray(raw.lotItems) && raw.lotItems.length
+      ? {
+          lotItems: (raw.lotItems as Array<Record<string, unknown>>)
+            .map((li) => ({ sku: takeText(li.sku), title: takeText(li.title) }))
+            .filter((li) => li.sku),
+        }
+      : {}),
   };
 }
 
@@ -170,6 +179,7 @@ export async function createCurationShare(opts: {
     price: number;
     imageUrl?: string | null;
     imageUrls?: string[];
+    lotItems?: Array<{ sku: string; title: string }>;
   }>;
   clientName?: string;
   /** Existing portal buyer — set when curating for a known client. */
@@ -196,6 +206,13 @@ export async function createCurationShare(opts: {
       imageUrls: Array.isArray(it.imageUrls) ? it.imageUrls.map(takeText).filter(Boolean) : [],
       decision: "" as CurationDecision,
       note: "",
+      ...(Array.isArray(it.lotItems) && it.lotItems.length
+        ? {
+            lotItems: it.lotItems
+              .map((li) => ({ sku: takeText(li.sku), title: takeText(li.title) }))
+              .filter((li) => li.sku),
+          }
+        : {}),
     }))
     .filter((it) => {
       if (!it.sku) return false;

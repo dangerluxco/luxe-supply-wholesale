@@ -21,7 +21,27 @@ type CurationItem = {
   decision: Decision;
   note: string;
   liveAdded?: boolean;
+  /** Member pieces when this row is a bundle — listed so the buyer sees every SKU. */
+  lotItems?: Array<{ sku: string; title: string }>;
 };
+
+/** Compact member-SKU list for bundle rows (scrolls past 5). */
+function LotSkuList({ lotItems }: { lotItems?: Array<{ sku: string; title: string }> }) {
+  if (!lotItems?.length) return null;
+  return (
+    <div className="mt-1.5 max-h-24 space-y-0.5 overflow-y-auto rounded-chip border border-border/60 bg-ground px-2 py-1.5">
+      <div className="micro-badge text-[8.5px] tracking-[0.12em] text-muted">
+        {lotItems.length} PIECES IN THIS BUNDLE
+      </div>
+      {lotItems.map((li) => (
+        <div key={li.sku} className="truncate font-mono text-[10.5px] text-secondary">
+          {li.sku}
+          {li.title ? <span className="text-muted"> · {li.title}</span> : null}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 type CurationShare = {
   token: string;
@@ -317,6 +337,7 @@ export function CurationViewer({ token }: { token: string }) {
                   <div className="mt-3 font-mono text-[26px] text-ink sm:text-[32px]">
                     {money(Math.round(heroItem.price))}
                   </div>
+                  <LotSkuList lotItems={heroItem.lotItems} />
                 </div>
                 <DecisionButtons it={heroItem} />
                 <label className="flex flex-col gap-1">
@@ -393,6 +414,7 @@ export function CurationViewer({ token }: { token: string }) {
                     </div>
                   ) : null}
                   {it.brand ? <div className="text-[11px] text-secondary">{it.brand}</div> : null}
+                  <LotSkuList lotItems={it.lotItems} />
                 </div>
                 <div className="font-mono text-[14px] text-ink">{money(Math.round(it.price))}</div>
                 <DecisionButtons it={it} />

@@ -111,6 +111,8 @@ export type QuoteCurationItem = {
   price: number;
   imageUrl: string | null;
   imageUrls: string[];
+  /** Member pieces when this row is a collapsed suggested lot — lets the curation views list the individual SKUs. */
+  lotItems?: Array<{ sku: string; title: string }>;
 };
 
 /**
@@ -135,6 +137,9 @@ export function curationItemsFromQuoteItems(
           price: Number(it.price) || 0,
           imageUrl: imageUrls[0] || (it.imageUrl ? String(it.imageUrl) : null),
           imageUrls,
+          lotItems: lotItems
+            .map((li) => ({ sku: String(li.sku || "").trim(), title: String(li.title || "") }))
+            .filter((li) => li.sku),
         };
       }
       const sku = String(it.sku || "").trim();

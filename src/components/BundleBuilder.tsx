@@ -655,6 +655,12 @@ export function BundleBuilder({
               <span className="text-[12px] text-[#C9C7BE]">As a bundle</span>
               <span className="text-[24px] font-semibold text-ground">{money(bundlePrice)}</span>
             </div>
+            {chosen.length > 1 ? (
+              <div className="flex justify-between text-[12px] text-[#C9C7BE]">
+                Price per piece
+                <span className="font-mono">{money(Math.round(bundlePrice / chosen.length))}</span>
+              </div>
+            ) : null}
             <div className="self-end micro-badge text-[9.5px] tracking-[0.12em] text-accent">
               SAVE {savePct}% · {money(saveAmt)}
             </div>

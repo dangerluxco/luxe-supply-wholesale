@@ -77,13 +77,27 @@ export function QuoteItemsEditor({
   quoteId,
   items,
   context = {},
+  lotPriceFallback = {},
 }: {
   quoteId: string;
   items: Array<Record<string, unknown>>;
   /** Keyed by UPPERCASE SKU. Absent keys render a plain row (no margin/stock line). */
   context?: Record<string, QuoteLineContext>;
+  /** Live lot prices keyed by lotId — repairs lot lines whose stored price zeroed out. */
+  lotPriceFallback?: Record<string, number>;
 }) {
-  const initial = useMemo(() => toEditable(items), [items]);
+  const initial = useMemo(() => {
+    const rows = toEditable(items);
+    // A lot line with a $0 stored price is always a data bug (lots can't be
+    // added to a cart without a price) — repair from the live lot document.
+    for (const r of rows) {
+      if (r.isSuggestedLot && !(r.price > 0) && lotPriceFallback[r.lotId] > 0) {
+        r.price = lotPriceFallback[r.lotId]!;
+      }
+    }
+    return rows;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items]);
   const router = useRouter();
   const [rows, setRows] = useState<EditableItem[]>(initial);
   const [savedRows, setSavedRows] = useState<EditableItem[]>(initial);
@@ -205,19 +219,20 @@ export function QuoteItemsEditor({
   return (
     <div>
       <div className="overflow-hidden rounded-chip border border-border">
-        <div className="grid grid-cols-[1fr_100px_50px_110px_64px] border-b border-border bg-ground px-4 py-2 font-mono text-[10px] uppercase tracking-[0.1em] text-muted">
+        {/* Thumbnail + name + SKU own the row; brand/qty demote to a muted
+            secondary line. The old fixed Brand/Qty columns crushed the item
+            cell on narrow screens until text overlapped. */}
+        <div className="grid grid-cols-[minmax(200px,1fr)_120px_64px] border-b border-border bg-ground px-4 py-2 font-mono text-[10px] uppercase tracking-[0.1em] text-muted">
           <span>Item</span>
-          <span>Brand</span>
-          <span className="text-center">Qty</span>
           <span className="text-right">Price</span>
           <span />
         </div>
         {rows.map((item, i) => (
           <div
             key={`${item.sku}-${i}`}
-            className="grid grid-cols-[1fr_100px_50px_110px_64px] items-center border-b border-border/60 px-4 py-3 text-[12.5px] last:border-b-0"
+            className="grid grid-cols-[minmax(200px,1fr)_120px_64px] items-center border-b border-border/60 px-4 py-3 text-[12.5px] last:border-b-0"
           >
-            <div className="min-w-0">
+            <div className="min-w-0 pr-2">
               <PortalItemLine
                 imageUrl={item.imageUrl}
                 title={item.title}
@@ -228,9 +243,27 @@ export function QuoteItemsEditor({
                     : undefined
                 }
               />
+              {item.brand || item.quantity > 1 ? (
+                <div className="mt-0.5 truncate text-[10.5px] text-muted">
+                  {[item.brand || null, item.quantity > 1 ? `× ${item.quantity}` : null]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </div>
+              ) : null}
+              {item.isSuggestedLot && item.lotItems.length ? (
+                <div className="mt-1 max-h-28 space-y-0.5 overflow-y-auto">
+                  {item.lotItems.map((li, j) => (
+                    <div
+                      key={`${String(li.sku || j)}`}
+                      className="truncate font-mono text-[10.5px] text-secondary"
+                    >
+                      {String(li.sku || "")}
+                      {li.title ? <span className="text-muted"> · {String(li.title)}</span> : null}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
-            <span className="text-secondary">{item.brand || "—"}</span>
-            <span className="text-center font-mono">{item.quantity}</span>
             <div className="flex items-center justify-end gap-1 font-mono">
               <span className="text-muted">$</span>
               <input

@@ -25,6 +25,7 @@ type CurationItem = {
   note: string;
   liveAdded?: boolean;
   featuredRank?: number;
+  lotItems?: Array<{ sku: string; title: string }>;
 };
 
 type CurationShare = {
@@ -1787,11 +1788,29 @@ export function CurationManage({ initialShare, buyerUrl }: { initialShare: Curat
                   className="h-24 w-24 shrink-0 rounded-chip"
                 />
                 <div className="min-w-0 px-2">
-                  <div className="truncate text-ink">
-                    {portalDisplayTitle(it.title, it.sku)}
+                  <div className="flex items-center gap-1.5 truncate text-ink">
+                    <span className="truncate">{portalDisplayTitle(it.title, it.sku)}</span>
+                    {it.liveAdded ? (
+                      // Upsell marker: the rep added this live — the buyer
+                      // hasn't seen a price commitment on it, so repricing is
+                      // fair game (unlike pre-shared items).
+                      <span className="micro-badge shrink-0 rounded-chip bg-accent px-1.5 py-0.5 text-[8.5px] tracking-[0.1em] text-ink">
+                        UPSELL
+                      </span>
+                    ) : null}
                   </div>
                   {portalShowSkuLine(it.title, it.sku) ? (
                     <div className="truncate font-mono text-[11px] text-muted">{it.sku}</div>
+                  ) : null}
+                  {it.lotItems?.length ? (
+                    <div className="mt-1 max-h-20 space-y-0.5 overflow-y-auto">
+                      {it.lotItems.map((li) => (
+                        <div key={li.sku} className="truncate font-mono text-[10px] text-secondary">
+                          {li.sku}
+                          {li.title ? <span className="text-muted"> · {li.title}</span> : null}
+                        </div>
+                      ))}
+                    </div>
                   ) : null}
                 </div>
                 <span className="text-right font-mono text-secondary">

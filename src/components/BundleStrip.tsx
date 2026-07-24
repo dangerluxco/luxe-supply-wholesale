@@ -37,6 +37,13 @@ export function BundleStrip({ lot, inCart = false }: { lot: LotForStrip; inCart?
   const individualSum = Math.round(Number(lot.individualSum) || 0);
   const saveAmt = Math.max(0, individualSum - lotPrice);
   const savePct = individualSum > 0 ? Math.round((saveAmt / individualSum) * 100) : 0;
+  // "20 wallets at $746 each, $709 apiece as a bundle" — the per-piece number
+  // is how buyers rationalize the lot price.
+  const pieceCount = lot.items.reduce(
+    (sum, it) => sum + Math.max(1, Math.round(Number((it as { quantity?: number }).quantity) || 1)),
+    0,
+  );
+  const perPiece = pieceCount > 0 ? lotPrice / pieceCount : null;
   const galleryItem = gallerySku
     ? lot.items.find((it) => it.sku === gallerySku) || null
     : null;
@@ -112,6 +119,12 @@ export function BundleStrip({ lot, inCart = false }: { lot: LotForStrip; inCart?
             <span className="text-[12px] text-[#C9C7BE]">Bundle</span>
             <span className="text-[26px] font-semibold text-ground">{money(lotPrice)}</span>
           </div>
+          {perPiece != null && pieceCount > 1 ? (
+            <div className="flex justify-between text-[12px] text-[#C9C7BE]">
+              Price per piece
+              <span className="font-mono">{money(Math.round(perPiece))}</span>
+            </div>
+          ) : null}
           {saveAmt > 0 ? (
             <div className="self-end font-mono text-[10px] font-semibold tracking-[0.08em] text-accent">
               SAVE {savePct}% · {money(saveAmt)}

@@ -16,6 +16,7 @@ import { QuoteNotesForm } from "@/components/QuoteNotesForm";
 import { QuoteActivityThread } from "@/components/QuoteActivityThread";
 import { listQuoteActivities } from "@/lib/firestore/quoteActivities";
 import { QuoteItemsEditor } from "@/components/QuoteItemsEditor";
+import { getSuggestedLotById } from "@/lib/firestore/suggestedLots";
 import { QuoteClaimControls } from "@/components/QuoteClaimControls";
 import { QuoteShippingEditor } from "@/components/QuoteShippingEditor";
 import { getShippingRules } from "@/lib/firestore/settings";
@@ -120,6 +121,17 @@ export default async function StaffQuoteDetailPage({
     getShippingRules().catch(() => null),
   ]);
 
+  // Repair data for lot lines whose stored price zeroed out (e.g. a bad
+  // curation round-trip): fetch the live lot price so the editor can offer it.
+  const zeroPricedLotIds = quote.items
+    .filter((it) => it.isSuggestedLot && it.lotId && !(Number(it.price) > 0))
+    .map((it) => String(it.lotId));
+  const lotPriceFallback: Record<string, number> = {};
+  for (const lotId of [...new Set(zeroPricedLotIds)]) {
+    const lot = await getSuggestedLotById(lotId).catch(() => null);
+    if (lot?.lotPrice != null && lot.lotPrice > 0) lotPriceFallback[lotId] = lot.lotPrice;
+  }
+
   const initialCurationUrl = quote.curationToken
     ? `${buyerStorefrontOrigin()}/curation/${quote.curationToken}`
     : null;
@@ -215,7 +227,12 @@ export default async function StaffQuoteDetailPage({
               </div>
               <span className="text-[11px] text-muted">Remove products or adjust prices below.</span>
             </div>
-            <QuoteItemsEditor quoteId={quote.id} items={quote.items} context={lineContext} />
+            <QuoteItemsEditor
+              quoteId={quote.id}
+              items={quote.items}
+              context={lineContext}
+              lotPriceFallback={lotPriceFallback}
+            />
           </div>
 
           <div className="rounded-card border border-border bg-surface p-5">
