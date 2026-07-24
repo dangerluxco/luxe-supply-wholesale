@@ -117,6 +117,10 @@ export default async function StaffInvoiceDetailPage({
             </div>
           </div>
 
+        </div>
+
+        <div className="space-y-6">
+          {/* Fulfillment moved to the right column — the left stays line items. */}
           <div className="rounded-card border border-border bg-surface p-5">
             <div className="mb-3 micro-badge text-[10px] tracking-[0.14em] text-accent">
               FULFILLMENT
@@ -166,9 +170,7 @@ export default async function StaffInvoiceDetailPage({
               </>
             )}
           </div>
-        </div>
 
-        <div className="space-y-6">
           <PackingNoteForm invoiceId={invoice.id} initialNote={invoice.packingNote} />
 
           <div className="rounded-card border border-border bg-surface p-5">

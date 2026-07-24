@@ -234,7 +234,11 @@ export default async function StaffQuoteDetailPage({
               lotPriceFallback={lotPriceFallback}
             />
           </div>
+        </div>
 
+        {/* Orders get big — the left column is line items only; the narrative
+            panels (buyer message, admin notes, activity) live on the right. */}
+        <div className="space-y-6">
           <div className="rounded-card border border-border bg-surface p-5">
             <div className="micro-badge mb-3 text-[10px] tracking-[0.14em] text-accent">
               BUYER MESSAGE
@@ -249,17 +253,6 @@ export default async function StaffQuoteDetailPage({
             </p>
           </div>
 
-          <div className="rounded-card border border-border bg-surface p-5">
-            <div className="micro-badge mb-3 text-[10px] tracking-[0.14em] text-accent">
-              ADMIN NOTES
-            </div>
-            <QuoteNotesForm quoteId={quote.id} adminNotes={quote.adminNotes} />
-          </div>
-
-          <QuoteActivityThread quoteId={quote.id} activities={activities} />
-        </div>
-
-        <div className="space-y-6">
           <div className="rounded-card border border-border bg-surface p-5">
             <div className="micro-badge mb-3 text-[10px] tracking-[0.14em] text-accent">
               INVOICE
@@ -458,6 +451,15 @@ export default async function StaffQuoteDetailPage({
               })()}
             </div>
           </div>
+
+          <div className="rounded-card border border-border bg-surface p-5">
+            <div className="micro-badge mb-3 text-[10px] tracking-[0.14em] text-accent">
+              ADMIN NOTES
+            </div>
+            <QuoteNotesForm quoteId={quote.id} adminNotes={quote.adminNotes} />
+          </div>
+
+          <QuoteActivityThread quoteId={quote.id} activities={activities} />
         </div>
       </div>
     </div>
