@@ -23,6 +23,7 @@ import { getSessionForArea } from "@/lib/auth";
 import { encryptTotpSecret } from "@/lib/totp";
 import { authenticateBuyerByOAuthEmail } from "@/lib/firestore/buyers";
 import { ROLE } from "@/lib/constants";
+import { isFulfillmentHostName } from "@/lib/fulfillment-host";
 import { staffPostLoginPath } from "@/lib/staff-totp-gate";
 
 export const dynamic = "force-dynamic";
@@ -104,10 +105,16 @@ export async function GET(request: Request) {
         );
       }
       const role = staffToAppRole(auth.staff);
+      // Managers signing in on the fulfillment domain (ppas.) land in the
+      // pack console, not the rep portal.
+      const home =
+        role === ROLE.MANAGER && isFulfillmentHostName(new URL(origin).hostname)
+          ? "/fulfillment"
+          : homeForRole(role);
       const dest = staffPostLoginPath({
         role,
         totpEnabled: auth.staff.totpEnabled,
-        home: homeForRole(role),
+        home,
       });
       const res = NextResponse.redirect(new URL(dest, origin));
       res.cookies.set(

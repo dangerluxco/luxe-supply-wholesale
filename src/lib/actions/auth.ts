@@ -13,6 +13,8 @@ import {
 import { SESSION_COOKIE, withAreaSession, withoutAreaSession } from "@/lib/auth-session";
 import { authenticateStaff, staffToAppRole } from "@/lib/firestore/staff";
 import { staffPostLoginPath } from "@/lib/staff-totp-gate";
+import { isFulfillmentHost } from "@/lib/fulfillment-host";
+import { ROLE } from "@/lib/constants";
 
 export async function login(_prev: unknown, formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
@@ -37,11 +39,15 @@ export async function login(_prev: unknown, formData: FormData) {
       withAreaSession(existingRaw, areaForRole(role), encodeSession(staffOk.staff.id, role, "firestore")),
       cookieOpts,
     );
+    // Managers signing in on the fulfillment domain (ppas.) land in the pack
+    // console, not the rep portal.
+    const home =
+      role === ROLE.MANAGER && (await isFulfillmentHost()) ? "/fulfillment" : homeForRole(role);
     redirect(
       staffPostLoginPath({
         role,
         totpEnabled: staffOk.staff.totpEnabled,
-        home: homeForRole(role),
+        home,
       }),
     );
   }
