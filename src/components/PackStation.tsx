@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { clsx } from "@/lib/clsx";
+import { LUXE_SUPPLY_LOGO_SRC } from "@/components/Logo";
 import type { FulfillmentRecord } from "@/lib/firestore/fulfillment";
 
 const CARRIERS = ["UPS", "FedEx", "USPS", "DHL", "Other"];
@@ -1429,6 +1430,8 @@ function ItemGalleryModal({
   const [index, setIndex] = useState(0);
   const count = images.length;
   const current = images[Math.min(index, Math.max(0, count - 1))] || null;
+  // Brand logo shows while each photo streams in — no dark empty square.
+  const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -1467,6 +1470,15 @@ function ItemGalleryModal({
         </div>
 
         <div className="relative aspect-square w-full overflow-hidden rounded-card bg-black/40">
+          {current && loadedSrc !== current ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={LUXE_SUPPLY_LOGO_SRC}
+              alt=""
+              aria-hidden
+              className="pointer-events-none absolute left-1/2 top-1/2 w-[38%] max-w-[220px] -translate-x-1/2 -translate-y-1/2 animate-pulse opacity-40"
+            />
+          ) : null}
           {current ? (
             <Image
               src={current}
@@ -1474,6 +1486,7 @@ function ItemGalleryModal({
               fill
               sizes="(max-width: 768px) 100vw, 672px"
               className="object-contain"
+              onLoad={() => setLoadedSrc(current)}
               priority
             />
           ) : (

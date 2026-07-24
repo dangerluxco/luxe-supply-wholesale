@@ -2,6 +2,7 @@
 
 import Image, { getImageProps } from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { LUXE_SUPPLY_LOGO_SRC } from "@/components/Logo";
 
 export type GalleryItem = {
   title: string;
@@ -59,6 +60,10 @@ export function ProductGallery({
 
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
+  // Loading watermark: the brand logo shows while each photo streams in
+  // (instead of a dark empty stage), covered the moment the photo paints.
+  const activeSrc = url ? lightboxSrc(url) : null;
+  const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
   const dragging = useRef(false);
   const dragRef = useRef<{
     pointerId: number;
@@ -274,10 +279,20 @@ export function ProductGallery({
           ref={stageRef}
           className="relative flex min-h-[280px] items-center justify-center overflow-hidden bg-black/40 px-4 py-6 sm:min-h-[480px] sm:px-12 sm:py-8"
         >
+          {activeSrc && loadedSrc !== activeSrc ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={LUXE_SUPPLY_LOGO_SRC}
+              alt=""
+              aria-hidden
+              className="pointer-events-none absolute left-1/2 top-1/2 w-[38%] max-w-[220px] -translate-x-1/2 -translate-y-1/2 animate-pulse opacity-40"
+            />
+          ) : null}
           {url ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={lightboxSrc(url)}
+              src={activeSrc || undefined}
+              onLoad={() => setLoadedSrc(activeSrc)}
               alt={item.title}
               draggable={false}
               onPointerDown={onPointerDown}
