@@ -33,6 +33,22 @@ function toQuoteItemInput(
       lotItems: Array.isArray(lot.lotItems) ? (lot.lotItems as Array<Record<string, unknown>>) : [],
     };
   }
+  // Bundle that wasn't on the order before (ad-hoc session / live add):
+  // curation items carry their member pieces, so rebuild the lot line rather
+  // than writing a bare "SKU" that loses the bundle's identity.
+  if (item.lotItems?.length) {
+    return {
+      sku: item.sku,
+      title: item.title,
+      brand: item.brand,
+      quantity: 1,
+      price: item.price,
+      imageUrl: item.imageUrl,
+      isSuggestedLot: true,
+      lotId: item.sku,
+      lotItems: item.lotItems.map((li) => ({ sku: li.sku, title: li.title })),
+    };
+  }
   return {
     sku: item.sku,
     title: item.title,

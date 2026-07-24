@@ -60,6 +60,8 @@ export async function POST(request: Request, ctx: { params: Promise<{ token: str
   }
 
   try {
+    // Bundles keep their lot identity — a collapsed curation row carries its
+    // member pieces, so the new order gets a real lot line, not a bare "SKU".
     const items: QuoteItemInput[] = source.map((it) => ({
       sku: it.sku,
       title: it.title,
@@ -67,6 +69,13 @@ export async function POST(request: Request, ctx: { params: Promise<{ token: str
       quantity: 1,
       price: it.price,
       imageUrl: it.imageUrl,
+      ...(it.lotItems?.length
+        ? {
+            isSuggestedLot: true,
+            lotId: it.sku,
+            lotItems: it.lotItems.map((li) => ({ sku: li.sku, title: li.title })),
+          }
+        : {}),
     }));
 
     const { id: quoteId } = await createStaffQuote({

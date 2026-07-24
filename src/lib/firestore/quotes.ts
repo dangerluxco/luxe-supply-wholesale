@@ -492,18 +492,39 @@ export async function updateQuoteItems(
   const snap = await ref.get();
   if (!snap.exists) throw new Error("Order request not found.");
 
+  // Anti-lossiness guard: a line arriving at $0 when its previous version had
+  // a real price is a data bug (curation round-trips have zeroed lot lines
+  // this way), never an intentional edit — keep the stored price.
+  const prevItems = Array.isArray((snap.data() || {}).items)
+    ? ((snap.data() || {}).items as Array<Record<string, unknown>>)
+    : [];
+  const prevPriceBySku = new Map(
+    prevItems
+      .map((p) => [String(p.sku || "").trim().toLowerCase(), Number(p.price) || 0] as const)
+      .filter(([sku, price]) => sku && price > 0),
+  );
+
   const cleanItems = items
-    .map((i) => ({
-      sku: String(i.sku || "").trim(),
-      title: String(i.title || ""),
-      brand: String(i.brand || ""),
-      quantity: Math.max(1, Math.round(Number(i.quantity) || 1)),
-      price: Math.max(0, Number(i.price) || 0),
-      imageUrl: i.imageUrl ? String(i.imageUrl) : null,
-      isSuggestedLot: !!i.isSuggestedLot,
-      lotId: i.isSuggestedLot ? String(i.lotId || "") : "",
-      lotItems: i.isSuggestedLot && Array.isArray(i.lotItems) ? i.lotItems : [],
-    }))
+    .map((i) => {
+      const sku = String(i.sku || "").trim();
+      let price = Math.max(0, Number(i.price) || 0);
+      const prev = prevPriceBySku.get(sku.toLowerCase());
+      if (!(price > 0) && prev) {
+        console.warn(`[quotes] kept previous price for ${sku} — update arrived at $0`);
+        price = prev;
+      }
+      return {
+        sku,
+        title: String(i.title || ""),
+        brand: String(i.brand || ""),
+        quantity: Math.max(1, Math.round(Number(i.quantity) || 1)),
+        price,
+        imageUrl: i.imageUrl ? String(i.imageUrl) : null,
+        isSuggestedLot: !!i.isSuggestedLot,
+        lotId: i.isSuggestedLot ? String(i.lotId || "") : "",
+        lotItems: i.isSuggestedLot && Array.isArray(i.lotItems) ? i.lotItems : [],
+      };
+    })
     .filter((i) => i.sku);
 
   const cartTotal = cleanItems.reduce((sum, i) => sum + i.price * i.quantity, 0);

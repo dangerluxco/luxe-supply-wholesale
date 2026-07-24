@@ -441,13 +441,17 @@ export async function updateCurationNote(
   return { revision };
 }
 
-/** Staff-only: adjust a listed price mid-session. */
+/** Staff-only: adjust a listed price mid-session. Rejects $0/garbage instead
+ * of coercing — silent zeroing here used to propagate into order requests. */
 export async function updateCurationPrice(
   token: string,
   sku: string,
   priceRaw: number,
 ): Promise<{ revision: number }> {
-  const price = Number.isFinite(Number(priceRaw)) ? Math.max(0, Math.round(Number(priceRaw))) : 0;
+  const price = Number.isFinite(Number(priceRaw)) ? Math.round(Number(priceRaw)) : NaN;
+  if (!(price > 0)) {
+    throw new Error("Enter a price above $0 — the previous price is unchanged.");
+  }
   const { revision } = await updateItemField(token, sku, (it) => ({ ...it, price }));
   return { revision };
 }
