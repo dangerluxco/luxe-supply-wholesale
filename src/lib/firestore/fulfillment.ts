@@ -189,9 +189,10 @@ const BOX_BARCODE_PREFIX = /^BOX[-_ ]/i;
  * - code matches an expected SKU  -> assign to the current box (error if none
  *   selected or already boxed — both logged)
  * - code matches an existing box barcode -> select that box
- * - a BOX-prefixed code -> new box with that barcode (labels -1, -2, … per meeting)
- * - anything else -> STOP error. A stray SKU must never silently open a box —
- *   that's how wrong pieces end up packed.
+ * - anything else -> STOP error. Scanning NEVER creates boxes (per meeting:
+ *   box setup happens before packing, via "+ New box" + printed labels).
+ *   A BOX- code that isn't on this shipment is most likely another invoice's
+ *   box label — silently creating a box here would cross two shipments.
  */
 export async function recordScan(
   invoiceId: string,
@@ -270,41 +271,17 @@ export async function recordScan(
       message = `${cleaned} is not on this order — wrong piece. Do not pack it.`;
       scans.push({ at: now, by, code: cleaned, kind: "error", boxId: null, error: message });
     } else if (BOX_BARCODE_PREFIX.test(cleaned)) {
-      // BOX-prefixed code — a new box barcode. Label is
-      // max-existing + 1, so removing a box never recycles an ordinal.
-      const maxLabel = boxes.reduce(
-        (m, b) => Math.max(m, Math.abs(parseInt(b.label, 10)) || 0),
-        0,
-      );
-      const label = `-${maxLabel + 1}`;
-      const box = {
-        id: `box_${maxLabel + 1}_${Math.random().toString(36).slice(2, 8)}`,
-        label,
-        barcode: cleaned,
-        carrier: "",
-        trackingNumber: "",
-        createdAt: now,
-        weightOz: null,
-        lengthIn: null,
-        widthIn: null,
-        heightIn: null,
-        labelId: null,
-        labelPdfUrl: null,
-        labelZplUrl: null,
-        labelCost: null,
-        labelService: null,
-        trackingStatus: null,
-        trackingStatusAt: null,
-      };
-      boxes.push(box);
-      nextCurrentBoxId = box.id;
-      outcome = "box_created";
-      message = `New box ${label} (${cleaned}) — scan items into it.`;
-      scans.push({ at: now, by, code: cleaned, kind: "box", boxId: box.id, error: null });
+      // A box label that isn't one of THIS shipment's boxes — most likely a
+      // label from a different invoice. Never auto-create a box from a scan:
+      // box setup is its own step ("+ New box" + printed labels) before packing.
+      outcome = "error";
+      stop = true;
+      message = `“${cleaned}” isn't one of this shipment's boxes — check that the label belongs to this invoice. Add boxes with “+ New box”, then print and scan its labels.`;
+      scans.push({ at: now, by, code: cleaned, kind: "error", boxId: null, error: message });
     } else {
       outcome = "error";
       stop = true;
-      message = `“${cleaned}” isn't on this order — check the piece. (New-box barcodes start with BOX-, or use “+ New box”.)`;
+      message = `“${cleaned}” isn't on this order — check the piece. (Boxes are set up with “+ New box”, then selected by scanning their printed labels.)`;
       scans.push({ at: now, by, code: cleaned, kind: "error", boxId: null, error: message });
     }
 

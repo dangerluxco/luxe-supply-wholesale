@@ -327,6 +327,15 @@ export function PackStation({
                   )}
                 </div>
               </div>
+              {/* Box-first is the #1 pack-station mistake — make the step
+                  unmissable instead of relying on the error after a bad scan. */}
+              {!currentBox ? (
+                <div className="mb-2 rounded-chip border border-accent/60 bg-accent/10 px-3 py-2 text-[12px] font-semibold text-accent">
+                  {record.boxes.length === 0
+                    ? "STEP 1 · Set up boxes first — click ＋ New box for each box you need, then print its labels. Don't scan items yet."
+                    : "SELECT A BOX — scan a box label (or click a box below) before scanning items. An item scanned now will not be packed."}
+                </div>
+              ) : null}
               <div className="flex gap-2">
                 <input
                   ref={scanRef}
@@ -341,7 +350,11 @@ export function PackStation({
                   autoFocus
                   disabled={busy}
                   placeholder={
-                    currentBox ? "Scan or type item SKU…" : "Scan a BOX- barcode, or use + New box"
+                    currentBox
+                      ? "Scan or type item SKU…"
+                      : record.boxes.length === 0
+                        ? "No boxes yet — use ＋ New box first"
+                        : "Scan a box label to select a box…"
                   }
                   className="h-12 w-full rounded-chip border border-white/20 bg-[#1c1c20] px-4 font-mono text-[15px] text-white outline-none focus:border-accent"
                 />
@@ -438,7 +451,7 @@ export function PackStation({
       <div className="space-y-5">
         {record.boxes.length === 0 ? (
           <div className="rounded-card border border-dashed border-white/20 px-5 py-10 text-center text-[12.5px] text-white/50">
-            No boxes yet — click ＋ New box (or scan a BOX- barcode) to open Box -1.
+            No boxes yet — click ＋ New box for each box you need, then print box labels.
           </div>
         ) : (
           record.boxes.map((box) => {
