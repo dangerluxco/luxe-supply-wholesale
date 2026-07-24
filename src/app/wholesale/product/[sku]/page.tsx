@@ -51,6 +51,7 @@ async function SimilarPiecesSlot({
           >
             <Placeholder
               imageSrc={item.imageUrl}
+              imageSrcs={item.imageUrls}
               alt={item.title}
               className="aspect-square w-full"
             />

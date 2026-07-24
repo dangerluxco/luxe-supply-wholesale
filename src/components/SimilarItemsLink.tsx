@@ -11,6 +11,8 @@ export type SimilarItem = {
   brand: string;
   price: number | null;
   imageUrl: string | null;
+  /** Fallback candidates when imageUrl is a dead link. */
+  imageUrls?: string[];
   era: string;
   material: string;
   condition: string;
@@ -37,6 +39,7 @@ function HoverPreview({ item, anchor }: { item: SimilarItem; anchor: DOMRect }) 
     >
       <Placeholder
         imageSrc={item.imageUrl}
+        imageSrcs={item.imageUrls}
         alt={portalDisplayTitle(item.title, item.sku)}
         className="h-full w-full"
       />
@@ -103,6 +106,7 @@ function SimilarItemModal({
         <div className="mt-3 h-56 w-full overflow-hidden rounded-chip">
           <Placeholder
             imageSrc={item.imageUrl}
+            imageSrcs={item.imageUrls}
             alt={portalDisplayTitle(item.title, item.sku)}
             className="h-full w-full"
           />
@@ -329,6 +333,7 @@ export function SimilarItemsCarousel({
           >
             <Placeholder
               imageSrc={it.imageUrl}
+              imageSrcs={it.imageUrls}
               alt={portalDisplayTitle(it.title, it.sku)}
               className="h-full w-full"
             />

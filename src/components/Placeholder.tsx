@@ -1,4 +1,7 @@
+"use client";
+
 import Image from "next/image";
+import { useEffect, useMemo, useState } from "react";
 import { clsx } from "@/lib/clsx";
 import { LUXE_SUPPLY_LOGO_SRC } from "@/components/Logo";
 
@@ -9,6 +12,11 @@ import { LUXE_SUPPLY_LOGO_SRC } from "@/components/Logo";
 // resized to the rendered size, converted to WebP/AVIF, and long-cached —
 // instead of shipping multi-MB originals from Firebase Storage. While the
 // photo streams in, the Luxe logo shows on a soft ground (no black square).
+//
+// Dead URLs never show the browser's broken-image icon: on error this falls
+// forward through `imageSrcs` candidates and finally degrades to the striped
+// block — stale uploadHistory URLs surfaced as broken images all over the
+// portal (similar-item rails, curation views) before this.
 export function Placeholder({
   label,
   className,
@@ -16,6 +24,7 @@ export function Placeholder({
   labelClassName,
   children,
   imageSrc,
+  imageSrcs,
   alt,
   priority = false,
   sizes,
@@ -26,12 +35,25 @@ export function Placeholder({
   labelClassName?: string;
   children?: React.ReactNode;
   imageSrc?: string | null;
+  /** Additional candidate URLs tried in order when the primary photo fails to load. */
+  imageSrcs?: Array<string | null | undefined>;
   alt?: string;
   /** Hero / LCP image — eager + high fetch priority. */
   priority?: boolean;
   /** Rendered-size hint for the optimizer (e.g. "440px", "(max-width:640px) 50vw, 25vw"). */
   sizes?: string;
 }) {
+  const candidates = useMemo(() => {
+    const all = [imageSrc, ...(imageSrcs || [])];
+    return all.filter((u, i): u is string => !!u && all.indexOf(u) === i);
+  }, [imageSrc, imageSrcs]);
+  const [failed, setFailed] = useState(0);
+  const primary = candidates[0] ?? null;
+  useEffect(() => {
+    setFailed(0);
+  }, [primary]);
+  const src = candidates[failed] ?? null;
+
   const stripe =
     variant === "dark" ? "ph-stripe-dark" : variant === "vault" ? "ph-stripe-vault" : "ph-stripe";
   const labelColor = variant === "light" ? "text-muted" : "text-white/45";
@@ -39,13 +61,13 @@ export function Placeholder({
     <div
       className={clsx(
         "relative flex items-center justify-center overflow-hidden font-mono text-[10px]",
-        !imageSrc && stripe,
-        !imageSrc && labelColor,
-        imageSrc && "bg-[#F4F1EA]",
+        !src && stripe,
+        !src && labelColor,
+        src && "bg-[#F4F1EA]",
         className,
       )}
     >
-      {imageSrc ? (
+      {src ? (
         <>
           {/* Loading watermark — the opaque photo covers it once painted. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -56,12 +78,13 @@ export function Placeholder({
             className="pointer-events-none absolute left-1/2 top-1/2 w-[45%] max-w-[160px] -translate-x-1/2 -translate-y-1/2 opacity-30"
           />
           <Image
-            src={imageSrc}
+            src={src}
             alt={alt || label || ""}
             fill
             priority={priority}
             loading={priority ? "eager" : "lazy"}
             sizes={sizes || "(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"}
+            onError={() => setFailed((n) => n + 1)}
             className="object-cover"
           />
         </>

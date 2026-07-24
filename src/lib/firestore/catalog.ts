@@ -1469,6 +1469,8 @@ export type SimilarCatalogItem = {
   brand: string;
   price: number | null;
   imageUrl: string | null;
+  /** Full photo set — render-side fallback candidates when imageUrl is a dead link. */
+  imageUrls: string[];
   era: string;
   material: string;
   condition: string;
@@ -1519,6 +1521,7 @@ export async function findSimilarCatalogItems(
     limit,
   );
 
+  const imageUrlsBySku = new Map(candidates.map((p) => [p.sku, p.imageUrls || []]));
   return ranked
     .filter((r) => r.match > 0)
     .map((r) => ({
@@ -1527,6 +1530,7 @@ export async function findSimilarCatalogItems(
       brand: r.brand,
       price: r.price,
       imageUrl: r.imageUrl,
+      imageUrls: imageUrlsBySku.get(r.sku) || (r.imageUrl ? [r.imageUrl] : []),
       era: r.era,
       material: r.material,
       condition: r.condition,
