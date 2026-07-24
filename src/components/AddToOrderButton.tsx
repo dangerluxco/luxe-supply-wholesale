@@ -80,7 +80,10 @@ export function AddToOrderButton({
               setCartBadge({ cartCount: data.cartCount, cartTotal: data.cartTotal ?? 0 });
             }
             setMsg(null);
-            router.push("/wholesale/cart");
+            // Back to browsing, not the cart — buyers kept losing their place in
+            // the catalog after every add. The cart badge + "in cart" card state
+            // are the confirmation.
+            router.push("/wholesale");
           })
         }
         className="flex h-[50px] w-full items-center justify-center rounded-chip bg-ink text-[12.5px] font-semibold uppercase tracking-[0.14em] text-ground disabled:opacity-60"

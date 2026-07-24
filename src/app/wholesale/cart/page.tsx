@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { DEFAULT_MAX_CART_ITEMS, DEFAULT_MAX_CART_VALUE, ROLE } from "@/lib/constants";
@@ -58,6 +59,12 @@ export default async function CartPage() {
 
   return (
     <div className="px-8 pb-16 pt-8">
+      <Link
+        href="/wholesale"
+        className="mb-3 inline-block font-mono text-[11px] uppercase tracking-[0.1em] text-muted transition hover:text-ink"
+      >
+        ← Continue shopping
+      </Link>
       <h1 className="flex items-center gap-2 text-[24px] font-semibold text-ink">
         Your order
         <InfoTip label="Cart vs invoice-request holds">
