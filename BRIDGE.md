@@ -55,7 +55,7 @@ gcloud run deploy luxe-wholesale-portal \
   --memory 1Gi \
   --cpu 1 \
   --min-instances 1 \
-  --update-env-vars "GCLOUD_PROJECT=photography-964f5,NODE_ENV=production,BUYER_ORIGIN=https://portal.luxesupply.co,STAFF_ORIGIN=https://luxe-wholesale-portal.web.app"
+  --update-env-vars "GCLOUD_PROJECT=photography-964f5,NODE_ENV=production,BUYER_ORIGIN=https://portal.luxesupply.co,STAFF_ORIGIN=https://rep.luxesupply.co"
 
 cd ../ItemIQ-Marketing-Website
 firebase deploy --only hosting

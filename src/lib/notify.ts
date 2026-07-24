@@ -24,9 +24,7 @@ const STAFF_ORIGIN =
   process.env.STAFF_ORIGIN ||
   (process.env.PUBLIC_HOST
     ? `${schemeFor(process.env.PUBLIC_HOST)}://${process.env.PUBLIC_HOST}`
-    : // The domain staff actually use today. Switch via STAFF_ORIGIN env to
-      // rep.luxesupply.co once its Google OAuth callback is authorized.
-      "https://luxe-wholesale-portal.web.app");
+    : "https://rep.luxesupply.co");
 
 export function buyerStorefrontOrigin(): string {
   return BUYER_ORIGIN.replace(/\/$/, "");
